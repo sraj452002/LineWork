@@ -1,0 +1,625 @@
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { TEMPLATES, TYPES, engineOf, prep } from '../lib/engines.js';
+import { NO_AI, copyFor, langFor, sampleP } from '../lib/ai.js';
+import { HELP } from '../lib/help.js';
+import { esc, rid, trunc } from '../lib/utils.js';
+import {
+  COLOR_NAMES, DEVICES, KEEP_RATIO, SHAPE_LIST, colorOf, drawn, editBox, handlesMarkup, hasText, icons, make,
+  measure, moved, resized, shapeBounds, shapeIcon, shapesMarkup, unionBox,
+} from '../lib/shapes.js';
+import { InsertPanel, TOOL_KEYS, Toolbar } from './Toolbar.jsx';
+import { useUI } from './ui.jsx';
+
+const PLACEHOLDER = {
+  architecture: 'Describe a system, paste Terraform, or ask for a change',
+  flowchart: 'Describe a process, or ask for a change',
+  sequence: 'Describe an interaction between services',
+  erd: 'Describe your data, paste SQL, or ask for a change',
+};
+const NO_SHAPES = [];
+const DEVICE_ICON = { phone: '<rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M11 5.5h2"/>', tablet: '<rect x="4.5" y="2.5" width="15" height="19" rx="2"/><path d="M12 4.5h.01"/>', browser: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 8.5h18M6 6.3h.01M8.5 6.3h.01"/>', desktop: '<rect x="3" y="3.5" width="18" height="13" rx="1.5"/><path d="M9 20.5h6M12 16.5v4"/>' };
+
+const nodeIds = (d, m) => new Set(d.type === 'erd' ? m.tables.keys() : d.type === 'sequence' ? [] : m.nodes.keys());
+const pruneManual = x => {
+  const keep = nodeIds(x, engineOf(x).parse(x.code || ''));
+  Object.keys(x.manual || {}).forEach(id => { if (!keep.has(id)) delete x.manual[id]; });
+};
+// One undo entry holds the diagram code and the hand-drawn objects together.
+const snap = (code, shapes) => JSON.stringify({ code, shapes: shapes || [] });
+
+// One canvas per diagram. The parent keys it by diagram id, so switching tabs starts fresh.
+export default function Canvas({ file, d, visible, updateDiagram, history, onAddDiagram }) {
+  const { toast, theme } = useUI();
+  const svgRef = useRef(null), stageRef = useRef(null), dockRef = useRef(null), promptRef = useRef(null), fileRef = useRef(null);
+  const dRef = useRef(d);
+  dRef.current = d;
+
+  const [view, setView] = useState({ x: 0, y: 0, k: 1 });
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  const [dragManual, setDragManual] = useState(null);
+  const [selRaw, setSel] = useState(null);
+  const [drawer, setDrawer] = useState(false);
+  const [log, setLog] = useState([]);
+  const [prompt, setPrompt] = useState('');
+  const [status, setStatus] = useState({ text: '', busy: false });
+  const [busy, setBusy] = useState(false);
+  const [fitReq, setFitReq] = useState(1);
+  const ctl = useRef(null);
+
+  // Hand-drawn objects. `live` previews a draw, move or resize until the pointer is released.
+  const [tool, setTool] = useState('select');
+  const [live, setLive] = useState(null);
+  const [selShapeId, setSelShape] = useState(null);
+  const [editing, setEditing] = useState(null);
+  const [draft, setDraft] = useState('');
+  const [panel, setPanel] = useState(null); // null when closed, '' for all categories, or a category key
+  const shapes = live || d.shapes || NO_SHAPES;
+  const selS = selShapeId ? shapes.find(s => s.id === selShapeId) || null : null;
+  const editS = editing ? shapes.find(s => s.id === editing) || null : null;
+
+  // History lives in the parent so it survives tab switches.
+  if (!history.has(d.id)) history.set(d.id, { stack: [snap(d.code, d.shapes)], i: 0 });
+  const hist = history.get(d.id);
+  const [, bump] = useState(0);
+
+  const ctx = useMemo(() => prep(dragManual ? { ...d, manual: { ...(d.manual || {}), ...dragManual } } : d),
+    [d, dragManual, theme]);
+  const ids = useMemo(() => nodeIds(d, ctx.m), [d, ctx]);
+  const sel = selRaw && ids.has(selRaw) ? selRaw : null;
+  const markup = useMemo(() => ctx.E.markup(ctx, sel), [ctx, sel]);
+  const layers = useMemo(() => shapesMarkup(shapes, { editing }), [shapes, editing, theme]); // eslint-disable-line react-hooks/exhaustive-deps
+  const handles = useMemo(() => (selS && !editing ? handlesMarkup(selS, view.k) : ''), [selS, editing, view.k, theme]); // eslint-disable-line react-hooks/exhaustive-deps
+  const E = ctx.E;
+
+  /* ---- code + history ---- */
+  function pushHist(entry) {
+    if (hist.stack[hist.i] === entry) return;
+    hist.stack = hist.stack.slice(0, hist.i + 1);
+    hist.stack.push(entry);
+    if (hist.stack.length > 80) hist.stack.shift();
+    hist.i = hist.stack.length - 1;
+    bump(n => n + 1);
+  }
+  const setCode = useCallback((code, { commit = true, fit = false } = {}) => {
+    updateDiagram(x => { x.code = code; pruneManual(x); });
+    if (commit) pushHist(snap(code, dRef.current.shapes));
+    if (fit) setFitReq(n => n + 1);
+  }, [updateDiagram]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Save shapes; record = false skips the undo entry (used while a new text box is still empty).
+  const putShapes = (next, record = true) => {
+    // Update the ref now so a second change in the same event builds on this one.
+    dRef.current = { ...dRef.current, shapes: next };
+    updateDiagram(x => { x.shapes = next; });
+    if (record) pushHist(snap(dRef.current.code, next));
+  };
+  const restore = entry => {
+    const o = JSON.parse(entry);
+    updateDiagram(x => { x.code = o.code; x.shapes = o.shapes; pruneManual(x); });
+    setEditing(null);
+  };
+  const undo = () => { if (hist.i > 0) { hist.i--; restore(hist.stack[hist.i]); bump(n => n + 1); } };
+  const redo = () => { if (hist.i < hist.stack.length - 1) { hist.i++; restore(hist.stack[hist.i]); bump(n => n + 1); } };
+
+  const editT = useRef(0);
+  const onCodeInput = v => {
+    setCode(v, { commit: false });
+    clearTimeout(editT.current);
+    editT.current = setTimeout(() => pushHist(snap(v, dRef.current.shapes)), 700);
+  };
+
+  /* ---- view ---- */
+  const fit = useCallback(() => {
+    const stage = stageRef.current; if (!stage) return;
+    const b = unionBox(ctx.m.count ? ctx.E.bounds(ctx) : null, shapeBounds(shapes)), r = stage.getBoundingClientRect();
+    if (!b || !r.width) { setView({ x: 0, y: 0, k: 1 }); return; }
+    const wide = r.width > 640;
+    const left = drawer && wide ? 410 : 66, right = 62, top = 54;
+    const bottom = (dockRef.current?.offsetHeight || 80) + 26 + (drawer && !wide ? r.height * 0.66 : 0);
+    const aw = Math.max(80, r.width - left - right), ah = Math.max(80, r.height - top - bottom);
+    const k = Math.max(0.15, Math.min(1.2, aw / b.w, ah / b.h));
+    setView({ k, x: left + (aw - b.w * k) / 2 - b.x * k, y: top + (ah - b.h * k) / 2 - b.y * k });
+  }, [ctx, drawer, shapes]);
+
+  useLayoutEffect(() => { if (visible) fit(); }, [fitReq, visible]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const zoomAt = (px, py, k) => {
+    const v = viewRef.current;
+    k = Math.max(0.15, Math.min(3, k));
+    const wx = (px - v.x) / v.k, wy = (py - v.y) / v.k;
+    setView({ k, x: px - wx * k, y: py - wy * k });
+  };
+  const zoomCenter = f => { const r = svgRef.current.getBoundingClientRect(); zoomAt(r.width / 2, r.height / 2, viewRef.current.k * f); };
+
+  useEffect(() => {
+    const el = svgRef.current;
+    const wheel = e => {
+      e.preventDefault();
+      const r = el.getBoundingClientRect();
+      zoomAt(e.clientX - r.left, e.clientY - r.top, viewRef.current.k * Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015)));
+    };
+    el.addEventListener('wheel', wheel, { passive: false });
+    return () => el.removeEventListener('wheel', wheel);
+  }, []);
+
+  const toWorld = (cx, cy) => {
+    const r = svgRef.current.getBoundingClientRect(), v = viewRef.current;
+    return { x: (cx - r.left - v.x) / v.k, y: (cy - r.top - v.y) / v.k };
+  };
+  const center = () => { const r = svgRef.current.getBoundingClientRect(); return toWorld(r.left + r.width / 2, r.top + r.height / 2); };
+
+  /* ---- shape actions ---- */
+  const startEdit = s => { setDraft(s.text || ''); setEditing(s.id); setSelShape(s.id); };
+  const finishEdit = () => {
+    const id = editing; if (!id) return;
+    setEditing(null);
+    const base = dRef.current.shapes || [], s = base.find(x => x.id === id);
+    if (!s) return;
+    const text = s.t === 'code' ? draft.replace(/\s+$/, '') : draft.trim();
+    if (!text && (s.t === 'text' || s.t === 'comment')) { putShapes(base.filter(x => x.id !== id)); setSelShape(null); return; }
+    if (text === (s.text || '')) return;
+    const n = { ...s, text };
+    if (s.t === 'text') Object.assign(n, measure(text, s.fs || 20));
+    putShapes(base.map(x => (x.id === id ? n : x)));
+  };
+  const place = (t, extra, at) => {
+    const c = at || center(), s = make(t, c.x, c.y, extra);
+    putShapes([...(dRef.current.shapes || []), s]);
+    setSelShape(s.id); setSel(null); setTool('select');
+    return s;
+  };
+  const patchSel = p => {
+    if (!selS) return;
+    putShapes((dRef.current.shapes || []).map(s => (s.id === selS.id ? { ...s, ...p } : s)));
+  };
+  const removeSel = () => {
+    if (!selS) return;
+    putShapes((dRef.current.shapes || []).filter(s => s.id !== selS.id));
+    setSelShape(null);
+  };
+  const duplicateSel = () => {
+    if (!selS) return;
+    const c = { ...moved(selS, 24, 24), id: rid('s') };
+    putShapes([...(dRef.current.shapes || []), c]);
+    setSelShape(c.id);
+  };
+  const reorder = front => {
+    if (!selS) return;
+    const rest = (dRef.current.shapes || []).filter(s => s.id !== selS.id);
+    putShapes(front ? [...rest, selS] : [selS, ...rest]);
+  };
+
+  const addImageFile = (f, at) => {
+    if (!f || !/^image\//.test(f.type)) { toast('Choose an image file'); return; }
+    const rd = new FileReader();
+    rd.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        let src = rd.result;
+        const w = img.naturalWidth || 400, h = img.naturalHeight || 300;
+        // Images are saved in browser storage, so shrink big ones.
+        if (f.size > 350000 || Math.max(w, h) > 1400) {
+          const k = Math.min(1, 1400 / Math.max(w, h)), cv = document.createElement('canvas');
+          cv.width = Math.round(w * k); cv.height = Math.round(h * k);
+          cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+          src = cv.toDataURL('image/png');
+          if (src.length > 900000) src = cv.toDataURL('image/jpeg', 0.85);
+        }
+        const dw = Math.min(480, w);
+        place('image', { src, w: dw, h: Math.round(h * dw / w) }, at);
+      };
+      img.onerror = () => toast('That image couldn’t be read');
+      img.src = rd.result;
+    };
+    rd.readAsDataURL(f);
+  };
+
+  /* ---- pointer: pan, drag nodes, draw and edit shapes, pinch ---- */
+  const ptrs = useRef(new Map()), drag = useRef(null), pinch = useRef(null), lastTap = useRef({ id: null, t: 0 });
+  const [grabbing, setGrabbing] = useState(false);
+  const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y), mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+
+  const onPointerDown = e => {
+    if (e.button > 0) return;
+    // Keep focus handling in our hands: blur any field (this also saves an open text edit).
+    e.preventDefault();
+    const ae = document.activeElement;
+    if (ae && ae !== document.body && ae.blur) ae.blur();
+    svgRef.current.setPointerCapture(e.pointerId);
+    ptrs.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const v = viewRef.current;
+    if (ptrs.current.size === 2) {
+      const [a, b] = [...ptrs.current.values()];
+      pinch.current = { d: dist(a, b) || 1, k: v.k, m: mid(a, b), vx: v.x, vy: v.y };
+      drag.current = null;
+      setLive(null); setDragManual(null);
+      return;
+    }
+    const w = toWorld(e.clientX, e.clientY), base = dRef.current.shapes || [], at = { sx: e.clientX, sy: e.clientY, moved: false };
+
+    if (tool !== 'select') {
+      if (tool === 'text' || tool === 'comment') {
+        const s = make(tool, w.x, w.y);
+        putShapes([...base, s], false);
+        startEdit(s); setTool('select');
+        drag.current = null;
+        return;
+      }
+      drag.current = { t: 'draw', tool, a: w, id: rid('s'), pts: [[Math.round(w.x), Math.round(w.y)]], ...at };
+      return;
+    }
+
+    const hEl = e.target.closest('[data-handle]');
+    if (hEl && selS) { drag.current = { t: 'resize', id: selS.id, h: hEl.dataset.handle, o: selS, ...at }; setGrabbing(true); return; }
+
+    const sEl = e.target.closest('[data-shape]');
+    if (sEl) {
+      const id = sEl.dataset.shape, s = base.find(x => x.id === id);
+      if (!s) return;
+      const now = Date.now(), lt = lastTap.current;
+      if (lt.id === id && now - lt.t < 400 && hasText(s)) {
+        lastTap.current = { id: null, t: 0 };
+        startEdit(s); drag.current = null;
+        return;
+      }
+      lastTap.current = { id, t: now };
+      setSelShape(id); setSel(null);
+      drag.current = { t: 'move', id, o: s, a: w, ...at };
+      setGrabbing(true);
+      return;
+    }
+
+    const n = E.draggable && e.target.closest('[data-node]');
+    if (n) { const id = n.dataset.node, p = ctx.P(id); drag.current = { t: 'n', id, ox: p.x, oy: p.y, ...at }; setSelShape(null); }
+    else drag.current = { t: 'p', vx: v.x, vy: v.y, ...at };
+    setGrabbing(true);
+  };
+  const onPointerMove = e => {
+    if (!ptrs.current.has(e.pointerId)) return;
+    ptrs.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const pc = pinch.current;
+    if (pc && ptrs.current.size >= 2) {
+      const [a, b] = [...ptrs.current.values()], r = svgRef.current.getBoundingClientRect(), m = mid(a, b);
+      const k = Math.max(0.15, Math.min(3, pc.k * dist(a, b) / pc.d));
+      const wx = (pc.m.x - r.left - pc.vx) / pc.k, wy = (pc.m.y - r.top - pc.vy) / pc.k;
+      setView({ k, x: m.x - r.left - wx * k, y: m.y - r.top - wy * k });
+      return;
+    }
+    const dr = drag.current; if (!dr) return;
+    const dx = e.clientX - dr.sx, dy = e.clientY - dr.sy;
+    if (!dr.moved && Math.hypot(dx, dy) < 4) return;
+    dr.moved = true;
+    const k = viewRef.current.k, base = dRef.current.shapes || [], w = toWorld(e.clientX, e.clientY);
+    if (dr.t === 'draw') {
+      if (dr.tool === 'pen') {
+        const last = dr.pts[dr.pts.length - 1];
+        if (Math.hypot(w.x - last[0], w.y - last[1]) * k < 2) return;
+        dr.pts.push([Math.round(w.x), Math.round(w.y)]);
+        dr.shape = { id: dr.id, t: 'pen', pts: dr.pts.slice() };
+      } else dr.shape = drawn(dr.tool, dr.a, w, e.shiftKey, dr.id);
+      setLive([...base, dr.shape]);
+    } else if (dr.t === 'move') {
+      dr.shape = moved(dr.o, Math.round(w.x - dr.a.x), Math.round(w.y - dr.a.y));
+      setLive(base.map(s => (s.id === dr.id ? dr.shape : s)));
+    } else if (dr.t === 'resize') {
+      dr.shape = resized(dr.o, dr.h, w, e.shiftKey || KEEP_RATIO.has(dr.o.t));
+      setLive(base.map(s => (s.id === dr.id ? dr.shape : s)));
+    } else if (dr.t === 'n') {
+      dr.pos = { x: Math.round((dr.ox + dx / k) / 4) * 4, y: Math.round((dr.oy + dy / k) / 4) * 4 };
+      setDragManual({ [dr.id]: dr.pos });
+    } else setView(v => ({ ...v, x: dr.vx + dx, y: dr.vy + dy }));
+  };
+  const onPointerEnd = e => {
+    ptrs.current.delete(e.pointerId);
+    if (ptrs.current.size < 2) pinch.current = null;
+    if (ptrs.current.size) return;
+    const dr = drag.current, base = dRef.current.shapes || [];
+    if (dr) {
+      if (dr.t === 'draw') {
+        let s = dr.shape;
+        if (dr.tool === 'pen') s = dr.pts.length > 1 ? s : null;
+        else if (!s || (s.w != null && s.w < 8 && s.h < 8)) s = make(dr.tool, dr.a.x, dr.a.y); // a click drops a default-size shape
+        if (s) { putShapes([...base, s]); setSelShape(s.id); setSel(null); }
+        if (dr.tool !== 'pen') setTool('select');
+      } else if (dr.t === 'move' || dr.t === 'resize') {
+        if (dr.moved && dr.shape) putShapes(base.map(s => (s.id === dr.id ? dr.shape : s)));
+      } else if (!dr.moved) {
+        setSel(s => (dr.t === 'n' && s !== dr.id ? dr.id : null));
+        if (dr.t === 'p') setSelShape(null);
+      } else if (dr.t === 'n' && dr.pos) {
+        const { id, pos } = dr;
+        updateDiagram(x => { x.manual = x.manual || {}; x.manual[id] = pos; });
+        setDragManual(null);
+      }
+    }
+    setLive(null);
+    drag.current = null;
+    setGrabbing(false);
+  };
+
+  const pickTool = t => {
+    if (t === 'icon') { setPanel('icon'); return; }
+    setTool(t); setPanel(null);
+    if (t !== 'select') setSelShape(null);
+  };
+  const focusAI = () => { setPanel(null); promptRef.current?.focus(); };
+
+  /* ---- keyboard ---- */
+  useEffect(() => {
+    if (!visible) return;
+    const key = e => {
+      if (document.querySelector('.modal')) return;
+      const inField = e.target.closest && e.target.closest('textarea,input');
+      const mod = e.metaKey || e.ctrlKey, k = e.key.toLowerCase();
+      if (mod && k === 'j') { e.preventDefault(); focusAI(); return; }
+      if (inField) return;
+      if (mod && k === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
+      if (mod && k === 'y') { e.preventDefault(); redo(); return; }
+      if (mod && k === 'd' && selS) { e.preventDefault(); duplicateSel(); return; }
+      if (mod || e.altKey) return;
+      if (e.key === '/') { e.preventDefault(); setPanel(p => (p == null ? '' : null)); return; }
+      if (e.key === 'Escape') { setSel(null); setSelShape(null); setTool('select'); setPanel(null); return; }
+      if (selS && (e.key === 'Delete' || e.key === 'Backspace')) { e.preventDefault(); removeSel(); return; }
+      if (selS && e.key === 'Enter' && hasText(selS)) { e.preventDefault(); startEdit(selS); return; }
+      if (selS && e.key.startsWith('Arrow')) {
+        e.preventDefault();
+        const n = e.shiftKey ? 10 : 1, dx = e.key === 'ArrowLeft' ? -n : e.key === 'ArrowRight' ? n : 0, dy = e.key === 'ArrowUp' ? -n : e.key === 'ArrowDown' ? n : 0;
+        putShapes((dRef.current.shapes || []).map(s => (s.id === selS.id ? moved(s, dx, dy) : s)));
+        return;
+      }
+      if (TOOL_KEYS[k]) { e.preventDefault(); pickTool(TOOL_KEYS[k]); }
+    };
+    const paste = e => {
+      if (e.target.closest && e.target.closest('textarea,input')) return;
+      const f = [...(e.clipboardData?.files || [])].find(x => /^image\//.test(x.type));
+      if (f) { e.preventDefault(); addImageFile(f); }
+    };
+    document.addEventListener('keydown', key);
+    document.addEventListener('paste', paste);
+    return () => { document.removeEventListener('keydown', key); document.removeEventListener('paste', paste); };
+  });
+
+  /* ---- AI ---- */
+  const addLog = (cls, text) => setLog(l => [...l, { cls, text, id: Math.random() }].slice(-12));
+  const logRef = useRef(null);
+  useEffect(() => { if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight; }, [log]);
+
+  const generate = async () => {
+    if (ctl.current) { ctl.current.abort(); return; }
+    const text = prompt.trim();
+    if (!text) return;
+    const sample = await sampleP;
+    if (!sample) { setStatus({ text: NO_AI }); return; }
+    addLog('u', trunc(text, 240));
+    setPrompt('');
+    ctl.current = new AbortController();
+    setBusy(true); setStatus({ text: 'Drawing', busy: true });
+    const name = TYPES[d.type].name.toLowerCase();
+    const others = file.diagrams.filter(x => x.id !== d.id && x.code && x.code.trim())
+      .map(x => `"${x.name}" (${TYPES[x.type]?.name}):\n${x.code}`).join('\n\n');
+    const selLabel = sel && E.label ? E.label(ctx.m, sel) : '';
+    let p = `You draw ${name} diagrams in Linework.\n\n${langFor(d.type)}\n\nIf the input is code or config (Terraform, SQL, YAML, source code), diagram what it defines. When changing an existing diagram, keep existing ids and everything the request doesn't touch.\n\n`;
+    p += d.code.trim() ? `Current diagram code:\n<<<\n${d.code}\n>>>\n\n` : 'There is no diagram yet. Create a new one.\n\n';
+    if (selLabel) p += `The user has selected "${sel}" (${selLabel}); the request most likely refers to it.\n\n`;
+    if (file.doc && file.doc.trim()) p += `The file's design doc, for context:\n<<<\n${file.doc.slice(0, 6000)}\n>>>\n\n`;
+    if (others) p += `Other diagrams in this file, for context:\n${others.slice(0, 6000)}\n\n`;
+    p += `Request:\n<<<\n${text}\n>>>\n\nReply with ONLY a JSON object, no markdown fences: {"reply": "<one short sentence saying what you drew or changed>", "code": "<the complete diagram code>"}`;
+    try {
+      const res = await sample.json(p, { signal: ctl.current.signal, cache: false, modelTier: 'default' });
+      if (!res || typeof res.code !== 'string' || !engineOf(d).parse(res.code).count) throw { code: 'empty' };
+      setCode(res.code.trim(), { fit: true });
+      addLog('a', typeof res.reply === 'string' && res.reply ? res.reply : 'Diagram updated.');
+      setStatus({ text: '' });
+    } catch (e) {
+      addLog('e', copyFor(e && e.code));
+      setStatus({ text: '' });
+    } finally {
+      ctl.current = null; setBusy(false);
+    }
+  };
+
+  /* ---- tools ---- */
+  const copyCode = async () => {
+    try { await navigator.clipboard.writeText(d.code); toast('Code copied'); }
+    catch (e) { toast('Copy isn’t allowed here. Select the code and copy it manually.'); }
+  };
+  const toggleDir = () => { updateDiagram(x => { x.dir = x.dir === 'TB' ? 'LR' : 'TB'; x.manual = {}; }); setFitReq(n => n + 1); };
+  const tidy = () => { updateDiagram(x => { x.manual = {}; }); setFitReq(n => n + 1); toast('Layout tidied'); };
+  const toggleStyle = () => updateDiagram(x => { x.style = x.style === 'mono' ? 'color' : 'mono'; });
+
+  /* ---- insert menu ---- */
+  const isBlank = !d.code.trim() && !(d.shapes || []).length;
+  // Fill this diagram when it's blank, otherwise add a new tab.
+  const loadDiagram = (type, name, code) => {
+    if (isBlank) {
+      updateDiagram(x => { x.type = type; x.manual = {}; if (type === 'flowchart') x.dir = 'TB'; });
+      if (code) setCode(code, { fit: true }); else setDrawer(true);
+    } else {
+      onAddDiagram(type, name, code);
+      toast(`Added “${name}” as a new diagram`);
+    }
+  };
+  const iconSet = icons();
+  const tree = [
+    { key: 'ai', icon: 'ai', label: 'AI chat', note: 'Ask AI to draw or change this diagram', act: focusAI },
+    { key: 'code', icon: 'diagram', label: 'Diagram as code', note: 'Create diagrams using code', children: Object.entries(TYPES).map(([k, v]) => ({
+      key: 'code-' + k, icon: 'diagram', label: v.name,
+      note: k === d.type ? 'Open the code for this diagram' : isBlank ? 'Switch this diagram and open its code' : 'Add a new diagram tab',
+      act: () => (k === d.type ? setDrawer(true) : loadDiagram(k, v.name, '')),
+    })) },
+    { key: 'catalog', icon: 'catalog', label: 'Diagram catalog', note: 'Start from a ready-made diagram', children: TEMPLATES.filter(t => t.key !== 'blank' && t.key !== 'doc').map(t => ({
+      key: 'cat-' + t.key, icon: 'catalog', label: t.name, note: t.note,
+      act: () => { const x = t.make().diagrams[0]; loadDiagram(x.type, x.name, x.code); },
+    })) },
+    { key: 'shape', icon: 'shapes', label: 'Shape', note: 'Explore shapes', children: SHAPE_LIST.map(s => ({
+      key: 'sh-' + s.t, svg: shapeIcon(s.t), label: s.name, act: () => place(s.t),
+    })) },
+    { key: 'icon', icon: 'smile', label: 'Icon', note: `${Object.keys(iconSet).length} icons available`, grid: true, children: Object.keys(iconSet).map(k => ({
+      key: 'ic-' + k, glyph: iconSet[k], label: k, act: () => place('icon', { v: k }),
+    })) },
+    { key: 'device', icon: 'device', label: 'Device frame', note: 'Phone, tablet, browser frames', children: DEVICES.map(x => ({
+      key: 'dev-' + x.v, svg: DEVICE_ICON[x.v], label: x.name, act: () => place('device', { v: x.v }),
+    })) },
+    { key: 'figure', icon: 'frame', label: 'Figure', note: 'A labeled frame to group things', tile: true, act: () => place('frame', { text: 'Figure' }) },
+    { key: 'codeblock', icon: 'codeblock', label: 'Code block', note: 'A snippet of code', tile: true, act: () => place('code') },
+    { key: 'image', icon: 'image', label: 'Image', note: 'Upload a picture', tile: true, act: () => fileRef.current?.click() },
+  ];
+  const closePanel = useCallback(() => setPanel(null), []);
+
+  const big = 120 * view.k, sm = 24 * view.k;
+  const stageStyle = {
+    backgroundSize: `${big}px ${big}px,${big}px ${big}px,${sm}px ${sm}px,${sm}px ${sm}px`,
+    backgroundPosition: `${view.x}px ${view.y}px`,
+  };
+  const empty = !ctx.m.count && !shapes.length;
+  const selLabel = sel && E.label ? E.label(ctx.m, sel) : null;
+  const helpText = d.type === 'sequence' ? HELP.sequence : d.type === 'erd' ? HELP.erd : d.type === 'flowchart' ? HELP.flowchart : HELP.graph;
+  const errs = ctx.m.errors.slice(0, 3);
+
+  // Text editor laid over the shape being edited.
+  let editor = null;
+  if (editS) {
+    const b = editBox(editS, draft), k = view.k;
+    editor = (
+      <textarea className={'sedit' + (b.card ? ' card' : '')} autoFocus value={draft} spellCheck={editS.t !== 'code'} aria-label="Edit text"
+        style={{
+          left: view.x + b.x * k, top: view.y + b.y * k, width: b.w * k, height: b.h * k,
+          fontSize: b.fs * k, textAlign: b.align, fontWeight: b.weight, color: b.color,
+          fontFamily: b.mono ? 'var(--mono)' : undefined, whiteSpace: b.mono ? 'pre' : undefined,
+          paddingTop: (b.pad || 0) * k, paddingLeft: (b.padX || 0) * k, paddingRight: (b.padX || 0) * k,
+        }}
+        onFocus={e => { const t = e.target; t.selectionStart = t.selectionEnd = t.value.length; }}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={finishEdit}
+        onKeyDown={e => {
+          if (e.key === 'Escape' || (e.key === 'Enter' && (e.metaKey || e.ctrlKey))) { e.preventDefault(); e.target.blur(); }
+          else if (e.key === 'Enter' && !e.shiftKey && editS.t !== 'text' && editS.t !== 'code' && editS.t !== 'sticky' && editS.t !== 'comment') { e.preventDefault(); e.target.blur(); }
+          else if (e.key === 'Tab' && editS.t === 'code') {
+            e.preventDefault();
+            const t = e.target, s = t.selectionStart, v = t.value.slice(0, s) + '  ' + t.value.slice(t.selectionEnd);
+            setDraft(v); requestAnimationFrame(() => { t.selectionStart = t.selectionEnd = s + 2; });
+          }
+        }} />
+    );
+  }
+
+  return (
+    <div className={'cwrap' + (drawer ? ' has-drawer' : '')}
+      onDragOver={e => { if ([...e.dataTransfer.types].includes('Files')) e.preventDefault(); }}
+      onDrop={e => {
+        const f = [...e.dataTransfer.files].find(x => /^image\//.test(x.type));
+        if (!f) return;
+        e.preventDefault();
+        addImageFile(f, toWorld(e.clientX, e.clientY));
+      }}>
+      <div id="stage" ref={stageRef} style={stageStyle}>
+        <svg id="svg" ref={svgRef} className={(grabbing ? 'grabbing' : '') + (tool !== 'select' ? ' drawing' : '')} xmlns="http://www.w3.org/2000/svg"
+          fontFamily="Bricolage Grotesque, system-ui, -apple-system, Segoe UI, sans-serif" aria-label="Diagram canvas"
+          onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerEnd} onPointerCancel={onPointerEnd}>
+          <g transform={`translate(${view.x} ${view.y}) scale(${view.k})`} dangerouslySetInnerHTML={{ __html: layers.under + markup + layers.over + handles }} />
+        </svg>
+      </div>
+      {editor}
+
+      {empty && (
+        <div className="cempty">
+          <h3>This {(TYPES[d.type]?.name || 'diagram').toLowerCase()} is empty</h3>
+          <p>Draw with the tools on the left, describe it in the box below and AI will draw it, or open Code and write it yourself.</p>
+        </div>
+      )}
+
+      <Toolbar tool={tool} onTool={pickTool} panelOpen={panel != null} onInsert={() => setPanel(p => (p == null ? '' : null))} onAI={focusAI} />
+      {panel != null && <InsertPanel tree={tree} start={panel} onClose={closePanel} />}
+      <input ref={fileRef} type="file" accept="image/*" hidden onChange={e => { addImageFile(e.target.files[0]); e.target.value = ''; }} />
+
+      <div className="ctools">
+        <button className="btn" aria-pressed={drawer} onClick={() => setDrawer(o => !o)}>Code</button>
+        {E.directional && <button className="btn" onClick={toggleDir} aria-label={'Layout direction: ' + (d.dir === 'TB' ? 'Vertical' : 'Horizontal')}>{d.dir === 'TB' ? 'Vertical' : 'Horizontal'}</button>}
+        {E.draggable && <button className="btn" onClick={tidy}>Tidy layout</button>}
+        <button className="btn" onClick={toggleStyle} aria-label={'Diagram style: ' + (d.style === 'mono' ? 'Mono' : 'Color')}>{d.style === 'mono' ? 'Mono' : 'Color'}</button>
+      </div>
+
+      {selS && !editing && (
+        <div className="sbar" role="toolbar" aria-label="Selected object">
+          {selS.t !== 'image' && COLOR_NAMES.map((n, i) => (
+            <button key={n} className="sw" style={{ background: colorOf(i) }} aria-label={n + ' color'} title={n}
+              aria-pressed={(selS.c || 0) === i} onClick={() => patchSel({ c: i })} />
+          ))}
+          {selS.t === 'text' && (<>
+            <span className="sep" />
+            <button className="sbtn" aria-label="Smaller text" onClick={() => { const fs = Math.max(8, (selS.fs || 20) - 4); patchSel({ fs, ...measure(selS.text, fs) }); }}>A−</button>
+            <button className="sbtn" aria-label="Larger text" onClick={() => { const fs = Math.min(200, (selS.fs || 20) + 4); patchSel({ fs, ...measure(selS.text, fs) }); }}>A+</button>
+            <button className="sbtn" aria-pressed={!!selS.bold} onClick={() => patchSel({ bold: !selS.bold })}><b>B</b></button>
+          </>)}
+          {(selS.t === 'line' || selS.t === 'arrow' || selS.t === 'rect' || selS.t === 'ellipse' || selS.t === 'diamond') && (
+            <button className="sbtn" aria-pressed={!!selS.dash} onClick={() => patchSel({ dash: !selS.dash })}>Dashed</button>
+          )}
+          {(selS.t === 'line' || selS.t === 'arrow') && (
+            <button className="sbtn" onClick={() => patchSel({ t: selS.t === 'line' ? 'arrow' : 'line' })}>{selS.t === 'line' ? 'Add arrow' : 'No arrow'}</button>
+          )}
+          <span className="sep" />
+          {hasText(selS) && <button className="sbtn" onClick={() => startEdit(selS)}>Edit text</button>}
+          <button className="sbtn" onClick={() => reorder(true)} title="Bring to front">Front</button>
+          <button className="sbtn" onClick={() => reorder(false)} title="Send to back">Back</button>
+          <button className="sbtn" onClick={duplicateSel} title="Duplicate (Ctrl D)">Duplicate</button>
+          <button className="sbtn danger" onClick={removeSel} title="Delete (Del)">Delete</button>
+        </div>
+      )}
+
+      <div className="zoom" role="group" aria-label="Zoom">
+        <button onClick={() => zoomCenter(1.2)} aria-label="Zoom in">+</button>
+        <button onClick={() => zoomCenter(1 / 1.2)} aria-label="Zoom out">−</button>
+        <button className="pct" onClick={fit} aria-label="Fit diagram to screen">{Math.round(view.k * 100)}%</button>
+      </div>
+
+      {drawer && (
+        <aside className="drawer" aria-label="Diagram code">
+          <div className="dhead">
+            <strong>Diagram code</strong>
+            <button className="link" onClick={copyCode}>Copy</button>
+            <button className="link" onClick={() => setDrawer(false)}>Close</button>
+          </div>
+          <textarea id="code" value={d.code} spellCheck="false" autoCapitalize="off" autoComplete="off" aria-label="Diagram code" autoFocus
+            onChange={e => onCodeInput(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Tab') {
+                e.preventDefault();
+                const t = e.target, s = t.selectionStart;
+                onCodeInput(t.value.slice(0, s) + '  ' + t.value.slice(t.selectionEnd));
+                requestAnimationFrame(() => { t.selectionStart = t.selectionEnd = s + 2; });
+              }
+            }} />
+          {errs.length > 0 && (
+            <div className="errs" role="status"
+              dangerouslySetInnerHTML={{ __html: errs.map(x => `Line ${x.line} isn’t recognized: <code>${esc(trunc(x.text, 60))}</code>`).join('<br>') }} />
+          )}
+          <details className="help"><summary>How the code works</summary><pre>{helpText}</pre></details>
+        </aside>
+      )}
+
+      <div className="dock" ref={dockRef}>
+        {log.length > 0 && (
+          <div className="log" ref={logRef} aria-live="polite">
+            {log.map(l => <p key={l.id} className={l.cls}><span>{l.text}</span></p>)}
+          </div>
+        )}
+        {selLabel && (
+          <span className="chip">Editing {selLabel}<button onClick={() => setSel(null)} aria-label="Clear selection">×</button></span>
+        )}
+        <div className="row">
+          <textarea id="prompt" ref={promptRef} rows={1} value={prompt} placeholder={PLACEHOLDER[d.type] || 'Describe a diagram'} aria-label="Ask AI to draw or change the diagram"
+            style={{ height: Math.min(140, 22 + 20 * Math.max(1, prompt.split('\n').length)) }}
+            onChange={e => setPrompt(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); generate(); } }} />
+          <button className={'go' + (busy ? ' stop' : '')} onClick={generate}>{busy ? 'Stop' : empty ? 'Generate' : 'Update'}</button>
+        </div>
+        <div className="meta">
+          <button className="link" onClick={undo} disabled={hist.i <= 0}>Undo</button>
+          <button className="link" onClick={redo} disabled={hist.i >= hist.stack.length - 1}>Redo</button>
+          <span className={'status' + (status.busy ? ' busy' : '')}>{status.text}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
