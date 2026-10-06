@@ -150,7 +150,7 @@ button,input,textarea{font:inherit;color:inherit}
 .zoom button+button{border-top:1px solid var(--line)}
 .zoom button:hover{background:var(--panel)}
 .zoom .pct{font-size:11px;color:var(--ink2);height:28px}
-.cempty{position:absolute;left:50%;top:40%;transform:translate(-50%,-50%);width:min(360px,calc(100% - 40px));z-index:2;pointer-events:none}
+.cempty{position:absolute;left:50%;top:42%;transform:translate(-50%,-50%);width:min(440px,calc(100% - 100px));z-index:2;pointer-events:none}
 .cempty h3{margin:0 0 6px;font-size:22px;letter-spacing:-.02em}
 .cempty p{margin:0;color:var(--ink2);line-height:1.5}
 
@@ -283,3 +283,60 @@ details.help pre{margin:8px 0 2px;font-family:var(--mono);font-size:11.5px;line-
 /* text editor over a shape */
 .sedit{position:absolute;z-index:6;margin:0;border:0;outline:1.5px dashed var(--ink2);outline-offset:2px;background:transparent;resize:none;overflow:hidden;line-height:1.3;padding:0;color:var(--ink);font-family:var(--ui);font-weight:500}
 .sedit.card{background:var(--surface);outline:1px solid var(--line);border-radius:8px}
+
+/* ---- interaction polish ---- */
+@keyframes pop{from{opacity:0;transform:translateY(-6px) scale(.98)}to{opacity:1;transform:none}}
+@keyframes popx{from{opacity:0;transform:translate(-50%,-6px)}to{opacity:1;transform:translate(-50%,0)}}
+@keyframes fadein{from{opacity:0}to{opacity:1}}
+@keyframes tipin{from{opacity:0;transform:translate(-4px,-50%)}to{opacity:1;transform:translate(0,-50%)}}
+.ins,.menu,.mbox{animation:pop .16s cubic-bezier(.2,.8,.3,1)}
+.modal{animation:fadein .14s ease-out}
+.sbar,.hint{animation:popx .16s cubic-bezier(.2,.8,.3,1)}
+.cempty{animation:fadein .3s ease-out}
+
+/* press and hover feedback */
+.btn,.sbtn,.go,.tbtn,.ins-item,.ins-tile,.zoom button,.qs button,.sw,.tab,.card{transition:background-color .12s,border-color .12s,color .12s,transform .1s,box-shadow .12s}
+.btn:active,.sbtn:active,.go:active,.zoom button:active,.qs button:active,.ins-item:active,.ins-tile:active{transform:scale(.97)}
+.tbtn:active{transform:scale(.9)}
+.sw:hover{transform:scale(1.15)}
+.card:hover{transform:translateY(-2px);box-shadow:var(--shadow)}
+.ins-item:hover .chev{transform:translateX(2px)}
+.ins-item .chev{transition:transform .12s}
+
+/* objects on the canvas glow on hover */
+#svg [data-shape],#svg [data-node]{transition:filter .15s}
+#svg:not(.drawing):not(.panning):not(.grabbing) [data-shape]:hover,
+#svg:not(.drawing):not(.panning):not(.grabbing) [data-node]:hover{filter:drop-shadow(0 0 5px color-mix(in srgb,var(--hi) 70%,transparent))}
+#svg [data-handle]{transition:transform .1s}
+#svg [data-handle]:hover{filter:drop-shadow(0 0 3px var(--hi))}
+
+/* toolbar tooltip */
+.ttip{position:fixed;z-index:45;transform:translateY(-50%);display:flex;align-items:center;gap:8px;background:var(--ink);color:var(--paper);padding:5px 6px 5px 10px;border-radius:7px;font-size:12.5px;font-weight:500;white-space:nowrap;pointer-events:none;box-shadow:var(--shadow);animation:tipin .14s ease-out .2s both}
+.ttip kbd{font:600 11px/1 var(--ui);padding:3px 5px;border-radius:4px;background:color-mix(in srgb,var(--paper) 18%,transparent)}
+
+/* tool hint */
+.hint{position:absolute;top:54px;left:50%;transform:translateX(-50%);z-index:4;display:flex;align-items:center;gap:10px;max-width:calc(100% - 140px);background:var(--surface);border:1px solid var(--line);border-radius:999px;box-shadow:var(--shadow);padding:6px 6px 6px 14px;font-size:12.5px;color:var(--ink2);pointer-events:none}
+.hint span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hint kbd,.qs kbd,.krow kbd{font:600 11px/1 var(--ui);padding:4px 6px;border-radius:5px;border:1px solid var(--line);background:var(--panel);color:var(--ink2);white-space:nowrap}
+@media (max-width:640px){.hint{top:auto;bottom:150px;max-width:calc(100% - 20px)}}
+
+/* empty-state quick starts */
+.qs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:16px;pointer-events:auto}
+.qs button{display:flex;align-items:center;gap:10px;text-align:left;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:10px 12px;font-size:13.5px;font-weight:500;cursor:pointer}
+.qs button:hover{border-color:var(--ink2);box-shadow:var(--shadow)}
+.qs svg{flex:none;width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.qs kbd{margin-left:auto}
+@media (max-width:520px){.qs{grid-template-columns:1fr}}
+
+/* zoom extras */
+.zoom .kbtn{font-size:13px;font-weight:600;color:var(--ink2);height:30px}
+
+/* shortcuts sheet */
+.mbox.keys{width:min(760px,100%);max-height:calc(100vh - 40px);overflow:auto}
+.kcols{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:6px 22px;margin-top:10px}
+.kcols h4{margin:8px 0 6px;font-size:12px;font-weight:600;color:var(--ink2);text-transform:uppercase;letter-spacing:.04em}
+.krow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid var(--line);font-size:13.5px}
+
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-delay:0s!important;transition-duration:.01ms!important}
+}

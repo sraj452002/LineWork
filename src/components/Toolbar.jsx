@@ -33,7 +33,7 @@ export const Ico = ({ d, vb = 24, className }) => (
 
 const TOOLS = [
   { t: 'select', k: 'v', label: 'Select' },
-  { t: 'hand', k: 'h', label: 'Hand (drag empty canvas also pans)' },
+  { t: 'hand', k: 'h', label: 'Hand' },
   { t: 'rect', k: 'r', label: 'Rectangle' },
   { t: 'ellipse', k: 'o', label: 'Ellipse' },
   { t: 'arrow', k: 'a', label: 'Arrow' },
@@ -48,27 +48,32 @@ const TOOLS2 = [
 ];
 export const TOOL_KEYS = Object.fromEntries([...TOOLS, ...TOOLS2].map(x => [x.k, x.t]));
 
-function TBtn({ icon, k, label, pressed, onClick, ...rest }) {
+function TBtn({ icon, k, label, pressed, onClick, onTip, ...rest }) {
+  const show = e => { const r = e.currentTarget.getBoundingClientRect(); onTip({ label, k: k.toUpperCase(), x: r.right + 10, y: r.top + r.height / 2 }); };
   return (
-    <button className="tbtn" aria-label={`${label} (${k.toUpperCase()})`} title={`${label}  ${k.toUpperCase()}`}
-      aria-pressed={pressed} onClick={onClick} {...rest}>
+    <button className="tbtn" aria-label={`${label} (${k.toUpperCase()})`}
+      aria-pressed={pressed} onClick={e => { onTip(null); onClick(e); }}
+      onMouseEnter={show} onFocus={show} onMouseLeave={() => onTip(null)} onBlur={() => onTip(null)} {...rest}>
       <Ico d={IC[icon]} /><kbd>{k.toUpperCase()}</kbd>
     </button>
   );
 }
 
 export function Toolbar({ tool, onTool, panelOpen, onInsert, onAI }) {
-  const btn = x => <TBtn key={x.t} icon={x.t} k={x.k} label={x.label} pressed={tool === x.t} onClick={() => onTool(x.t)} />;
-  return (
+  // The toolbar scrolls on short screens, which would clip a CSS tooltip, so it's drawn outside it.
+  const [tip, setTip] = useState(null);
+  const btn = x => <TBtn key={x.t} icon={x.t} k={x.k} label={x.label} pressed={tool === x.t} onClick={() => onTool(x.t)} onTip={setTip} />;
+  return (<>
     <div className="tbar" role="toolbar" aria-label="Drawing tools" aria-orientation="vertical">
       <div className="tgroup">
-        <TBtn icon={panelOpen ? 'close' : 'plus'} k="/" label="Insert" pressed={panelOpen} onClick={onInsert} data-insert-toggle="" />
+        <TBtn icon={panelOpen ? 'close' : 'plus'} k="/" label="Insert" pressed={panelOpen} onClick={onInsert} onTip={setTip} data-insert-toggle="" />
       </div>
-      <div className="tgroup"><TBtn icon="ai" k="Ctrl J" label="AI" onClick={onAI} /></div>
+      <div className="tgroup"><TBtn icon="ai" k="Ctrl J" label="Ask AI" onClick={onAI} onTip={setTip} /></div>
       <div className="tgroup">{TOOLS.map(btn)}</div>
       <div className="tgroup">{TOOLS2.map(btn)}</div>
     </div>
-  );
+    {tip && <div className="ttip" role="presentation" style={{ left: tip.x, top: tip.y }}>{tip.label}<kbd>{tip.k}</kbd></div>}
+  </>);
 }
 
 const flat = tree => tree.flatMap(x => (x.children ? [x, ...x.children] : [x]));

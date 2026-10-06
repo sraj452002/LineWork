@@ -9,7 +9,7 @@ import {
   hasText, icons, isLink, make, marqueeMarkup, measure, moved, outlinesMarkup, overlaps, resized, resolveLinks, selKey,
   shapeAt, shapeBounds, shapeIcon, shapesMarkup, targetMarkup, unionBox,
 } from '../lib/shapes.js';
-import { InsertPanel, TOOL_KEYS, Toolbar } from './Toolbar.jsx';
+import { IC, Ico, InsertPanel, TOOL_KEYS, Toolbar } from './Toolbar.jsx';
 import { useUI } from './ui.jsx';
 
 const PLACEHOLDER = {
@@ -29,10 +29,30 @@ const pruneManual = x => {
 // One undo entry holds the diagram code and the hand-drawn objects together.
 const snap = (code, shapes) => JSON.stringify({ code, shapes: shapes || [] });
 const NODE = 'n:'; // selection keys: a shape id, or NODE + a diagram node id
+const reducedMotion = () => typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+const sameRect = (a, b) => (!a && !b) || (a && b && a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h);
+
+// Shown while a drawing tool is active.
+const HINTS = {
+  hand: 'Drag to move around the canvas',
+  rect: 'Drag to draw a rectangle, or click to drop one · Shift keeps it square',
+  ellipse: 'Drag to draw an ellipse, or click to drop one · Shift keeps it round',
+  arrow: 'Drag from one box to another to connect them · Shift snaps to 45°',
+  line: 'Drag to draw a line · start or end on a box to attach it',
+  pen: 'Drag to draw freehand · press V when you’re done',
+  text: 'Click where the text should go',
+  frame: 'Drag to draw a frame around a group of things',
+  comment: 'Click to leave a comment',
+};
+const SHORTCUTS = [
+  ['Tools', [['V', 'Select'], ['H', 'Hand'], ['R', 'Rectangle'], ['O', 'Ellipse'], ['A', 'Arrow'], ['L', 'Line'], ['D', 'Draw'], ['T', 'Text'], ['I', 'Icon'], ['F', 'Frame'], ['C', 'Comment']]],
+  ['Canvas', [['/', 'Insert menu'], ['Ctrl J', 'Ask AI'], ['Space + drag', 'Pan'], ['+  −', 'Zoom in / out'], ['Shift 1', 'Zoom to fit'], ['Shift 0', 'Zoom to 100%'], ['Ctrl Z', 'Undo'], ['Ctrl Y', 'Redo']]],
+  ['Selection', [['Shift + drag', 'Select an area'], ['Shift + click', 'Add or remove'], ['Ctrl A', 'Select all'], ['Ctrl D', 'Duplicate'], ['Delete', 'Delete'], ['Enter', 'Edit text'], ['Arrow keys', 'Nudge (Shift: 10px)'], ['Esc', 'Deselect / cancel']]],
+];
 
 // One canvas per diagram. The parent keys it by diagram id, so switching tabs starts fresh.
 export default function Canvas({ file, d, visible, updateDiagram, history, onAddDiagram }) {
-  const { toast, theme } = useUI();
+  const { toast, theme, popup } = useUI();
   const svgRef = useRef(null), stageRef = useRef(null), dockRef = useRef(null), promptRef = useRef(null), fileRef = useRef(null);
   const dRef = useRef(d);
   dRef.current = d;
@@ -60,6 +80,7 @@ export default function Canvas({ file, d, visible, updateDiagram, history, onAdd
   const [editing, setEditing] = useState(null);
   const [draft, setDraft] = useState('');
   const [panel, setPanel] = useState(null); // null when closed, '' for all categories, or a category key
+  const [showKeys, setShowKeys] = useState(false);
   const imgV = useImages(d.shapes);
 
   // History lives in the parent so it survives tab switches.
@@ -135,27 +156,52 @@ export default function Canvas({ file, d, visible, updateDiagram, history, onAdd
   };
 
   /* ---- view ---- */
-  const fit = useCallback(() => {
+  // Glide to a new view (buttons, menu, keys); wheel, pinch and drag stay immediate.
+  const animRef = useRef(0);
+  const moveView = useCallback((to, smooth) => {
+    cancelAnimationFrame(animRef.current);
+    if (!smooth || reducedMotion()) { setView(to); return; }
+    const from = viewRef.current, t0 = performance.now();
+    const step = now => {
+      const t = Math.min(1, (now - t0) / 240), e = 1 - Math.pow(1 - t, 3);
+      setView({ k: from.k + (to.k - from.k) * e, x: from.x + (to.x - from.x) * e, y: from.y + (to.y - from.y) * e });
+      if (t < 1) animRef.current = requestAnimationFrame(step);
+    };
+    animRef.current = requestAnimationFrame(step);
+  }, []);
+  useEffect(() => () => cancelAnimationFrame(animRef.current), []);
+
+  const fit = useCallback(smooth => {
     const stage = stageRef.current; if (!stage) return;
     const b = unionBox(ctx.m.count ? ctx.E.bounds(ctx) : null, shapeBounds(shapes)), r = stage.getBoundingClientRect();
-    if (!b || !r.width) { setView({ x: 0, y: 0, k: 1 }); return; }
+    if (!b || !r.width) { moveView({ x: 0, y: 0, k: 1 }, smooth === true); return; }
     const wide = r.width > 640;
     const left = drawer && wide ? 410 : 66, right = 62, top = 54;
     const bottom = (dockRef.current?.offsetHeight || 80) + 26 + (drawer && !wide ? r.height * 0.66 : 0);
     const aw = Math.max(80, r.width - left - right), ah = Math.max(80, r.height - top - bottom);
     const k = Math.max(0.15, Math.min(1.2, aw / b.w, ah / b.h));
-    setView({ k, x: left + (aw - b.w * k) / 2 - b.x * k, y: top + (ah - b.h * k) / 2 - b.y * k });
-  }, [ctx, drawer, shapes]);
+    moveView({ k, x: left + (aw - b.w * k) / 2 - b.x * k, y: top + (ah - b.h * k) / 2 - b.y * k }, smooth === true);
+  }, [ctx, drawer, shapes, moveView]);
 
   useLayoutEffect(() => { if (visible) fit(); }, [fitReq, visible]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const zoomAt = (px, py, k) => {
+  const zoomAt = (px, py, k, smooth) => {
     const v = viewRef.current;
     k = Math.max(0.15, Math.min(3, k));
     const wx = (px - v.x) / v.k, wy = (py - v.y) / v.k;
-    setView({ k, x: px - wx * k, y: py - wy * k });
+    moveView({ k, x: px - wx * k, y: py - wy * k }, smooth);
   };
-  const zoomCenter = f => { const r = svgRef.current.getBoundingClientRect(); zoomAt(r.width / 2, r.height / 2, viewRef.current.k * f); };
+  const zoomTo = k => { const r = svgRef.current.getBoundingClientRect(); zoomAt(r.width / 2, r.height / 2, k, true); };
+  const zoomCenter = f => zoomTo(viewRef.current.k * f);
+  const zoomMenu = btn => popup(btn, [
+    { label: 'Zoom in', note: '+', act: () => zoomCenter(1.25) },
+    { label: 'Zoom out', note: '−', act: () => zoomCenter(0.8) },
+    { label: 'Zoom to fit', note: 'Shift 1', act: () => fit(true) },
+    '-',
+    { label: 'Zoom to 50%', act: () => zoomTo(0.5) },
+    { label: 'Zoom to 100%', note: 'Shift 0', act: () => zoomTo(1) },
+    { label: 'Zoom to 200%', act: () => zoomTo(2) },
+  ]);
 
   useEffect(() => {
     const el = svgRef.current;
@@ -296,6 +342,7 @@ export default function Canvas({ file, d, visible, updateDiagram, history, onAdd
 
   const onPointerDown = e => {
     if (e.button > 1) return;
+    cancelAnimationFrame(animRef.current);
     // Keep focus handling in our hands: blur any field (this also saves an open text edit).
     e.preventDefault();
     const ae = document.activeElement;
@@ -375,7 +422,14 @@ export default function Canvas({ file, d, visible, updateDiagram, history, onAdd
     setGrabbing(true);
   };
   const onPointerMove = e => {
-    if (!ptrs.current.has(e.pointerId)) return;
+    if (!ptrs.current.has(e.pointerId)) {
+      // Before pressing, show which box an arrow would start from.
+      if ((tool === 'arrow' || tool === 'line') && !drag.current) {
+        const h = hitTarget(toWorld(e.clientX, e.clientY)), r = h ? h.r : null;
+        setTarget(t => (sameRect(t, r) ? t : r));
+      }
+      return;
+    }
     ptrs.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     const pc = pinch.current;
     if (pc && ptrs.current.size >= 2) {
@@ -495,6 +549,11 @@ export default function Canvas({ file, d, visible, updateDiagram, history, onAdd
       if (mod && k === 'd' && selShapes.length) { e.preventDefault(); duplicateSel(); return; }
       if (mod || e.altKey) return;
       if (e.key === '/') { e.preventDefault(); setPanel(p => (p == null ? '' : null)); return; }
+      if (e.key === '?') { e.preventDefault(); setShowKeys(true); return; }
+      if (e.key === '+' || e.key === '=') { e.preventDefault(); zoomCenter(1.25); return; }
+      if (e.key === '-' || e.key === '_') { e.preventDefault(); zoomCenter(0.8); return; }
+      if (e.shiftKey && e.code === 'Digit1') { e.preventDefault(); fit(true); return; }
+      if (e.shiftKey && e.code === 'Digit0') { e.preventDefault(); zoomTo(1); return; }
       if (e.key === 'Escape') { setSelection([]); setTool('select'); setPanel(null); return; }
       if (selShapes.length && (e.key === 'Delete' || e.key === 'Backspace')) { e.preventDefault(); removeSel(); return; }
       if (selS && e.key === 'Enter' && hasText(selS)) { e.preventDefault(); startEdit(selS); return; }
@@ -659,16 +718,25 @@ export default function Canvas({ file, d, visible, updateDiagram, history, onAdd
       <div id="stage" ref={stageRef} style={stageStyle}>
         <svg id="svg" ref={svgRef} className={(grabbing ? 'grabbing' : '') + (tool === 'hand' || space ? ' panning' : tool !== 'select' ? ' drawing' : '')} xmlns="http://www.w3.org/2000/svg"
           fontFamily="Bricolage Grotesque, system-ui, -apple-system, Segoe UI, sans-serif" aria-label="Diagram canvas"
-          onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerEnd} onPointerCancel={onPointerEnd}>
+          onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerEnd} onPointerCancel={onPointerEnd}
+          onPointerLeave={() => { if (!drag.current) setTarget(null); }}>
           <g transform={`translate(${view.x} ${view.y}) scale(${view.k})`} dangerouslySetInnerHTML={{ __html: layers.under + markup + layers.over + overlay }} />
         </svg>
       </div>
       {editor}
 
-      {empty && (
+      {empty && tool === 'select' && (
         <div className="cempty">
           <h3>This {(TYPES[d.type]?.name || 'diagram').toLowerCase()} is empty</h3>
-          <p>Draw with the tools on the left, describe it in the box below and AI will draw it, or open Code and write it yourself.</p>
+          <p>Pick a starting point, or just start drawing.</p>
+          <div className="qs">
+            <button onClick={() => pickTool('rect')}><Ico d={IC.rect} />Draw a box<kbd>R</kbd></button>
+            <button onClick={() => pickTool('arrow')}><Ico d={IC.arrow} />Draw an arrow<kbd>A</kbd></button>
+            <button onClick={() => setPanel('')}><Ico d={IC.plus} />Insert something<kbd>/</kbd></button>
+            <button onClick={() => setPanel('catalog')}><Ico d={IC.catalog} />Start from a template</button>
+            <button onClick={() => setDrawer(true)}><Ico d={IC.codeblock} />Write diagram code</button>
+            <button onClick={focusAI}><Ico d={IC.ai} />Ask AI to draw it<kbd>Ctrl J</kbd></button>
+          </div>
         </div>
       )}
 
@@ -720,8 +788,31 @@ export default function Canvas({ file, d, visible, updateDiagram, history, onAdd
       <div className="zoom" role="group" aria-label="Zoom">
         <button onClick={() => zoomCenter(1.2)} aria-label="Zoom in">+</button>
         <button onClick={() => zoomCenter(1 / 1.2)} aria-label="Zoom out">−</button>
-        <button className="pct" onClick={fit} aria-label="Fit diagram to screen">{Math.round(view.k * 100)}%</button>
+        <button className="pct" onClick={e => zoomMenu(e.currentTarget)} aria-haspopup="menu" aria-label={`Zoom ${Math.round(view.k * 100)}%, zoom options`}>{Math.round(view.k * 100)}%</button>
+        <button className="kbtn" onClick={() => setShowKeys(true)} aria-label="Keyboard shortcuts (?)" title="Keyboard shortcuts  ?">?</button>
       </div>
+
+      {tool !== 'select' && HINTS[tool] && !selShapes.length && (
+        <div className="hint" role="status"><span>{HINTS[tool]}</span><kbd>Esc</kbd></div>
+      )}
+
+      {showKeys && (
+        <div className="modal" onClick={e => { if (e.target === e.currentTarget) setShowKeys(false); }}
+          onKeyDown={e => { if (e.key === 'Escape' || e.key === '?') setShowKeys(false); }}>
+          <div className="mbox keys" role="dialog" aria-modal="true" aria-labelledby="keysTitle">
+            <h3 id="keysTitle">Keyboard shortcuts</h3>
+            <div className="kcols">
+              {SHORTCUTS.map(([title, rows]) => (
+                <section key={title}>
+                  <h4>{title}</h4>
+                  {rows.map(([k, v]) => <div className="krow" key={v}><span>{v}</span><kbd>{k}</kbd></div>)}
+                </section>
+              ))}
+            </div>
+            <div className="mact"><button className="btn dark" autoFocus onClick={() => setShowKeys(false)}>Done</button></div>
+          </div>
+        </div>
+      )}
 
       {drawer && (
         <aside className="drawer" aria-label="Diagram code">
