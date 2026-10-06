@@ -2,10 +2,12 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { TEMPLATES, TYPES, engineOf, prep } from '../lib/engines.js';
 import { NO_AI, copyFor, langFor, sampleP } from '../lib/ai.js';
 import { HELP } from '../lib/help.js';
+import { saveImage, useImages } from '../lib/images.js';
 import { esc, rid, trunc } from '../lib/utils.js';
 import {
-  COLOR_NAMES, DEVICES, KEEP_RATIO, SHAPE_LIST, colorOf, drawn, editBox, handlesMarkup, hasText, icons, make,
-  measure, moved, resized, shapeBounds, shapeIcon, shapesMarkup, unionBox,
+  COLOR_NAMES, DEVICES, KEEP_RATIO, SHAPE_LIST, bbox, colorOf, contains, drawn, dropDeadLinks, editBox, handlesMarkup,
+  hasText, icons, isLink, make, marqueeMarkup, measure, moved, outlinesMarkup, overlaps, resized, resolveLinks, selKey,
+  shapeAt, shapeBounds, shapeIcon, shapesMarkup, targetMarkup, unionBox,
 } from '../lib/shapes.js';
 import { InsertPanel, TOOL_KEYS, Toolbar } from './Toolbar.jsx';
 import { useUI } from './ui.jsx';
@@ -26,6 +28,7 @@ const pruneManual = x => {
 };
 // One undo entry holds the diagram code and the hand-drawn objects together.
 const snap = (code, shapes) => JSON.stringify({ code, shapes: shapes || [] });
+const NODE = 'n:'; // selection keys: a shape id, or NODE + a diagram node id
 
 // One canvas per diagram. The parent keys it by diagram id, so switching tabs starts fresh.
 export default function Canvas({ file, d, visible, updateDiagram, history, onAddDiagram }) {
@@ -38,7 +41,6 @@ export default function Canvas({ file, d, visible, updateDiagram, history, onAdd
   const viewRef = useRef(view);
   viewRef.current = view;
   const [dragManual, setDragManual] = useState(null);
-  const [selRaw, setSel] = useState(null);
   const [drawer, setDrawer] = useState(false);
   const [log, setLog] = useState([]);
   const [prompt, setPrompt] = useState('');
@@ -50,13 +52,15 @@ export default function Canvas({ file, d, visible, updateDiagram, history, onAdd
   // Hand-drawn objects. `live` previews a draw, move or resize until the pointer is released.
   const [tool, setTool] = useState('select');
   const [live, setLive] = useState(null);
-  const [selShapeId, setSelShape] = useState(null);
+  const [selection, setSelection] = useState([]);
+  const [marquee, setMarquee] = useState(null);
+  const [target, setTarget] = useState(null); // box an arrow end will attach to, while dragging
+  const [space, setSpace] = useState(false); // Space held: drag pans
+  const spaceRef = useRef(false);
   const [editing, setEditing] = useState(null);
   const [draft, setDraft] = useState('');
   const [panel, setPanel] = useState(null); // null when closed, '' for all categories, or a category key
-  const shapes = live || d.shapes || NO_SHAPES;
-  const selS = selShapeId ? shapes.find(s => s.id === selShapeId) || null : null;
-  const editS = editing ? shapes.find(s => s.id === editing) || null : null;
+  const imgV = useImages(d.shapes);
 
   // History lives in the parent so it survives tab switches.
   if (!history.has(d.id)) history.set(d.id, { stack: [snap(d.code, d.shapes)], i: 0 });
@@ -66,11 +70,31 @@ export default function Canvas({ file, d, visible, updateDiagram, history, onAdd
   const ctx = useMemo(() => prep(dragManual ? { ...d, manual: { ...(d.manual || {}), ...dragManual } } : d),
     [d, dragManual, theme]);
   const ids = useMemo(() => nodeIds(d, ctx.m), [d, ctx]);
-  const sel = selRaw && ids.has(selRaw) ? selRaw : null;
-  const markup = useMemo(() => ctx.E.markup(ctx, sel), [ctx, sel]);
-  const layers = useMemo(() => shapesMarkup(shapes, { editing }), [shapes, editing, theme]); // eslint-disable-line react-hooks/exhaustive-deps
-  const handles = useMemo(() => (selS && !editing ? handlesMarkup(selS, view.k) : ''), [selS, editing, view.k, theme]); // eslint-disable-line react-hooks/exhaustive-deps
   const E = ctx.E;
+  const nodeRect = useCallback(id => (ctx.E.rect ? ctx.E.rect(ctx, id) : null), [ctx]);
+  // Shapes as drawn: attached arrow ends placed on whatever they point at.
+  const rawShapes = live || d.shapes || NO_SHAPES;
+  const shapes = useMemo(() => resolveLinks(rawShapes, nodeRect), [rawShapes, nodeRect]);
+  const baseShapes = () => resolveLinks(dRef.current.shapes || [], nodeRect);
+
+  const selSet = useMemo(() => new Set(selection), [selection]);
+  const selShapes = shapes.filter(s => selSet.has(s.id));
+  const selNodes = selection.filter(k => k.startsWith(NODE)).map(k => k.slice(NODE.length)).filter(id => ids.has(id));
+  const selS = selection.length === 1 && selShapes.length === 1 ? selShapes[0] : null;
+  const sel = selection.length === 1 && selNodes.length === 1 ? selNodes[0] : null;
+  const editS = editing ? shapes.find(s => s.id === editing) || null : null;
+
+  const markup = useMemo(() => ctx.E.markup(ctx, sel), [ctx, sel]);
+  const layers = useMemo(() => shapesMarkup(shapes, { editing }), [shapes, editing, theme, imgV]); // eslint-disable-line react-hooks/exhaustive-deps
+  const overlay = (() => {
+    if (editing) return '';
+    const k = view.k;
+    let m = selS ? handlesMarkup(selS, k)
+      : selection.length > 1 ? outlinesMarkup([...selShapes.map(bbox), ...selNodes.map(nodeRect).filter(Boolean)], k) : '';
+    if (marquee) m += marqueeMarkup(marquee, k);
+    if (target) m += targetMarkup(target, k);
+    return m;
+  })();
 
   /* ---- code + history ---- */
   function pushHist(entry) {
@@ -89,6 +113,7 @@ export default function Canvas({ file, d, visible, updateDiagram, history, onAdd
 
   // Save shapes; record = false skips the undo entry (used while a new text box is still empty).
   const putShapes = (next, record = true) => {
+    next = dropDeadLinks(next);
     // Update the ref now so a second change in the same event builds on this one.
     dRef.current = { ...dRef.current, shapes: next };
     updateDiagram(x => { x.shapes = next; });
@@ -149,15 +174,29 @@ export default function Canvas({ file, d, visible, updateDiagram, history, onAdd
   };
   const center = () => { const r = svgRef.current.getBoundingClientRect(); return toWorld(r.left + r.width / 2, r.top + r.height / 2); };
 
+  // What an arrow end at world point p would attach to: a shape first, then a diagram node.
+  const hitTarget = (p, other) => {
+    const s = shapeAt(shapes, p, other && other.s);
+    let hit = s ? { a: { s: s.id }, r: bbox(s) } : null;
+    if (!hit) {
+      for (const id of ids) {
+        const r = nodeRect(id);
+        if (r && p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h) { hit = { a: { n: id }, r }; }
+      }
+    }
+    // Both ends on the same box would collapse the arrow.
+    return hit && other && selKey(hit.a) === selKey(other) ? null : hit;
+  };
+
   /* ---- shape actions ---- */
-  const startEdit = s => { setDraft(s.text || ''); setEditing(s.id); setSelShape(s.id); };
+  const startEdit = s => { setDraft(s.text || ''); setEditing(s.id); setSelection([s.id]); };
   const finishEdit = () => {
     const id = editing; if (!id) return;
     setEditing(null);
     const base = dRef.current.shapes || [], s = base.find(x => x.id === id);
     if (!s) return;
     const text = s.t === 'code' ? draft.replace(/\s+$/, '') : draft.trim();
-    if (!text && (s.t === 'text' || s.t === 'comment')) { putShapes(base.filter(x => x.id !== id)); setSelShape(null); return; }
+    if (!text && (s.t === 'text' || s.t === 'comment')) { putShapes(base.filter(x => x.id !== id)); setSelection([]); return; }
     if (text === (s.text || '')) return;
     const n = { ...s, text };
     if (s.t === 'text') Object.assign(n, measure(text, s.fs || 20));
@@ -166,48 +205,61 @@ export default function Canvas({ file, d, visible, updateDiagram, history, onAdd
   const place = (t, extra, at) => {
     const c = at || center(), s = make(t, c.x, c.y, extra);
     putShapes([...(dRef.current.shapes || []), s]);
-    setSelShape(s.id); setSel(null); setTool('select');
+    setSelection([s.id]); setTool('select');
     return s;
   };
   const patchSel = p => {
-    if (!selS) return;
-    putShapes((dRef.current.shapes || []).map(s => (s.id === selS.id ? { ...s, ...p } : s)));
+    if (!selShapes.length) return;
+    putShapes(baseShapes().map(s => (selSet.has(s.id) ? { ...s, ...p } : s)));
   };
   const removeSel = () => {
-    if (!selS) return;
-    putShapes((dRef.current.shapes || []).filter(s => s.id !== selS.id));
-    setSelShape(null);
+    if (!selShapes.length) return;
+    putShapes(baseShapes().filter(s => !selSet.has(s.id)));
+    setSelection([]);
   };
   const duplicateSel = () => {
-    if (!selS) return;
-    const c = { ...moved(selS, 24, 24), id: rid('s') };
-    putShapes([...(dRef.current.shapes || []), c]);
-    setSelShape(c.id);
+    const src = baseShapes().filter(s => selSet.has(s.id));
+    if (!src.length) return;
+    const map = new Map(src.map(s => [s.id, rid('s')]));
+    const copies = src.map(s => {
+      const c = { ...moved(s, 24, 24), id: map.get(s.id) };
+      // Copied arrows stay attached only to copied shapes.
+      ['a0', 'a1'].forEach(k => { if (c[k]) { if (c[k].s && map.has(c[k].s)) c[k] = { s: map.get(c[k].s) }; else delete c[k]; } });
+      return c;
+    });
+    putShapes([...baseShapes(), ...copies]);
+    setSelection(copies.map(c => c.id));
   };
   const reorder = front => {
-    if (!selS) return;
-    const rest = (dRef.current.shapes || []).filter(s => s.id !== selS.id);
-    putShapes(front ? [...rest, selS] : [selS, ...rest]);
+    if (!selShapes.length) return;
+    const all = baseShapes(), picked = all.filter(s => selSet.has(s.id)), rest = all.filter(s => !selSet.has(s.id));
+    putShapes(front ? [...rest, ...picked] : [...picked, ...rest]);
   };
+  const selectAll = () => setSelection([...shapes.map(s => s.id), ...(E.draggable ? [...ids].map(id => NODE + id) : [])]);
 
   const addImageFile = (f, at) => {
     if (!f || !/^image\//.test(f.type)) { toast('Choose an image file'); return; }
     const rd = new FileReader();
     rd.onload = () => {
       const img = new Image();
-      img.onload = () => {
-        let src = rd.result;
+      img.onload = async () => {
         const w = img.naturalWidth || 400, h = img.naturalHeight || 300;
-        // Images are saved in browser storage, so shrink big ones.
-        if (f.size > 350000 || Math.max(w, h) > 1400) {
-          const k = Math.min(1, 1400 / Math.max(w, h)), cv = document.createElement('canvas');
+        const shrink = (max, limit) => {
+          const k = Math.min(1, max / Math.max(w, h)), cv = document.createElement('canvas');
           cv.width = Math.round(w * k); cv.height = Math.round(h * k);
           cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
-          src = cv.toDataURL('image/png');
-          if (src.length > 900000) src = cv.toDataURL('image/jpeg', 0.85);
-        }
-        const dw = Math.min(480, w);
-        place('image', { src, w: dw, h: Math.round(h * dw / w) }, at);
+          const png = cv.toDataURL('image/png');
+          return png.length > limit ? cv.toDataURL('image/jpeg', 0.85) : png;
+        };
+        // Images go to IndexedDB, which has plenty of room; only very large ones are scaled down.
+        let src = rd.result;
+        if (f.size > 4e6 || Math.max(w, h) > 2400) src = shrink(2400, 3e6);
+        const key = await saveImage(src);
+        const dw = Math.min(480, w), size = { w: dw, h: Math.round(h * dw / w) };
+        if (key) { place('image', { img: key, ...size }, at); return; }
+        // No IndexedDB (some private windows): keep it inline in localStorage, kept small.
+        if (f.size > 350000 || Math.max(w, h) > 1400) src = shrink(1400, 9e5);
+        place('image', { src, ...size }, at);
       };
       img.onerror = () => toast('That image couldn’t be read');
       img.src = rd.result;
@@ -215,13 +267,35 @@ export default function Canvas({ file, d, visible, updateDiagram, history, onAdd
     rd.readAsDataURL(f);
   };
 
-  /* ---- pointer: pan, drag nodes, draw and edit shapes, pinch ---- */
+  /* ---- pointer: select, marquee, move, draw, attach, pan, pinch ---- */
   const ptrs = useRef(new Map()), drag = useRef(null), pinch = useRef(null), lastTap = useRef({ id: null, t: 0 });
   const [grabbing, setGrabbing] = useState(false);
   const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y), mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
 
+  // Start dragging the given selection (shapes and diagram nodes move together).
+  const startMove = (keys, key, w, at) => {
+    drag.current = {
+      t: 'move', key, keys: new Set(keys), a: w, shapes: baseShapes(),
+      nodes: keys.filter(k => k.startsWith(NODE)).map(k => k.slice(NODE.length)).filter(id => ids.has(id)).map(id => ({ id, p: ctx.P(id) })),
+      ...at,
+    };
+    setGrabbing(true);
+  };
+  // Click (or shift-click) on a shape or node.
+  const pickItem = (key, e, w, at) => {
+    if (e.shiftKey) {
+      const next = selSet.has(key) ? selection.filter(k => k !== key) : [...selection, key];
+      setSelection(next);
+      if (next.includes(key)) startMove(next, null, w, at);
+      return;
+    }
+    const keys = selSet.has(key) ? selection : [key];
+    if (!selSet.has(key)) setSelection(keys);
+    startMove(keys, key, w, at);
+  };
+
   const onPointerDown = e => {
-    if (e.button > 0) return;
+    if (e.button > 1) return;
     // Keep focus handling in our hands: blur any field (this also saves an open text edit).
     e.preventDefault();
     const ae = document.activeElement;
@@ -233,46 +307,71 @@ export default function Canvas({ file, d, visible, updateDiagram, history, onAdd
       const [a, b] = [...ptrs.current.values()];
       pinch.current = { d: dist(a, b) || 1, k: v.k, m: mid(a, b), vx: v.x, vy: v.y };
       drag.current = null;
-      setLive(null); setDragManual(null);
+      setLive(null); setDragManual(null); setMarquee(null); setTarget(null);
       return;
     }
-    const w = toWorld(e.clientX, e.clientY), base = dRef.current.shapes || [], at = { sx: e.clientX, sy: e.clientY, moved: false };
+    const w = toWorld(e.clientX, e.clientY), at = { sx: e.clientX, sy: e.clientY, moved: false };
+    const pan = () => { drag.current = { t: 'p', vx: v.x, vy: v.y, ...at }; setGrabbing(true); };
+
+    if (e.button === 1 || tool === 'hand' || spaceRef.current) { pan(); return; }
 
     if (tool !== 'select') {
       if (tool === 'text' || tool === 'comment') {
         const s = make(tool, w.x, w.y);
-        putShapes([...base, s], false);
+        putShapes([...(dRef.current.shapes || []), s], false);
         startEdit(s); setTool('select');
         drag.current = null;
         return;
       }
-      drag.current = { t: 'draw', tool, a: w, id: rid('s'), pts: [[Math.round(w.x), Math.round(w.y)]], ...at };
+      const from = tool === 'arrow' || tool === 'line' ? hitTarget(w) : null;
+      drag.current = { t: 'draw', tool, a: w, a0: from && from.a, id: rid('s'), pts: [[Math.round(w.x), Math.round(w.y)]], ...at };
       return;
     }
 
     const hEl = e.target.closest('[data-handle]');
-    if (hEl && selS) { drag.current = { t: 'resize', id: selS.id, h: hEl.dataset.handle, o: selS, ...at }; setGrabbing(true); return; }
+    if (hEl && selS) {
+      let h = hEl.dataset.handle, o = selS;
+      if (h[0] === 'a') {
+        // "+" handle: add a bend point there and drag it.
+        const i = +h.slice(1) + 1;
+        o = { ...selS, pts: [...selS.pts.slice(0, i), [Math.round(w.x), Math.round(w.y)], ...selS.pts.slice(i)] };
+        h = 'p' + i;
+      } else if (isLink(selS)) {
+        // Double-click a bend point to remove it.
+        const i = +h.slice(1), now = Date.now(), lt = lastTap.current, tap = selS.id + ':' + h;
+        if (i > 0 && i < selS.pts.length - 1 && lt.id === tap && now - lt.t < 400) {
+          lastTap.current = { id: null, t: 0 };
+          putShapes(baseShapes().map(x => (x.id === selS.id ? { ...x, pts: x.pts.filter((_, j) => j !== i) } : x)));
+          return;
+        }
+        lastTap.current = { id: tap, t: now };
+      }
+      drag.current = { t: 'resize', id: selS.id, h, o, shape: o !== selS ? o : null, ...at };
+      setGrabbing(true);
+      return;
+    }
 
     const sEl = e.target.closest('[data-shape]');
     if (sEl) {
-      const id = sEl.dataset.shape, s = base.find(x => x.id === id);
+      const id = sEl.dataset.shape, s = shapes.find(x => x.id === id);
       if (!s) return;
       const now = Date.now(), lt = lastTap.current;
-      if (lt.id === id && now - lt.t < 400 && hasText(s)) {
+      if (!e.shiftKey && lt.id === id && now - lt.t < 400 && hasText(s)) {
         lastTap.current = { id: null, t: 0 };
         startEdit(s); drag.current = null;
         return;
       }
       lastTap.current = { id, t: now };
-      setSelShape(id); setSel(null);
-      drag.current = { t: 'move', id, o: s, a: w, ...at };
-      setGrabbing(true);
+      pickItem(id, e, w, at);
       return;
     }
 
     const n = E.draggable && e.target.closest('[data-node]');
-    if (n) { const id = n.dataset.node, p = ctx.P(id); drag.current = { t: 'n', id, ox: p.x, oy: p.y, ...at }; setSelShape(null); }
-    else drag.current = { t: 'p', vx: v.x, vy: v.y, ...at };
+    if (n) { pickItem(NODE + n.dataset.node, e, w, at); return; }
+
+    // Empty canvas: drag pans; Shift+drag draws a selection box.
+    if (e.shiftKey && e.pointerType !== 'touch') { drag.current = { t: 'box', a: w, keep: selection, ...at }; return; }
+    drag.current = { t: 'p', vx: v.x, vy: v.y, clear: true, ...at };
     setGrabbing(true);
   };
   const onPointerMove = e => {
@@ -290,50 +389,84 @@ export default function Canvas({ file, d, visible, updateDiagram, history, onAdd
     const dx = e.clientX - dr.sx, dy = e.clientY - dr.sy;
     if (!dr.moved && Math.hypot(dx, dy) < 4) return;
     dr.moved = true;
-    const k = viewRef.current.k, base = dRef.current.shapes || [], w = toWorld(e.clientX, e.clientY);
+    const k = viewRef.current.k, w = toWorld(e.clientX, e.clientY);
     if (dr.t === 'draw') {
+      const base = dRef.current.shapes || [];
       if (dr.tool === 'pen') {
         const last = dr.pts[dr.pts.length - 1];
         if (Math.hypot(w.x - last[0], w.y - last[1]) * k < 2) return;
         dr.pts.push([Math.round(w.x), Math.round(w.y)]);
         dr.shape = { id: dr.id, t: 'pen', pts: dr.pts.slice() };
-      } else dr.shape = drawn(dr.tool, dr.a, w, e.shiftKey, dr.id);
+      } else {
+        dr.shape = drawn(dr.tool, dr.a, w, e.shiftKey, dr.id);
+        if (isLink(dr.shape)) {
+          const to = hitTarget(w, dr.a0);
+          if (dr.a0) dr.shape.a0 = dr.a0;
+          if (to) dr.shape.a1 = to.a;
+          setTarget(to ? to.r : null);
+        }
+      }
       setLive([...base, dr.shape]);
     } else if (dr.t === 'move') {
-      dr.shape = moved(dr.o, Math.round(w.x - dr.a.x), Math.round(w.y - dr.a.y));
-      setLive(base.map(s => (s.id === dr.id ? dr.shape : s)));
+      const mx = Math.round(w.x - dr.a.x), my = Math.round(w.y - dr.a.y);
+      // An arrow end stays attached only if what it points at moves with it.
+      const keep = a => dr.keys.has(selKey(a));
+      dr.next = dr.shapes.map(s => {
+        if (!dr.keys.has(s.id)) return s;
+        const n = moved(s, mx, my);
+        if (n.a0 && !keep(n.a0)) delete n.a0;
+        if (n.a1 && !keep(n.a1)) delete n.a1;
+        return n;
+      });
+      setLive(dr.next);
+      if (dr.nodes.length) {
+        const g = dr.next.some(s => dr.keys.has(s.id)) ? 1 : 4; // snap nodes to the grid when they move alone
+        dr.pos = Object.fromEntries(dr.nodes.map(({ id, p }) => [id, { x: Math.round((p.x + mx) / g) * g, y: Math.round((p.y + my) / g) * g }]));
+        setDragManual(dr.pos);
+      }
     } else if (dr.t === 'resize') {
-      dr.shape = resized(dr.o, dr.h, w, e.shiftKey || KEEP_RATIO.has(dr.o.t));
-      setLive(base.map(s => (s.id === dr.id ? dr.shape : s)));
-    } else if (dr.t === 'n') {
-      dr.pos = { x: Math.round((dr.ox + dx / k) / 4) * 4, y: Math.round((dr.oy + dy / k) / 4) * 4 };
-      setDragManual({ [dr.id]: dr.pos });
+      let s = resized(dr.o, dr.h, w, e.shiftKey || KEEP_RATIO.has(dr.o.t));
+      const i = +dr.h.slice(1), last = dr.o.pts ? dr.o.pts.length - 1 : -1;
+      if (isLink(dr.o) && dr.h[0] === 'p' && (i === 0 || i === last)) {
+        // Only the two ends attach to boxes; bend points stay free.
+        const k = i === 0 ? 'a0' : 'a1', to = hitTarget(w, s[i === 0 ? 'a1' : 'a0']);
+        s = { ...s };
+        if (to) s[k] = to.a; else delete s[k];
+        setTarget(to ? to.r : null);
+      }
+      dr.shape = s;
+      setLive(baseShapes().map(x => (x.id === dr.id ? s : x)));
+    } else if (dr.t === 'box') {
+      const r = { x: Math.min(dr.a.x, w.x), y: Math.min(dr.a.y, w.y), w: Math.abs(w.x - dr.a.x), h: Math.abs(w.y - dr.a.y) };
+      setMarquee(r);
+      const hit = shapes.filter(s => (s.t === 'frame' ? contains(r, bbox(s)) : overlaps(r, bbox(s)))).map(s => s.id);
+      if (E.draggable) ids.forEach(id => { const nr = nodeRect(id); if (nr && overlaps(r, nr)) hit.push(NODE + id); });
+      setSelection([...new Set([...dr.keep, ...hit])]);
     } else setView(v => ({ ...v, x: dr.vx + dx, y: dr.vy + dy }));
   };
   const onPointerEnd = e => {
     ptrs.current.delete(e.pointerId);
     if (ptrs.current.size < 2) pinch.current = null;
     if (ptrs.current.size) return;
-    const dr = drag.current, base = dRef.current.shapes || [];
+    const dr = drag.current;
     if (dr) {
       if (dr.t === 'draw') {
         let s = dr.shape;
         if (dr.tool === 'pen') s = dr.pts.length > 1 ? s : null;
         else if (!s || (s.w != null && s.w < 8 && s.h < 8)) s = make(dr.tool, dr.a.x, dr.a.y); // a click drops a default-size shape
-        if (s) { putShapes([...base, s]); setSelShape(s.id); setSel(null); }
+        if (s) { putShapes([...(dRef.current.shapes || []), s]); setSelection([s.id]); }
         if (dr.tool !== 'pen') setTool('select');
-      } else if (dr.t === 'move' || dr.t === 'resize') {
-        if (dr.moved && dr.shape) putShapes(base.map(s => (s.id === dr.id ? dr.shape : s)));
-      } else if (!dr.moved) {
-        setSel(s => (dr.t === 'n' && s !== dr.id ? dr.id : null));
-        if (dr.t === 'p') setSelShape(null);
-      } else if (dr.t === 'n' && dr.pos) {
-        const { id, pos } = dr;
-        updateDiagram(x => { x.manual = x.manual || {}; x.manual[id] = pos; });
-        setDragManual(null);
-      }
+      } else if (dr.t === 'move') {
+        if (dr.moved) {
+          if (dr.next && dr.next.some(s => dr.keys.has(s.id))) putShapes(dr.next);
+          if (dr.pos) { const pos = dr.pos; updateDiagram(x => { x.manual = { ...(x.manual || {}), ...pos }; }); }
+          setDragManual(null);
+        } else if (dr.key && selection.length > 1) setSelection([dr.key]); // plain click inside a group picks one
+      } else if (dr.t === 'resize') {
+        if (dr.shape) putShapes(baseShapes().map(s => (s.id === dr.id ? dr.shape : s)));
+      } else if (dr.t === 'p' && dr.clear && !dr.moved) setSelection([]); // click on empty canvas clears
     }
-    setLive(null);
+    setLive(null); setMarquee(null); setTarget(null);
     drag.current = null;
     setGrabbing(false);
   };
@@ -341,7 +474,7 @@ export default function Canvas({ file, d, visible, updateDiagram, history, onAdd
   const pickTool = t => {
     if (t === 'icon') { setPanel('icon'); return; }
     setTool(t); setPanel(null);
-    if (t !== 'select') setSelShape(null);
+    if (t !== 'select' && t !== 'hand') setSelection([]);
   };
   const focusAI = () => { setPanel(null); promptRef.current?.focus(); };
 
@@ -350,34 +483,44 @@ export default function Canvas({ file, d, visible, updateDiagram, history, onAdd
     if (!visible) return;
     const key = e => {
       if (document.querySelector('.modal')) return;
-      const inField = e.target.closest && e.target.closest('textarea,input');
+      const inField = e.target.closest && e.target.closest('textarea,input,button,select');
+      const typing = e.target.closest && e.target.closest('textarea,input');
       const mod = e.metaKey || e.ctrlKey, k = e.key.toLowerCase();
       if (mod && k === 'j') { e.preventDefault(); focusAI(); return; }
-      if (inField) return;
+      if (e.key === ' ' && !inField) { e.preventDefault(); if (!spaceRef.current) { spaceRef.current = true; setSpace(true); } return; }
+      if (typing) return;
       if (mod && k === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
       if (mod && k === 'y') { e.preventDefault(); redo(); return; }
-      if (mod && k === 'd' && selS) { e.preventDefault(); duplicateSel(); return; }
+      if (mod && k === 'a') { e.preventDefault(); selectAll(); return; }
+      if (mod && k === 'd' && selShapes.length) { e.preventDefault(); duplicateSel(); return; }
       if (mod || e.altKey) return;
       if (e.key === '/') { e.preventDefault(); setPanel(p => (p == null ? '' : null)); return; }
-      if (e.key === 'Escape') { setSel(null); setSelShape(null); setTool('select'); setPanel(null); return; }
-      if (selS && (e.key === 'Delete' || e.key === 'Backspace')) { e.preventDefault(); removeSel(); return; }
+      if (e.key === 'Escape') { setSelection([]); setTool('select'); setPanel(null); return; }
+      if (selShapes.length && (e.key === 'Delete' || e.key === 'Backspace')) { e.preventDefault(); removeSel(); return; }
       if (selS && e.key === 'Enter' && hasText(selS)) { e.preventDefault(); startEdit(selS); return; }
-      if (selS && e.key.startsWith('Arrow')) {
+      if (selShapes.length && e.key.startsWith('Arrow')) {
         e.preventDefault();
         const n = e.shiftKey ? 10 : 1, dx = e.key === 'ArrowLeft' ? -n : e.key === 'ArrowRight' ? n : 0, dy = e.key === 'ArrowUp' ? -n : e.key === 'ArrowDown' ? n : 0;
-        putShapes((dRef.current.shapes || []).map(s => (s.id === selS.id ? moved(s, dx, dy) : s)));
+        putShapes(baseShapes().map(s => (selSet.has(s.id) ? moved(s, dx, dy) : s)));
         return;
       }
       if (TOOL_KEYS[k]) { e.preventDefault(); pickTool(TOOL_KEYS[k]); }
     };
+    const up = e => { if (e.key === ' ') { spaceRef.current = false; setSpace(false); } };
+    const lost = () => { spaceRef.current = false; setSpace(false); };
     const paste = e => {
       if (e.target.closest && e.target.closest('textarea,input')) return;
       const f = [...(e.clipboardData?.files || [])].find(x => /^image\//.test(x.type));
       if (f) { e.preventDefault(); addImageFile(f); }
     };
     document.addEventListener('keydown', key);
+    document.addEventListener('keyup', up);
+    window.addEventListener('blur', lost);
     document.addEventListener('paste', paste);
-    return () => { document.removeEventListener('keydown', key); document.removeEventListener('paste', paste); };
+    return () => {
+      document.removeEventListener('keydown', key); document.removeEventListener('keyup', up);
+      window.removeEventListener('blur', lost); document.removeEventListener('paste', paste);
+    };
   });
 
   /* ---- AI ---- */
@@ -514,10 +657,10 @@ export default function Canvas({ file, d, visible, updateDiagram, history, onAdd
         addImageFile(f, toWorld(e.clientX, e.clientY));
       }}>
       <div id="stage" ref={stageRef} style={stageStyle}>
-        <svg id="svg" ref={svgRef} className={(grabbing ? 'grabbing' : '') + (tool !== 'select' ? ' drawing' : '')} xmlns="http://www.w3.org/2000/svg"
+        <svg id="svg" ref={svgRef} className={(grabbing ? 'grabbing' : '') + (tool === 'hand' || space ? ' panning' : tool !== 'select' ? ' drawing' : '')} xmlns="http://www.w3.org/2000/svg"
           fontFamily="Bricolage Grotesque, system-ui, -apple-system, Segoe UI, sans-serif" aria-label="Diagram canvas"
           onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerEnd} onPointerCancel={onPointerEnd}>
-          <g transform={`translate(${view.x} ${view.y}) scale(${view.k})`} dangerouslySetInnerHTML={{ __html: layers.under + markup + layers.over + handles }} />
+          <g transform={`translate(${view.x} ${view.y}) scale(${view.k})`} dangerouslySetInnerHTML={{ __html: layers.under + markup + layers.over + overlay }} />
         </svg>
       </div>
       {editor}
@@ -540,26 +683,33 @@ export default function Canvas({ file, d, visible, updateDiagram, history, onAdd
         <button className="btn" onClick={toggleStyle} aria-label={'Diagram style: ' + (d.style === 'mono' ? 'Mono' : 'Color')}>{d.style === 'mono' ? 'Mono' : 'Color'}</button>
       </div>
 
-      {selS && !editing && (
-        <div className="sbar" role="toolbar" aria-label="Selected object">
-          {selS.t !== 'image' && COLOR_NAMES.map((n, i) => (
+      {selShapes.length > 0 && !editing && (
+        <div className="sbar" role="toolbar" aria-label={selShapes.length > 1 ? `${selShapes.length} objects selected` : 'Selected object'}>
+          {selShapes.length > 1 && <span className="scount">{selShapes.length} selected</span>}
+          {selShapes.some(s => s.t !== 'image') && COLOR_NAMES.map((n, i) => (
             <button key={n} className="sw" style={{ background: colorOf(i) }} aria-label={n + ' color'} title={n}
-              aria-pressed={(selS.c || 0) === i} onClick={() => patchSel({ c: i })} />
+              aria-pressed={selShapes.every(s => (s.c || 0) === i)} onClick={() => patchSel({ c: i })} />
           ))}
-          {selS.t === 'text' && (<>
+          {selS && selS.t === 'text' && (<>
             <span className="sep" />
             <button className="sbtn" aria-label="Smaller text" onClick={() => { const fs = Math.max(8, (selS.fs || 20) - 4); patchSel({ fs, ...measure(selS.text, fs) }); }}>A−</button>
             <button className="sbtn" aria-label="Larger text" onClick={() => { const fs = Math.min(200, (selS.fs || 20) + 4); patchSel({ fs, ...measure(selS.text, fs) }); }}>A+</button>
             <button className="sbtn" aria-pressed={!!selS.bold} onClick={() => patchSel({ bold: !selS.bold })}><b>B</b></button>
           </>)}
-          {(selS.t === 'line' || selS.t === 'arrow' || selS.t === 'rect' || selS.t === 'ellipse' || selS.t === 'diamond') && (
+          {selS && (selS.t === 'line' || selS.t === 'arrow' || selS.t === 'rect' || selS.t === 'ellipse' || selS.t === 'diamond') && (
             <button className="sbtn" aria-pressed={!!selS.dash} onClick={() => patchSel({ dash: !selS.dash })}>Dashed</button>
           )}
-          {(selS.t === 'line' || selS.t === 'arrow') && (
-            <button className="sbtn" onClick={() => patchSel({ t: selS.t === 'line' ? 'arrow' : 'line' })}>{selS.t === 'line' ? 'Add arrow' : 'No arrow'}</button>
+          {selS && isLink(selS) && (
+            <>{selS.pts.length > 2 && (<>
+              <button className="sbtn" aria-pressed={!!selS.sharp} onClick={() => patchSel({ sharp: !selS.sharp })} title="Sharp corners at bend points">Sharp</button>
+              <button className="sbtn" onClick={() => patchSel({ pts: [selS.pts[0], selS.pts[selS.pts.length - 1]] })} title="Remove all bend points">Straighten</button>
+            </>)}
+            <button className="sbtn" aria-pressed={!!selS.anim} onClick={() => patchSel({ anim: selS.anim ? 0 : 1 })} title="Flowing dashes along the line">Animate</button>
+            {!!selS.anim && <button className="sbtn" aria-pressed={selS.anim === 'fast'} onClick={() => patchSel({ anim: selS.anim === 'fast' ? 1 : 'fast' })}>Fast</button>}
+            <button className="sbtn" onClick={() => patchSel({ t: selS.t === 'line' ? 'arrow' : 'line' })}>{selS.t === 'line' ? 'Add arrow' : 'No arrow'}</button></>
           )}
           <span className="sep" />
-          {hasText(selS) && <button className="sbtn" onClick={() => startEdit(selS)}>Edit text</button>}
+          {selS && hasText(selS) && <button className="sbtn" onClick={() => startEdit(selS)}>Edit text</button>}
           <button className="sbtn" onClick={() => reorder(true)} title="Bring to front">Front</button>
           <button className="sbtn" onClick={() => reorder(false)} title="Send to back">Back</button>
           <button className="sbtn" onClick={duplicateSel} title="Duplicate (Ctrl D)">Duplicate</button>
@@ -605,7 +755,7 @@ export default function Canvas({ file, d, visible, updateDiagram, history, onAdd
           </div>
         )}
         {selLabel && (
-          <span className="chip">Editing {selLabel}<button onClick={() => setSel(null)} aria-label="Clear selection">×</button></span>
+          <span className="chip">Editing {selLabel}<button onClick={() => setSelection([])} aria-label="Clear selection">×</button></span>
         )}
         <div className="row">
           <textarea id="prompt" ref={promptRef} rows={1} value={prompt} placeholder={PLACEHOLDER[d.type] || 'Describe a diagram'} aria-label="Ask AI to draw or change the diagram"

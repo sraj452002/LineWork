@@ -137,9 +137,58 @@ export function drawn(t, a, b, shift, id){
 }
 
 /* ---- geometry ---- */
+/* A line or arrow runs through all its pts: the two ends plus any bend points in between.
+   It's drawn as a smooth curve through them, or with sharp corners when s.sharp is set. */
+const lerp = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+// Cubic segments [from, c1, c2, to] of the path (Catmull-Rom, so the curve passes through every point).
+export function segments(s){
+  const p = s.pts, out = [];
+  for(let i = 0; i < p.length - 1; i++){
+    const a = p[i], b = p[i + 1];
+    if(s.sharp || p.length === 2){ out.push([a, lerp(a, b, 1/3), lerp(a, b, 2/3), b]); continue; }
+    const pa = p[i - 1] || a, pb = p[i + 2] || b;
+    out.push([a, [a[0] + (b[0] - pa[0]) / 6, a[1] + (b[1] - pa[1]) / 6], [b[0] - (pb[0] - a[0]) / 6, b[1] - (pb[1] - a[1]) / 6], b]);
+  }
+  return out;
+}
+const bez = ([a, c1, c2, b], t) => {
+  const u = 1 - t;
+  return [u*u*u*a[0] + 3*u*u*t*c1[0] + 3*u*t*t*c2[0] + t*t*t*b[0], u*u*u*a[1] + 3*u*u*t*c1[1] + 3*u*t*t*c2[1] + t*t*t*b[1]];
+};
+// Middle of each segment, where the "add a bend" handles sit.
+export const segMids = s => segments(s).map(g => bez(g, .5));
+// Point halfway along the path (by segment count), for the label.
+export function pathMid(s){
+  const g = segments(s), n = g.length;
+  return n % 2 ? bez(g[(n - 1) / 2], .5) : g[n / 2][0];
+}
+const f1 = n => +n.toFixed(1);
+// SVG path data; endBack pulls the last point in so a line doesn't poke through its arrowhead.
+function pathD(s, endBack){
+  const g = segments(s), last = g[g.length - 1], straight = s.sharp || s.pts.length === 2;
+  let d = `M${s.pts[0][0]} ${s.pts[0][1]}`;
+  g.forEach((x, i) => {
+    let b = x[3];
+    if(i === g.length - 1 && endBack){
+      const a = Math.atan2(b[1] - x[2][1], b[0] - x[2][0]);
+      b = [f1(b[0] - endBack * Math.cos(a)), f1(b[1] - endBack * Math.sin(a))];
+    }
+    d += straight ? `L${b[0]} ${b[1]}` : `C${f1(x[1][0])} ${f1(x[1][1])} ${f1(x[2][0])} ${f1(x[2][1])} ${b[0]} ${b[1]}`;
+  });
+  return {d, from:last[2], to:last[3]};
+}
+// The previous version stored one sideways `bend`; turn it into a bend point.
+function unbend(s){
+  if(!s.bend || s.pts.length !== 2) return s;
+  const [[x1, y1], [x2, y2]] = s.pts, len = Math.hypot(x2 - x1, y2 - y1) || 1;
+  const m = [r0((x1 + x2) / 2 - (y2 - y1) / len * s.bend), r0((y1 + y2) / 2 + (x2 - x1) / len * s.bend)];
+  const { bend, ...rest } = s;
+  return {...rest, pts:[s.pts[0], m, s.pts[1]]};
+}
 export function bbox(s){
   if(s.pts){
-    const xs = s.pts.map(p => p[0]), ys = s.pts.map(p => p[1]);
+    const pts = s.pts;
+    const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
     const x = Math.min(...xs), y = Math.min(...ys);
     return {x, y, w:Math.max(...xs) - x, h:Math.max(...ys) - y};
   }
@@ -165,7 +214,7 @@ export function moved(s, dx, dy){
 }
 // Resize from a handle: corner handles keep the opposite corner fixed; p0/p1 move a line end.
 export function resized(o, handle, p, ratio){
-  if(handle === 'p0' || handle === 'p1'){ const pts = o.pts.map(q => [...q]); pts[+handle[1]] = [r0(p.x), r0(p.y)]; return {...o, pts}; }
+  if(/^p\d+$/.test(handle)){ const pts = o.pts.map(q => [...q]); pts[+handle.slice(1)] = [r0(p.x), r0(p.y)]; return {...o, pts}; }
   const b = bbox(o);
   const fx = handle.includes('w') ? b.x + b.w : b.x, fy = handle.includes('n') ? b.y + b.h : b.y;
   let w = Math.max(MIN, Math.abs(p.x - fx)), h = Math.max(MIN, Math.abs(p.y - fy));
@@ -212,7 +261,8 @@ function edgePoint(r, kind, to){
 }
 // Returns the shapes with attached ends placed on their targets. nodeRect(id) gives a diagram node's box.
 export function resolveLinks(shapes, nodeRect){
-  if(!shapes.some(s => s.a0 || s.a1)) return shapes;
+  if(!shapes.some(s => s.a0 || s.a1 || s.bend)) return shapes;
+  shapes = shapes.map(s => (s.bend ? unbend(s) : s));
   const byId = new Map(shapes.map(s => [s.id, s]));
   const target = a => {
     if(!a) return null;
@@ -225,8 +275,12 @@ export function resolveLinks(shapes, nodeRect){
     if(!isLink(s) || (!s.a0 && !s.a1)) return s;
     const A = target(s.a0), B = target(s.a1);
     if(!A && !B) return s;
-    const ref0 = A ? mid(A) : s.pts[0], ref1 = B ? mid(B) : s.pts[1];
-    return {...s, pts:[A ? edgePoint(A.r, A.kind, ref1) : s.pts[0], B ? edgePoint(B.r, B.kind, ref0) : s.pts[1]]};
+    const n = s.pts.length, inner = s.pts.slice(1, -1);
+    const ref0 = A ? mid(A) : s.pts[0], ref1 = B ? mid(B) : s.pts[n - 1];
+    // Each attached end points toward its nearest bend point, or the other end.
+    const p0 = A ? edgePoint(A.r, A.kind, inner.length ? inner[0] : ref1) : s.pts[0];
+    const p1 = B ? edgePoint(B.r, B.kind, inner.length ? inner[inner.length - 1] : ref0) : s.pts[n - 1];
+    return {...s, pts:[p0, ...inner, p1]};
   });
 }
 // Drop attachments to shapes that no longer exist (diagram nodes may come back, so keep those).
@@ -258,6 +312,7 @@ export const contains = (a, b) => b.x >= a.x && b.y >= a.y && b.x + b.w <= a.x +
 
 /* ---- render ---- */
 const P = a => a.map(p => p.join(',')).join(' ');
+const STILL = () => typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 function outline(t, w, h, attr, stroke){
   switch(t){
     case 'ellipse': return `<ellipse cx="${w/2}" cy="${h/2}" rx="${w/2}" ry="${h/2}" ${attr}/>`;
@@ -311,13 +366,15 @@ function device(s, col){
 function one(s, opt){
   const col = colorOf(s.c), open = `<g data-shape="${esc(s.id)}"`, text = opt.editing === s.id ? '' : (s.text || '');
   if(s.t === 'line' || s.t === 'arrow'){
-    const [[x1, y1], [x2, y2]] = s.pts;
-    let m = `<path d="M${x1} ${y1}L${x2} ${y2}" stroke="transparent" stroke-width="16" fill="none"/>`;
-    const a = Math.atan2(y2 - y1, x2 - x1), back = s.t === 'arrow' ? 8 : 0;
-    m += `<path d="M${x1} ${y1}L${(x2 - back * Math.cos(a)).toFixed(1)} ${(y2 - back * Math.sin(a)).toFixed(1)}" stroke="${col}" stroke-width="2" stroke-linecap="round" fill="none"${s.dash ? ' stroke-dasharray="7 6"' : ''}/>`;
-    if(s.t === 'arrow') m += head(x1, y1, x2, y2, col);
+    const full = pathD(s, 0), line = pathD(s, s.t === 'arrow' ? 8 : 0), [mx, my] = pathMid(s);
+    let m = `<path d="${full.d}" stroke="transparent" stroke-width="16" fill="none"/>`;
+    // Animated lines show dashes flowing from start to end (still when the viewer prefers less motion).
+    const flow = s.anim && !STILL();
+    m += `<path d="${line.d}" stroke="${col}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"${s.anim ? ' stroke-dasharray="9 7"' : s.dash ? ' stroke-dasharray="7 6"' : ''}>`
+      + (flow ? `<animate attributeName="stroke-dashoffset" from="32" to="0" dur="${s.anim === 'fast' ? .45 : .9}s" repeatCount="indefinite"/>` : '') + `</path>`;
+    if(s.t === 'arrow') m += head(line.from[0], line.from[1], full.to[0], full.to[1], col);
     if(text){
-      const ls = wrap(text, 160, 13), tw = Math.max(...ls.map(l => l.length)) * 13 * CW + 14, th = ls.length * 13 * LH + 6, mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+      const ls = wrap(text, 160, 13), tw = Math.max(...ls.map(l => l.length)) * 13 * CW + 14, th = ls.length * 13 * LH + 6;
       m += `<rect x="${mx - tw/2}" y="${my - th/2}" width="${tw}" height="${th}" rx="5" fill="${C.paper}"/>` + lines(ls, {x:mx, y:my - th/2 + 3, fs:13, fill:C.ink2, anchor:'middle'});
     }
     return `${open}>${m}</g>`;
@@ -389,8 +446,14 @@ export function shapesMarkup(shapes, opt = {}){
 
 export function handlesMarkup(s, k){
   const sw = 1.4 / k, hs = 9 / k, pad = 5 / k, frame = `stroke="${C.ink}" stroke-width="${sw}"`;
-  if(s.t === 'line' || s.t === 'arrow')
-    return s.pts.map((p, i) => `<circle data-handle="p${i}" cx="${p[0]}" cy="${p[1]}" r="${5.5 / k}" fill="${C.surface}" ${frame} style="cursor:grab"/>`).join('');
+  if(s.t === 'line' || s.t === 'arrow'){
+    const last = s.pts.length - 1, r = 5.5 / k;
+    let m = segMids(s).map(([x, y], i) => `<g data-handle="a${i}" style="cursor:copy"><title>Drag to add a bend</title><circle cx="${x}" cy="${y}" r="${r}" fill="${C.surface}" fill-opacity=".85" stroke="${C.ink2}" stroke-width="${sw}"/><path d="M${x - r*.5} ${y}h${r}M${x} ${y - r*.5}v${r}" stroke="${C.ink2}" stroke-width="${sw}"/></g>`).join('');
+    m += s.pts.map((p, i) => (i === 0 || i === last)
+      ? `<circle data-handle="p${i}" cx="${p[0]}" cy="${p[1]}" r="${r}" fill="${C.surface}" ${frame} style="cursor:grab"/>`
+      : `<rect data-handle="p${i}" x="${p[0] - r*.9}" y="${p[1] - r*.9}" width="${r*1.8}" height="${r*1.8}" transform="rotate(45 ${p[0]} ${p[1]})" fill="${C.hi}" ${frame} style="cursor:move"><title>Drag to move · double-click to remove</title></rect>`).join('');
+    return m;
+  }
   const b = bbox(s);
   let m = `<rect x="${b.x - pad}" y="${b.y - pad}" width="${b.w + 2*pad}" height="${b.h + 2*pad}" fill="none" ${frame} stroke-dasharray="${4/k} ${3/k}" pointer-events="none"/>`;
   if(s.t === 'comment') return m;
@@ -407,7 +470,7 @@ export function editBox(s, text){
     case 'frame': return {x:s.x, y:s.y - 30, w:Math.max(200, s.w), h:24, fs:13, align:'left', weight:600, color:colorOf(s.c)};
     case 'code': return {x:s.x + 12, y:s.y + 34, w:s.w - 24, h:s.h - 40, fs:12.5, align:'left', mono:true};
     case 'sticky': return {x:s.x + 14, y:s.y + 14, w:s.w - 28, h:s.h - 28, fs:s.fs || 15, align:'left'};
-    case 'line': case 'arrow': { const [[x1, y1], [x2, y2]] = s.pts; return {x:(x1 + x2) / 2 - 90, y:(y1 + y2) / 2 - 12, w:180, h:Math.max(24, wrap(text, 160, 13).length * 13 * LH + 6), fs:13, align:'center', card:true}; }
+    case 'line': case 'arrow': { const [mx, my] = pathMid(s); return {x:mx - 90, y:my - 12, w:180, h:Math.max(24, wrap(text, 160, 13).length * 13 * LH + 6), fs:13, align:'center', card:true}; }
     default: { const t = inner(s, text || ' '); return {x:s.x + (s.w - t.tw) / 2, y:s.y, w:t.tw, h:s.h, fs:t.fs, align:'center', pad:Math.max(0, t.top), weight:500}; }
   }
 }

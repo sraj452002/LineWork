@@ -140,8 +140,9 @@ button,input,textarea{font:inherit;color:inherit}
 .cwrap{position:relative;flex:1;min-height:0}
 #stage{position:absolute;inset:0;overflow:hidden;background-color:var(--paper);
   background-image:linear-gradient(var(--grid2) 1px,transparent 1px),linear-gradient(90deg,var(--grid2) 1px,transparent 1px),linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px)}
-#svg{display:block;width:100%;height:100%;touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none}
-#svg.grabbing{cursor:grabbing}
+#svg{display:block;width:100%;height:100%;touch-action:none;cursor:default;user-select:none;-webkit-user-select:none}
+#svg.panning,#svg.panning *{cursor:grab!important}
+#svg.grabbing,#svg.grabbing *{cursor:grabbing!important}
 #svg [data-node]{cursor:move}
 .ctools{position:absolute;top:10px;left:66px;display:flex;gap:6px;flex-wrap:wrap;z-index:3;max-width:calc(100% - 136px)}
 .zoom{position:absolute;top:10px;right:10px;display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);overflow:hidden;z-index:3}
@@ -271,6 +272,7 @@ details.help pre{margin:8px 0 2px;font-family:var(--mono);font-size:11.5px;line-
 .sbar{position:absolute;top:54px;left:50%;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:4px;flex-wrap:wrap;justify-content:center;max-width:calc(100% - 140px);background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:5px 7px}
 .sw{flex:none;width:20px;height:20px;border-radius:50%;border:2px solid var(--surface);box-shadow:0 0 0 1px var(--line);cursor:pointer;padding:0}
 .sw[aria-pressed="true"]{box-shadow:0 0 0 2px var(--ink)}
+.sbar .scount{font-size:12.5px;font-weight:600;padding:0 6px 0 2px;white-space:nowrap}
 .sbar .sep{width:1px;align-self:stretch;background:var(--line);margin:0 3px}
 .sbtn{flex:none;border:0;background:none;border-radius:6px;padding:4px 8px;font-size:12.5px;font-weight:500;cursor:pointer;white-space:nowrap}
 .sbtn:hover{background:var(--panel)}

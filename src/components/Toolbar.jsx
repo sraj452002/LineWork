@@ -33,7 +33,7 @@ export const Ico = ({ d, vb = 24, className }) => (
 
 const TOOLS = [
   { t: 'select', k: 'v', label: 'Select' },
-  { t: 'hand', k: 'h', label: 'Hand (or hold Space)' },
+  { t: 'hand', k: 'h', label: 'Hand (drag empty canvas also pans)' },
   { t: 'rect', k: 'r', label: 'Rectangle' },
   { t: 'ellipse', k: 'o', label: 'Ellipse' },
   { t: 'arrow', k: 'a', label: 'Arrow' },
