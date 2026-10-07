@@ -5,7 +5,8 @@ function createSample(){
     let res;
     try{ res = await fetch('/api/ai', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({prompt, tier:opts.modelTier || 'default', ...(opts.images && opts.images.length ? {images:opts.images} : {})}), signal:opts.signal}); }
     catch(e){ throw {code: e && e.name === 'AbortError' ? 'cancelled' : 'unavailable'}; }
-        if(res.status === 429) throw {code:'rate_limited'};
+        if(res.status === 401) throw {code:'signed_out'};
+    if(res.status === 429) throw {code:'rate_limited'};
     if(res.status === 413) throw {code:'prompt_too_large'};
     if(res.status === 400 && opts.images) throw {code:'image_unsupported'};
     if(!res.ok) throw {code:'unavailable'};
@@ -37,7 +38,10 @@ function createSample(){
     const a = t.indexOf('{'), b = t.lastIndexOf('}');
     try{ return JSON.parse(a >= 0 ? t.slice(a, b+1) : t); }catch(_){ throw {code:'empty'}; }
   };
-  return fetch('/api/ai/status', {cache:'no-store'}).then(r => r.ok ? r.json() : null).then(j => j && j.enabled ? sample : null).catch(() => null);
+  return fetch('/api/ai/status', {cache:'no-store'}).then(r => r.ok ? r.json() : null).then(j => {
+    NO_AI = j && j.reason === 'signed_out' ? AI_SIGNED_OUT : AI_NO_KEY;
+    return j && j.enabled ? sample : null;
+  }).catch(() => null);
 }
 // Shrink a picture so its long side is at most `max` pixels, as base64 JPEG for the AI.
 export function prepImage(file, max = 1568){
@@ -65,7 +69,9 @@ export const downloads = {
   }
 };
 
-export const sampleP = createSample();
+// Live bindings: refreshAI() replaces these after signing in or out, and importers see the new values.
+export let sampleP = createSample();
+export function refreshAI(){ sampleP = createSample(); return sampleP; }
 
 export const LANG = {
 graph:`Diagram language for architecture diagrams and flowcharts:
@@ -109,9 +115,12 @@ export function copyFor(code){
     rate_limited:'Too many requests right now. Wait a moment, then try again.',
     prompt_too_large:'That input is too long. Paste a smaller excerpt.',
     cancelled:'Stopped.',
+    signed_out:'Your session ended. Sign in again to use AI.',
     empty:'The reply had no usable diagram. Try describing it differently.',
     image_unsupported:'That picture couldn’t be read. Try a PNG or JPEG screenshot.'
   })[code] || 'That didn\u2019t work. Try rephrasing your request.';
 }
 
-export const NO_AI = 'AI is off. Add ANTHROPIC_API_KEY in Netlify to turn it on. Everything else works.';
+const AI_NO_KEY = 'AI is off. Add ANTHROPIC_API_KEY in Netlify to turn it on. Everything else works.';
+const AI_SIGNED_OUT = 'AI needs an account. Sign out, then sign in or create an account to use it. Everything else works.';
+export let NO_AI = AI_NO_KEY;

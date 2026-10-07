@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { TEMPLATES, TYPES, dg, newFile } from '../lib/engines.js';
 import { LANG, NO_AI, copyFor, sampleP } from '../lib/ai.js';
-import { USERNAME } from '../lib/auth.js';
-import { loadFolders, saveFolders } from '../lib/storage.js';
 import { ago, rid } from '../lib/utils.js';
 import { Brand, useUI } from './ui.jsx';
 
@@ -40,19 +38,17 @@ const typing = e => {
   return t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName);
 };
 
-export default function Home({ files, onOpen, onCreate, onUpdate, onRename, onDuplicate, onDelete, onSignOut, onGuide }) {
+export default function Home({ files, folders, setFolders, account, saveState, onOpen, onCreate, onUpdate, onRename, onDuplicate, onDelete, onSignOut, onGuide }) {
   const { popup, ask, toast } = useUI();
   const [q, setQ] = useState('');
   const [view, setView] = useState('all'); // 'all' | 'archive' | folder id
   const [tab, setTab] = useState('all'); // 'all' | 'recent'
   const [sort, setSort] = useState({ key: 'updated', dir: -1 });
-  const [folders, setFolders] = useState(loadFolders);
   const [busy, setBusy] = useState(false);
   const ctl = useRef(null);
   const searchRef = useRef(null);
   const newRef = useRef(null);
 
-  useEffect(() => { saveFolders(folders); }, [folders]);
 
   const createFrom = t => {
     const f = newFile(t);
@@ -189,7 +185,8 @@ Reply with ONLY a JSON object: {"title": "...", "doc": "...", "diagrams": [...]}
 
   const heading = view === 'all' ? 'All Files' : view === 'archive' ? 'Archive' : folderName(view);
   const count = k => files.filter(f => !f.archived && f.folder === k).length;
-  const initial = (USERNAME[0] || '?').toUpperCase();
+  const who = account ? (account.name || account.userMetadata?.full_name || account.email || 'You') : 'This browser';
+  const initial = (who[0] || '?').toUpperCase();
   const doc = TEMPLATES.find(t => t.key === 'doc');
 
   const empty = files.length === 0
@@ -231,7 +228,11 @@ Reply with ONLY a JSON object: {"title": "...", "doc": "...", "diagrams": [...]}
           <button className="nav" onClick={() => onGuide('erd')}><Ico d={IC.table} /><span>Database schema guide</span></button>
         </nav>
         <div className="side-foot">
-          <button className="nav" onClick={onSignOut}><Ico d={IC.logout} /><span>Sign out</span></button>
+          <div className="side-acct" title={account ? account.email : 'Files are saved in this browser only'}>
+            <span className="avatar sm">{initial}</span>
+            <span><b>{account ? who : 'No account'}</b><small>{account ? (saveState === 'Offline' ? 'Offline, will retry' : saveState === 'Syncing' ? 'Syncing…' : 'Saved to your account') : 'Saved in this browser only'}</small></span>
+          </div>
+          <button className="nav" onClick={onSignOut}><Ico d={IC.logout} /><span>{account ? 'Sign out' : 'Sign in or create an account'}</span></button>
           <button ref={newRef} className="new-btn" aria-haspopup="menu" onClick={e => newMenu(e.currentTarget)}>
             New File <small>Alt N</small><Ico d={IC.caret} size={16} />
           </button>
@@ -252,7 +253,7 @@ Reply with ONLY a JSON object: {"title": "...", "doc": "...", "diagrams": [...]}
                 onChange={e => setQ(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') { setQ(''); e.currentTarget.blur(); } }} />
               <kbd>/</kbd>
             </label>
-            <div className="avatar" title={USERNAME}>{initial}</div>
+            <div className="avatar" title={who}>{initial}</div>
           </header>
 
           <div className="actions">
@@ -296,7 +297,7 @@ Reply with ONLY a JSON object: {"title": "...", "doc": "...", "diagrams": [...]}
                     <td className="c-date" title={new Date(f.created || f.updated).toLocaleString()}>{ago(f.created || f.updated)}</td>
                     <td className="c-date" title={new Date(f.updated).toLocaleString()}>{ago(f.updated)}</td>
                     <td className="c-num">{f.diagrams.length}</td>
-                    <td className="c-author"><span className="avatar sm" title={USERNAME}>{initial}</span></td>
+                    <td className="c-author"><span className="avatar sm" title={who}>{initial}</span></td>
                     <td className="c-act">
                       <button className="icon-btn row-more" aria-label={'Actions for ' + (f.title || 'Untitled')}
                         onClick={e => { e.stopPropagation(); fileMenu(e.currentTarget, f); }}>⋯</button>

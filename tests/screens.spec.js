@@ -1,18 +1,17 @@
 import { test } from '@playwright/test';
-import { USERNAME } from '../src/lib/auth.js';
 
 // Screenshots of the main screens for a visual check. Run with: npx playwright test screens --workers=1
 // They're written to test-results/screens (not committed).
 test.skip(!process.env.SCREENS, 'set SCREENS=1 to take screenshots');
 
 test('screens', async ({ page }) => {
-  await page.addInitScript(user => {
+  await page.addInitScript(() => {
     if (sessionStorage.getItem('seeded')) return;
     localStorage.clear();
-    localStorage.setItem('linework:session', JSON.stringify({ user, exp: Date.now() + 864e5 }));
+    localStorage.setItem('linework:local-mode', '1');
     localStorage.setItem('linework:ai-open', '0');
     sessionStorage.setItem('seeded', '1');
-  }, USERNAME);
+  });
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.goto('/');
   const shot = name => page.screenshot({ path: `test-results/screens/${name}.png` });

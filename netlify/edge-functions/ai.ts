@@ -1,4 +1,5 @@
 import type { Config } from "@netlify/edge-functions";
+import { getUser } from "@netlify/identity";
 
 // Proxies AI requests to Anthropic so the API key stays on the server.
 export default async (req: Request) => {
@@ -7,12 +8,15 @@ export default async (req: Request) => {
   const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
 
-  if (url.pathname === "/api/ai/status") return json({ enabled: Boolean(key) });
+  // AI costs money per request, so it's for signed-in accounts only.
+  const user = await getUser().catch(() => null);
+  if (url.pathname === "/api/ai/status") return json({ enabled: Boolean(key) && Boolean(user), reason: !key ? "no_key" : !user ? "signed_out" : null });
 
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
   const origin = req.headers.get("origin");
   if (origin && origin !== url.origin) return json({ error: "forbidden" }, 403);
   if (!key) return json({ error: "not_configured" }, 503);
+  if (!user) return json({ error: "unauthorized" }, 401);
 
   const body = await req.json().catch(() => null);
   const prompt = typeof body?.prompt === "string" ? body.prompt : "";

@@ -1,5 +1,4 @@
 import { test, expect } from '@playwright/test';
-import { USERNAME } from '../src/lib/auth.js';
 
 // Start every test signed in with an empty workspace, and fail on any uncaught page error.
 test.beforeEach(async ({ page }) => {
@@ -7,13 +6,13 @@ test.beforeEach(async ({ page }) => {
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' && !/api\/ai|Failed to load resource/.test(m.text())) errors.push(m.text()); });
   test.info().errors_ = errors;
-  await page.addInitScript(user => {
+  await page.addInitScript(() => {
     if (sessionStorage.getItem('seeded')) return;
     localStorage.clear();
-    localStorage.setItem('linework:session', JSON.stringify({ user, exp: Date.now() + 864e5 }));
+    localStorage.setItem('linework:local-mode', '1');
     localStorage.setItem('linework:ai-open', '0');
     sessionStorage.setItem('seeded', '1');
-  }, USERNAME);
+  });
   await page.goto('/');
 });
 test.afterEach(async () => {
@@ -134,4 +133,14 @@ test('schema exports SQL and the guide opens', async ({ page }) => {
   await page.getByRole('button', { name: 'More actions' }).click();
   await page.getByRole('menuitem', { name: /How to use Linework/ }).click();
   await expect(page.getByRole('heading', { name: 'How to use Linework' })).toBeVisible();
+});
+
+test('without an account, the sign-in screen offers to keep files in this browser', async ({ page }) => {
+  await page.evaluate(() => { localStorage.removeItem('linework:local-mode'); });
+  await page.reload();
+  // Identity isn't available in local development, so only the no-account option is offered.
+  await expect(page.getByText('Accounts aren’t available here yet')).toBeVisible();
+  await page.getByRole('button', { name: 'Continue without an account' }).click();
+  await expect(page.getByRole('button', { name: 'Create a Blank File' })).toBeVisible();
+  await expect(page.getByText('Saved in this browser only')).toBeVisible();
 });
