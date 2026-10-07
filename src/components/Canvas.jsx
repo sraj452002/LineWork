@@ -1,24 +1,46 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { TEMPLATES, TYPES, engineOf, prep } from '../lib/engines.js';
-import { NO_AI, copyFor, langFor, sampleP } from '../lib/ai.js';
+import { C, TEMPLATES, TYPES, engineOf, prep, tableHue, tableIcon } from '../lib/engines.js';
+import { addColumn, deleteColumn, deleteTable, getColumn, moveColumn, notationOf, renameTable, setColumn, setNotation, setTableAttr } from '../lib/erdcode.js';
+import { highlight } from '../lib/highlight.js';
+import { LANG, NO_AI, copyFor, downloads, langFor, sampleP } from '../lib/ai.js';
+import { DIALECTS, erdToSql, sqlToErd } from '../lib/sql.js';
+import { shapesToCode } from '../lib/erdconvert.js';
 import { HELP } from '../lib/help.js';
-import { saveImage, useImages } from '../lib/images.js';
-import { esc, rid, trunc } from '../lib/utils.js';
+import { imageKeys, loadImages, saveImage, useImages } from '../lib/images.js';
+import { isPackIcon, loadIconPacks, useIconPacks } from '../lib/iconpacks.js';
+import { esc, rid, slug, trunc } from '../lib/utils.js';
 import {
-  COLOR_NAMES, DEVICES, KEEP_RATIO, SHAPE_LIST, bbox, colorOf, contains, drawn, dropDeadLinks, editBox, handlesMarkup,
-  hasText, icons, isLink, make, marqueeMarkup, measure, moved, outlinesMarkup, overlaps, resized, resolveLinks, selKey,
+  DEVICES, KEEP_RATIO, SHAPE_LIST, bbox, contains, drawn, dropDeadLinks, editBox, handlesMarkup,
+  brandColor, hasText, icons, isBox, shapesDoc, isLink, make, marqueeMarkup, measure, moved, outlinesMarkup, overlaps, resized, resolveLinks, selKey,
   shapeAt, shapeBounds, shapeIcon, shapesMarkup, targetMarkup, unionBox,
 } from '../lib/shapes.js';
 import { IC, Ico, InsertPanel, TOOL_KEYS, Toolbar } from './Toolbar.jsx';
+import AIChat, { KINDS } from './AIChat.jsx';
+import SelBar from './SelBar.jsx';
+import { DiagramBar, FieldBar, TableBar } from './DiagramBars.jsx';
 import { useUI } from './ui.jsx';
 
-const PLACEHOLDER = {
-  architecture: 'Describe a system, paste Terraform, or ask for a change',
-  flowchart: 'Describe a process, or ask for a change',
-  sequence: 'Describe an interaction between services',
-  erd: 'Describe your data, paste SQL, or ask for a change',
-};
 const NO_SHAPES = [];
+// Code editor header: [title, subtitle, icon] per diagram type.
+const CODE_TITLE = {
+  architecture: ['Cloud Architecture', 'Visualize your infrastructure', 'dCloud'],
+  flowchart: ['Flow Chart', 'Visualize process and logic flows', 'dFlow'],
+  sequence: ['Sequence', 'Visualize system flow and interactions', 'dSeq'],
+  erd: ['Entity Relationship', 'Visualize data models', 'dErd'],
+};
+// Connection symbols the code editor's footer can insert.
+const CHEATS = {
+  erd: [['>', 'many-to-one'], ['<', 'one-to-many'], ['-', 'one-to-one'], ['<>', 'many-to-many']],
+  architecture: [['>', 'arrow'], ['<>', 'two-way'], ['--', 'line']],
+  flowchart: [['>', 'arrow'], ['<>', 'two-way'], ['--', 'line']],
+  sequence: [['>', 'message'], ['-->', 'reply']],
+};
+const HELP_HINT = {
+  erd: 'users [icon: user, color: blue] {\n  id string pk\n}',
+  architecture: 'web [Storefront] client\napi [Orders API] server\nweb > api : HTTPS',
+  flowchart: 'start [Begin] start\ncheck [OK?] decision\nstart > check',
+  sequence: 'shop [Shopper] user\napi [API] api\nshop > api : Place order',
+};
 const DEVICE_ICON = { phone: '<rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M11 5.5h2"/>', tablet: '<rect x="4.5" y="2.5" width="15" height="19" rx="2"/><path d="M12 4.5h.01"/>', browser: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 8.5h18M6 6.3h.01M8.5 6.3h.01"/>', desktop: '<rect x="3" y="3.5" width="18" height="13" rx="1.5"/><path d="M9 20.5h6M12 16.5v4"/>' };
 
 const nodeIds = (d, m) => new Set(d.type === 'erd' ? m.tables.keys() : d.type === 'sequence' ? [] : m.nodes.keys());
@@ -44,16 +66,51 @@ const HINTS = {
   frame: 'Drag to draw a frame around a group of things',
   comment: 'Click to leave a comment',
 };
+// Entries in Insert → Diagram as Code. BPMN is a flowchart whose groups draw as swimlanes.
+const CODE_KINDS = [
+  { key: 'flowchart', type: 'flowchart', icon: 'dFlow', label: 'Flow Chart', note: 'Visualize process and logic flows' },
+  { key: 'architecture', type: 'architecture', icon: 'dCloud', label: 'Cloud Architecture', note: 'Visualize your infrastructure' },
+  { key: 'bpmn', type: 'flowchart', icon: 'dBpmn', label: 'BPMN', note: 'Visualize business processes with swimlanes', starter: `title: Purchase approval
+group requester "Employee" {
+  ask [Submit request] start
+  fix [Revise request] step
+}
+group manager "Manager" {
+  review [Within budget?] decision
+}
+group finance "Finance" {
+  pay [Place order] step
+  done [Order placed] end
+}
+
+ask > review
+review > pay : yes
+review > fix : no
+fix > review
+pay > done` },
+  { key: 'erd', type: 'erd', icon: 'dErd', label: 'Entity Relationship', note: 'Visualize data models' },
+  { key: 'sequence', type: 'sequence', icon: 'dSeq', label: 'Sequence', note: 'Visualize system flow and interactions' },
+];
+
+// Styles copied with Ctrl Alt C, kept across diagrams until the page reloads.
+let styleClip = null;
+const kindOf = s => (isLink(s) ? 'link' : isBox(s) ? 'box' : s.t);
+const STYLE_KEYS = { link: ['c', 'sw', 'dash', 'route', 'h0', 'anim'], box: ['c', 'sc', 'sw', 'dash', 'fm', 'fx'], text: ['c', 'bold'] };
+
 const SHORTCUTS = [
   ['Tools', [['V', 'Select'], ['H', 'Hand'], ['R', 'Rectangle'], ['O', 'Ellipse'], ['A', 'Arrow'], ['L', 'Line'], ['D', 'Draw'], ['T', 'Text'], ['I', 'Icon'], ['F', 'Frame'], ['C', 'Comment']]],
   ['Canvas', [['/', 'Insert menu'], ['Ctrl J', 'Ask AI'], ['Space + drag', 'Pan'], ['+  −', 'Zoom in / out'], ['Shift 1', 'Zoom to fit'], ['Shift 0', 'Zoom to 100%'], ['Ctrl Z', 'Undo'], ['Ctrl Y', 'Redo']]],
   ['Selection', [['Shift + drag', 'Select an area'], ['Shift + click', 'Add or remove'], ['Ctrl A', 'Select all'], ['Ctrl D', 'Duplicate'], ['Delete', 'Delete'], ['Enter', 'Edit text'], ['Arrow keys', 'Nudge (Shift: 10px)'], ['Esc', 'Deselect / cancel']]],
+  ['Arrange and copy', [['[  ]', 'Send to back / bring to front'], ['Ctrl [  ]', 'Send backward / bring forward'], ['Shift F', 'Wrap in a figure'], ['Shift Alt C', 'Copy as PNG'], ['Ctrl Alt C', 'Copy styles'], ['Ctrl Alt V', 'Paste styles']]],
+  ['Table columns', [['Click a row', 'Select a column'], ['↑  ↓', 'Previous / next column'], ['Alt ↑  ↓', 'Move the column'], ['Enter', 'Rename the column'], ['Delete', 'Delete the column'], ['Esc', 'Back to the whole table']]],
 ];
 
 // One canvas per diagram. The parent keys it by diagram id, so switching tabs starts fresh.
-export default function Canvas({ file, d, visible, updateDiagram, history, onAddDiagram }) {
+export const AI_W = 380; // width of the AI chat panel on wide screens
+
+export default function Canvas({ file, d, visible, updateDiagram, updateFile, history, onAddDiagram, onGuide, aiOpen, onAIOpen }) {
   const { toast, theme, popup } = useUI();
-  const svgRef = useRef(null), stageRef = useRef(null), dockRef = useRef(null), promptRef = useRef(null), fileRef = useRef(null);
+  const svgRef = useRef(null), stageRef = useRef(null), fileRef = useRef(null);
   const dRef = useRef(d);
   dRef.current = d;
 
@@ -62,9 +119,13 @@ export default function Canvas({ file, d, visible, updateDiagram, history, onAdd
   viewRef.current = view;
   const [dragManual, setDragManual] = useState(null);
   const [drawer, setDrawer] = useState(false);
-  const [log, setLog] = useState([]);
-  const [prompt, setPrompt] = useState('');
-  const [status, setStatus] = useState({ text: '', busy: false });
+  const [codeHelp, setCodeHelp] = useState(false);
+  const [diagSel, setDiagSel] = useState(false);
+  const [selField, setSelField] = useState(null); // {t, f}: one column of a selected table // the whole diagram is selected (its header was clicked)
+  const codeRef = useRef(null), hlRef = useRef(null), gutRef = useRef(null);
+  const [aiFocus, setAiFocus] = useState(0);
+  const [aiOff, setAiOff] = useState('');
+  const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
   const [fitReq, setFitReq] = useState(1);
   const ctl = useRef(null);
@@ -82,6 +143,7 @@ export default function Canvas({ file, d, visible, updateDiagram, history, onAdd
   const [panel, setPanel] = useState(null); // null when closed, '' for all categories, or a category key
   const [showKeys, setShowKeys] = useState(false);
   const imgV = useImages(d.shapes);
+  const packs = useIconPacks(panel != null || (d.shapes || []).some(s => s.t === 'icon' && isPackIcon(s.v)) || (d.type === 'erd' && /\bicon\s*:/.test(d.code)));
 
   // History lives in the parent so it survives tab switches.
   if (!history.has(d.id)) history.set(d.id, { stack: [snap(d.code, d.shapes)], i: 0 });
@@ -104,14 +166,23 @@ export default function Canvas({ file, d, visible, updateDiagram, history, onAdd
   const selS = selection.length === 1 && selShapes.length === 1 ? selShapes[0] : null;
   const sel = selection.length === 1 && selNodes.length === 1 ? selNodes[0] : null;
   const editS = editing ? shapes.find(s => s.id === editing) || null : null;
+  useEffect(() => { if (selection.length) setDiagSel(false); }, [selection]);
+  // The code editor and AI chat share the right-hand side, so opening one closes the other.
+  useEffect(() => { if (drawer && aiOpen) onAIOpen(false); }, [drawer]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (aiOpen && drawer) setDrawer(false); }, [aiOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+  const diagBox = ctx.m.count ? ctx.E.bounds(ctx) : null;
 
-  const markup = useMemo(() => ctx.E.markup(ctx, sel), [ctx, sel]);
-  const layers = useMemo(() => shapesMarkup(shapes, { editing }), [shapes, editing, theme, imgV]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A selected column only counts while its table is the selection and the column still exists.
+  const field = selField && sel === selField.t && ctx.m.tables && ctx.m.tables.get(sel)?.fields.some(x => x.name === selField.f) ? selField : null;
+  const markup = useMemo(() => ctx.E.markup(ctx, sel, field), [ctx, sel, packs, field && field.t, field && field.f]); // eslint-disable-line react-hooks/exhaustive-deps
+  const layers = useMemo(() => shapesMarkup(shapes, { editing }), [shapes, editing, theme, imgV, packs]); // eslint-disable-line react-hooks/exhaustive-deps
   const overlay = (() => {
     if (editing) return '';
     const k = view.k;
     let m = selS ? handlesMarkup(selS, k)
       : selection.length > 1 ? outlinesMarkup([...selShapes.map(bbox), ...selNodes.map(nodeRect).filter(Boolean)], k) : '';
+    // A light frame around the diagram, highlighted while the diagram is selected.
+    if (diagBox) m = `<rect x="${diagBox.x - 14}" y="${diagBox.y - 14}" width="${diagBox.w + 28}" height="${diagBox.h + 28}" rx="${10 / k}" fill="none" stroke="${diagSel ? C.hi : C.line}" stroke-width="${(diagSel ? 2.5 : 1.2) / k}" pointer-events="none"/>` + m;
     if (marquee) m += marqueeMarkup(marquee, k);
     if (target) m += targetMarkup(target, k);
     return m;
@@ -134,7 +205,8 @@ export default function Canvas({ file, d, visible, updateDiagram, history, onAdd
 
   // Save shapes; record = false skips the undo entry (used while a new text box is still empty).
   const putShapes = (next, record = true) => {
-    next = dropDeadLinks(next);
+    // o0/o1 are drawing hints that resolveLinks adds to elbow lines; don't save them.
+    next = dropDeadLinks(next).map(s => ('o0' in s || 'o1' in s ? (({ o0, o1, ...rest }) => rest)(s) : s));
     // Update the ref now so a second change in the same event builds on this one.
     dRef.current = { ...dRef.current, shapes: next };
     updateDiagram(x => { x.shapes = next; });
@@ -153,6 +225,113 @@ export default function Canvas({ file, d, visible, updateDiagram, history, onAdd
     setCode(v, { commit: false });
     clearTimeout(editT.current);
     editT.current = setTimeout(() => pushHist(snap(v, dRef.current.shapes)), 700);
+  };
+
+  /* ---- to and from database schemas ---- */
+  // Put schema code somewhere sensible: into this diagram if it has no code yet, otherwise a new tab.
+  const placeSchema = (code, name, positions) => {
+    if (!dRef.current.code.trim()) {
+      updateDiagram(x => { x.type = 'erd'; x.manual = { ...(positions || {}) }; });
+      setCode(code, { fit: true });
+      return 'here';
+    }
+    onAddDiagram('erd', name, code, positions ? { manual: positions } : undefined);
+    return 'tab';
+  };
+  // Drawings that can become code: boxes and sticky notes with text, and diagram icons.
+  const drawn = shapes.filter(x => ((isBox(x) || x.t === 'sticky') && (x.text || '').trim()) || (x.t === 'icon' && !String(x.v).includes(':')));
+  // Turn drawings into diagram code. With code already there, they're added to it (in this diagram's type);
+  // otherwise this diagram becomes `type`. newTab puts them in a new diagram instead.
+  const convertDrawing = (type, list, newTab) => {
+    const hasCode = !!dRef.current.code.trim(), merge = hasCode && !newTab;
+    const target = merge ? d.type : type;
+    const r = shapesToCode(target, list, shapes, merge ? [...ids] : []);
+    if (!r) { toast('Select boxes with text, or diagram icons, first. Their first line becomes the name.'); return; }
+    if (newTab) {
+      onAddDiagram(target, TYPES[target].name, r.code, r.positions ? { manual: r.positions } : undefined);
+      toast(`Added a new ${TYPES[target].name.toLowerCase()} diagram`);
+      return;
+    }
+    putShapes(baseShapes().filter(x => !r.used.has(x.id)));
+    updateDiagram(x => {
+      if (!hasCode) { x.type = target; x.manual = {}; if (target === 'flowchart') x.dir = 'TB'; }
+      if (r.positions) x.manual = { ...(x.manual || {}), ...r.positions };
+    });
+    setCode(hasCode ? dRef.current.code.replace(/\s*$/, '\n\n') + r.code : r.code, { fit: true });
+    setSelection([]);
+    toast(hasCode ? 'Added to the diagram code' : 'Converted to code');
+  };
+  const exportSql = (dialect, copy) => {
+    const sql = erdToSql(dRef.current.code, dialect);
+    if (copy) navigator.clipboard.writeText(sql).then(() => toast('SQL copied'), () => toast('Copy isn’t allowed here.'));
+    else downloads.save({ filename: slug(file.title) + '-' + slug(d.name) + (dialect === 'mysql' ? '.mysql' : '') + '.sql', data: sql });
+  };
+  const sqlFileRef = useRef(null);
+  const importSqlText = text => {
+    const code = sqlToErd(text || '');
+    if (!code) { toast('No CREATE TABLE statements found.'); return; }
+    const n = (code.match(/\{\n/g) || []).length;
+    const where = placeSchema(code, 'Imported schema');
+    toast(`Imported ${n} table${n === 1 ? '' : 's'}${where === 'tab' ? ' into a new tab' : ''}`);
+  };
+  const importSql = async () => {
+    const v = await ask({ title: 'Import SQL', text: 'Paste CREATE TABLE statements (PostgreSQL, MySQL, SQLite…). Primary keys, unique columns and foreign keys come across.', multiline: true, ok: 'Import' });
+    if (v && v.trim()) importSqlText(v);
+  };
+  const sqlMenu = [
+    ...DIALECTS.map(([k, n]) => ({ label: `Download SQL (${n})`, icon: IC.download, act: () => exportSql(k) })),
+    ...DIALECTS.map(([k, n]) => ({ label: `Copy SQL (${n})`, icon: IC.copy, act: () => exportSql(k, true) })),
+  ];
+  // Ask AI for the schema behind another kind of diagram.
+  const diagramToErd = () => {
+    focusAI();
+    send(`Design the database schema that would store the data for the "${d.name}" ${TYPES[d.type].name.toLowerCase()} diagram: one table per stored entity, with realistic columns, keys and a relationship line for every foreign key.`, { kind: 'erd' });
+  };
+
+  /* ---- schema edits from the table and diagram toolbars ---- */
+  const tableAttr = (id, key, value) => setCode(setTableAttr(dRef.current.code, id, key, value));
+  const renameNode = (from, to) => {
+    if (!/^[\w-]+$/.test(to)) { toast('Table names can use letters, numbers, - and _ (no spaces).'); return; }
+    if (ctx.m.tables && ctx.m.tables.has(to)) { toast(`There’s already a table called “${to}”.`); return; }
+    updateDiagram(x => { if (x.manual && x.manual[from]) { x.manual[to] = x.manual[from]; delete x.manual[from]; } });
+    setCode(renameTable(dRef.current.code, from, to));
+    setSelection([NODE + to]);
+  };
+  const columnSet = parts => {
+    const { t, f } = field;
+    if (parts.name !== f) {
+      if (!/^[\w-]+$/.test(parts.name)) { toast('Column names can use letters, numbers, - and _ (no spaces).'); return; }
+      if (ctx.m.tables.get(t).fields.some(x => x.name === parts.name)) { toast(`“${t}” already has a column called “${parts.name}”.`); return; }
+    }
+    setCode(setColumn(dRef.current.code, t, f, parts));
+    setSelField({ t, f: parts.name });
+  };
+  const columnAdd = () => {
+    const r = addColumn(dRef.current.code, field ? field.t : sel, field && field.f);
+    if (!r.name) return;
+    setCode(r.code);
+    setSelField({ t: field ? field.t : sel, f: r.name });
+    requestAnimationFrame(() => { const el = document.querySelector('.sbar.field .sbar-name'); if (el) { el.focus(); el.select(); } });
+  };
+  const columnDelete = () => {
+    const { t, f } = field, cols = ctx.m.tables.get(t).fields.map(x => x.name), i = cols.indexOf(f);
+    setCode(deleteColumn(dRef.current.code, t, f));
+    const next = cols[i + 1] || cols[i - 1];
+    setSelField(next ? { t, f: next } : null);
+  };
+  const columnMove = dir => setCode(moveColumn(dRef.current.code, field.t, field.f, dir));
+  const removeTable = id => { setCode(deleteTable(dRef.current.code, id), { fit: true }); setSelection([]); };
+  // Put text at the cursor in the code editor.
+  const insertCode = text => {
+    const t = codeRef.current, v = dRef.current.code;
+    const a = t ? t.selectionStart : v.length, b = t ? t.selectionEnd : v.length;
+    onCodeInput(v.slice(0, a) + text + v.slice(b));
+    requestAnimationFrame(() => { if (t) { t.focus(); t.selectionStart = t.selectionEnd = a + text.length; } });
+  };
+  const syncCode = e => {
+    const { scrollTop, scrollLeft } = e.target;
+    if (hlRef.current) { hlRef.current.scrollTop = scrollTop; hlRef.current.scrollLeft = scrollLeft; }
+    if (gutRef.current) gutRef.current.scrollTop = scrollTop;
   };
 
   /* ---- view ---- */
@@ -176,12 +355,12 @@ export default function Canvas({ file, d, visible, updateDiagram, history, onAdd
     const b = unionBox(ctx.m.count ? ctx.E.bounds(ctx) : null, shapeBounds(shapes)), r = stage.getBoundingClientRect();
     if (!b || !r.width) { moveView({ x: 0, y: 0, k: 1 }, smooth === true); return; }
     const wide = r.width > 640;
-    const left = drawer && wide ? 410 : 66, right = 62, top = 54;
-    const bottom = (dockRef.current?.offsetHeight || 80) + 26 + (drawer && !wide ? r.height * 0.66 : 0);
+    const left = 66, right = 62 + ((aiOpen || drawer) && wide ? AI_W : 0), top = 54;
+    const bottom = 26 + (drawer && !wide ? r.height * 0.66 : 0);
     const aw = Math.max(80, r.width - left - right), ah = Math.max(80, r.height - top - bottom);
     const k = Math.max(0.15, Math.min(1.2, aw / b.w, ah / b.h));
     moveView({ k, x: left + (aw - b.w * k) / 2 - b.x * k, y: top + (ah - b.h * k) / 2 - b.y * k }, smooth === true);
-  }, [ctx, drawer, shapes, moveView]);
+  }, [ctx, drawer, shapes, moveView, aiOpen]);
 
   useLayoutEffect(() => { if (visible) fit(); }, [fitReq, visible]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -281,6 +460,91 @@ export default function Canvas({ file, d, visible, updateDiagram, history, onAdd
     const all = baseShapes(), picked = all.filter(s => selSet.has(s.id)), rest = all.filter(s => !selSet.has(s.id));
     putShapes(front ? [...rest, ...picked] : [...picked, ...rest]);
   };
+  // Move each selected shape one place up (forward) or down the stack.
+  const step = up => {
+    const a = [...baseShapes()], on = x => selSet.has(x.id);
+    if (up) { for (let i = a.length - 2; i >= 0; i--) if (on(a[i]) && !on(a[i + 1])) [a[i], a[i + 1]] = [a[i + 1], a[i]]; }
+    else { for (let i = 1; i < a.length; i++) if (on(a[i]) && !on(a[i - 1])) [a[i - 1], a[i]] = [a[i], a[i - 1]]; }
+    putShapes(a);
+  };
+  // Wrap the selection in a labelled frame.
+  const createFigure = () => {
+    const pick = selShapes.filter(x => x.t !== 'comment');
+    if (!pick.length) return;
+    const b = pick.map(bbox).reduce((u, r) => unionBox(u, r), null), pad = 28;
+    const f = { id: rid('s'), t: 'frame', x: Math.round(b.x - pad), y: Math.round(b.y - pad), w: Math.round(b.w + 2 * pad), h: Math.round(b.h + 2 * pad), text: 'Figure' };
+    const a = baseShapes(), i = Math.max(0, a.findIndex(x => selSet.has(x.id)));
+    putShapes([...a.slice(0, i), f, ...a.slice(i)]);
+    setSelection([f.id]);
+  };
+  const copyStyles = () => {
+    const src = selShapes[0];
+    if (!src) return;
+    const keys = STYLE_KEYS[kindOf(src)] || ['c'];
+    styleClip = { kind: kindOf(src), v: Object.fromEntries(keys.filter(k => src[k] !== undefined).map(k => [k, src[k]])) };
+    toast('Styles copied');
+  };
+  const pasteStyles = () => {
+    if (!styleClip) { toast('Copy styles from something first (Ctrl Alt C)'); return; }
+    putShapes(baseShapes().map(x => {
+      if (!selSet.has(x.id)) return x;
+      const o = { ...x }, same = kindOf(x) === styleClip.kind;
+      (STYLE_KEYS[kindOf(x)] || ['c']).forEach(k => {
+        // From the same kind of object, copy styles exactly; otherwise only what they share.
+        if (k in styleClip.v) o[k] = styleClip.v[k]; else if (same) delete o[k];
+      });
+      return o;
+    }));
+  };
+  // The selection as a standalone SVG (and PNG), for copying and exporting.
+  const selectionDoc = async () => {
+    const pick = baseShapes().filter(x => selSet.has(x.id));
+    await loadImages(imageKeys(pick));
+    if (pick.some(x => x.t === 'icon' && isPackIcon(x.v))) await loadIconPacks().catch(() => {});
+    return shapesDoc(pick);
+  };
+  const pngOf = doc => new Promise(res => {
+    const img = new Image();
+    img.onload = () => {
+      const k = 2, cv = document.createElement('canvas');
+      cv.width = doc.w * k; cv.height = doc.h * k;
+      const g = cv.getContext('2d'); g.scale(k, k); g.drawImage(img, 0, 0);
+      cv.toBlob(res, 'image/png');
+    };
+    img.onerror = () => res(null);
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(doc.text);
+  });
+  const copyPng = async () => {
+    try {
+      if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') throw 0;
+      const doc = await selectionDoc();
+      if (!doc) return;
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngOf(doc).then(b => b || Promise.reject()) })]);
+      toast('Copied as PNG');
+    } catch (e) { toast('This browser won’t copy images. Use Export selection instead.'); }
+  };
+  const copySvg = async () => {
+    const doc = await selectionDoc();
+    if (!doc) return;
+    try { await navigator.clipboard.writeText(doc.text); toast('Copied as SVG'); }
+    catch (e) { toast('Copy isn’t allowed here.'); }
+  };
+  const exportPng = async () => {
+    const doc = await selectionDoc();
+    const blob = doc && await pngOf(doc);
+    if (!blob) { toast('The image couldn’t be created'); return; }
+    downloads.save({ filename: slug(file.title) + '-selection.png', data: blob });
+  };
+  const addComment = () => {
+    const b = selShapes.map(bbox).reduce((u, r) => unionBox(u, r), null);
+    startEdit(place('comment', undefined, { x: b.x + b.w + 18, y: b.y - 18 }));
+  };
+  const setRoute = v => putShapes(baseShapes().map(x => {
+    if (!selSet.has(x.id)) return x;
+    const { sharp, ...rest } = x;
+    // Elbows route themselves, so drop any bend points.
+    return { ...rest, route: v, ...(v === 'elbow' ? { pts: [x.pts[0], x.pts[x.pts.length - 1]] } : {}) };
+  }));
   const selectAll = () => setSelection([...shapes.map(s => s.id), ...(E.draggable ? [...ids].map(id => NODE + id) : [])]);
 
   const addImageFile = (f, at) => {
@@ -343,6 +607,7 @@ export default function Canvas({ file, d, visible, updateDiagram, history, onAdd
   const onPointerDown = e => {
     if (e.button > 1) return;
     cancelAnimationFrame(animRef.current);
+    setDiagSel(false);
     // Keep focus handling in our hands: blur any field (this also saves an open text edit).
     e.preventDefault();
     const ae = document.activeElement;
@@ -358,6 +623,9 @@ export default function Canvas({ file, d, visible, updateDiagram, history, onAdd
       return;
     }
     const w = toWorld(e.clientX, e.clientY), at = { sx: e.clientX, sy: e.clientY, moved: false };
+    // A double-click only counts if nothing else was pressed in between.
+    const prevTap = lastTap.current;
+    lastTap.current = { id: null, t: 0 };
     const pan = () => { drag.current = { t: 'p', vx: v.x, vy: v.y, ...at }; setGrabbing(true); };
 
     if (e.button === 1 || tool === 'hand' || spaceRef.current) { pan(); return; }
@@ -402,7 +670,7 @@ export default function Canvas({ file, d, visible, updateDiagram, history, onAdd
     if (sEl) {
       const id = sEl.dataset.shape, s = shapes.find(x => x.id === id);
       if (!s) return;
-      const now = Date.now(), lt = lastTap.current;
+      const now = Date.now(), lt = prevTap;
       if (!e.shiftKey && lt.id === id && now - lt.t < 400 && hasText(s)) {
         lastTap.current = { id: null, t: 0 };
         startEdit(s); drag.current = null;
@@ -414,7 +682,12 @@ export default function Canvas({ file, d, visible, updateDiagram, history, onAdd
     }
 
     const n = E.draggable && e.target.closest('[data-node]');
-    if (n) { pickItem(NODE + n.dataset.node, e, w, at); return; }
+    if (n) {
+      pickItem(NODE + n.dataset.node, e, w, at);
+      const fEl = e.target.closest('[data-field]');
+      if (drag.current && drag.current.t === 'move') drag.current.field = !e.shiftKey && fEl ? { t: n.dataset.node, f: fEl.dataset.field } : null;
+      return;
+    }
 
     // Empty canvas: drag pans; Shift+drag draws a selection box.
     if (e.shiftKey && e.pointerType !== 'touch') { drag.current = { t: 'box', a: w, keep: selection, ...at }; return; }
@@ -515,7 +788,11 @@ export default function Canvas({ file, d, visible, updateDiagram, history, onAdd
           if (dr.next && dr.next.some(s => dr.keys.has(s.id))) putShapes(dr.next);
           if (dr.pos) { const pos = dr.pos; updateDiagram(x => { x.manual = { ...(x.manual || {}), ...pos }; }); }
           setDragManual(null);
-        } else if (dr.key && selection.length > 1) setSelection([dr.key]); // plain click inside a group picks one
+        } else {
+          if (dr.key && selection.length > 1) setSelection([dr.key]); // plain click inside a group picks one
+          // A click on a table row selects that column; a click on the header selects the whole table.
+          if (dr.key && dr.key.startsWith(NODE)) setSelField(dr.field || null);
+        }
       } else if (dr.t === 'resize') {
         if (dr.shape) putShapes(baseShapes().map(s => (s.id === dr.id ? dr.shape : s)));
       } else if (dr.t === 'p' && dr.clear && !dr.moved) setSelection([]); // click on empty canvas clears
@@ -530,7 +807,8 @@ export default function Canvas({ file, d, visible, updateDiagram, history, onAdd
     setTool(t); setPanel(null);
     if (t !== 'select' && t !== 'hand') setSelection([]);
   };
-  const focusAI = () => { setPanel(null); promptRef.current?.focus(); };
+  const focusAI = () => { setPanel(null); onAIOpen(true); setAiFocus(n => n + 1); };
+  const toggleAI = () => { if (aiOpen && document.activeElement?.closest('.aichat')) onAIOpen(false); else focusAI(); };
 
   /* ---- keyboard ---- */
   useEffect(() => {
@@ -540,21 +818,44 @@ export default function Canvas({ file, d, visible, updateDiagram, history, onAdd
       const inField = e.target.closest && e.target.closest('textarea,input,button,select');
       const typing = e.target.closest && e.target.closest('textarea,input');
       const mod = e.metaKey || e.ctrlKey, k = e.key.toLowerCase();
-      if (mod && k === 'j') { e.preventDefault(); focusAI(); return; }
+      if (mod && k === 'j') { e.preventDefault(); toggleAI(); return; }
       if (e.key === ' ' && !inField) { e.preventDefault(); if (!spaceRef.current) { spaceRef.current = true; setSpace(true); } return; }
       if (typing) return;
       if (mod && k === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
       if (mod && k === 'y') { e.preventDefault(); redo(); return; }
       if (mod && k === 'a') { e.preventDefault(); selectAll(); return; }
       if (mod && k === 'd' && selShapes.length) { e.preventDefault(); duplicateSel(); return; }
+      if (field) {
+        const cols = ctx.m.tables.get(field.t).fields.map(x => x.name), i = cols.indexOf(field.f);
+        if (e.key === 'Escape') { setSelField(null); return; }
+        if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); columnDelete(); return; }
+        if (e.key === 'Enter') { e.preventDefault(); document.querySelector('.sbar.field .sbar-name')?.focus(); return; }
+        if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+          e.preventDefault();
+          const dir = e.key === 'ArrowUp' ? -1 : 1;
+          if (e.altKey) columnMove(dir);
+          else if (cols[i + dir]) setSelField({ t: field.t, f: cols[i + dir] });
+          return;
+        }
+      }
+      if (selShapes.length) {
+        if (mod && e.key === '[') { e.preventDefault(); step(false); return; }
+        if (mod && e.key === ']') { e.preventDefault(); step(true); return; }
+        if (mod && e.altKey && e.code === 'KeyC') { e.preventDefault(); copyStyles(); return; }
+        if (mod && e.altKey && e.code === 'KeyV') { e.preventDefault(); pasteStyles(); return; }
+        if (!mod && e.altKey && e.shiftKey && e.code === 'KeyC') { e.preventDefault(); copyPng(); return; }
+      }
       if (mod || e.altKey) return;
+      if (selShapes.length && e.key === '[') { e.preventDefault(); reorder(false); return; }
+      if (selShapes.length && e.key === ']') { e.preventDefault(); reorder(true); return; }
+      if (selShapes.length && e.shiftKey && k === 'f') { e.preventDefault(); createFigure(); return; }
       if (e.key === '/') { e.preventDefault(); setPanel(p => (p == null ? '' : null)); return; }
       if (e.key === '?') { e.preventDefault(); setShowKeys(true); return; }
       if (e.key === '+' || e.key === '=') { e.preventDefault(); zoomCenter(1.25); return; }
       if (e.key === '-' || e.key === '_') { e.preventDefault(); zoomCenter(0.8); return; }
       if (e.shiftKey && e.code === 'Digit1') { e.preventDefault(); fit(true); return; }
       if (e.shiftKey && e.code === 'Digit0') { e.preventDefault(); zoomTo(1); return; }
-      if (e.key === 'Escape') { setSelection([]); setTool('select'); setPanel(null); return; }
+      if (e.key === 'Escape') { setSelection([]); setDiagSel(false); setTool('select'); setPanel(null); return; }
       if (selShapes.length && (e.key === 'Delete' || e.key === 'Backspace')) { e.preventDefault(); removeSel(); return; }
       if (selS && e.key === 'Enter' && hasText(selS)) { e.preventDefault(); startEdit(selS); return; }
       if (selShapes.length && e.key.startsWith('Arrow')) {
@@ -582,42 +883,95 @@ export default function Canvas({ file, d, visible, updateDiagram, history, onAdd
     };
   });
 
-  /* ---- AI ---- */
-  const addLog = (cls, text) => setLog(l => [...l, { cls, text, id: Math.random() }].slice(-12));
-  const logRef = useRef(null);
-  useEffect(() => { if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight; }, [log]);
+  /* ---- AI ----
+     Chats belong to the file (newest first), so a conversation carries on across diagram tabs. */
+  useEffect(() => { sampleP.then(x => { if (!x) setAiOff(NO_AI); }); }, []);
+  const chats = file.chats || [];
+  const newChat = () => ({ id: rid('c'), title: '', at: Date.now(), msgs: [] });
+  const addMsg = (cls, text) => updateFile(c => {
+    c.chats = c.chats || [];
+    if (!c.chats.length) c.chats.unshift(newChat());
+    const ch = c.chats[0];
+    ch.msgs = [...ch.msgs, { id: rid('m'), cls, text }].slice(-60);
+    ch.at = Date.now();
+    if (!ch.title && cls === 'u') ch.title = trunc(text.split('\n')[0], 48);
+  });
+  const startChat = () => updateFile(c => {
+    c.chats = (c.chats || []).filter(x => x.msgs.length);
+    c.chats.unshift(newChat());
+    c.chats = c.chats.slice(0, 20);
+  });
+  const loadChat = id => updateFile(c => {
+    const i = (c.chats || []).findIndex(x => x.id === id);
+    if (i > 0) c.chats.unshift(...c.chats.splice(i, 1));
+  });
 
-  const generate = async () => {
-    if (ctl.current) { ctl.current.abort(); return; }
-    const text = prompt.trim();
-    if (!text) return;
+  // kind: one of KINDS (make that type), or none (draw or change the current diagram).
+  const send = async (text, { kind, file: att } = {}) => {
+    if (ctl.current) return;
     const sample = await sampleP;
-    if (!sample) { setStatus({ text: NO_AI }); return; }
-    addLog('u', trunc(text, 240));
-    setPrompt('');
+    if (!sample) { setAiOff(NO_AI); return; }
+    const K = kind ? KINDS.find(x => x.k === kind) : null;
+    const convo = ((chats[0] && chats[0].msgs) || []).slice(-6).map(m => (m.cls === 'u' ? 'User: ' : 'You: ') + m.text).join('\n');
+    addMsg('u', text + (att ? `\n(attached: ${att.name})` : '') + (K ? `\n(create: ${K.label})` : ''));
     ctl.current = new AbortController();
-    setBusy(true); setStatus({ text: 'Drawing', busy: true });
-    const name = TYPES[d.type].name.toLowerCase();
-    const others = file.diagrams.filter(x => x.id !== d.id && x.code && x.code.trim())
+    setBusy(true);
+    const others = file.diagrams.filter(x => x.code && x.code.trim())
       .map(x => `"${x.name}" (${TYPES[x.type]?.name}):\n${x.code}`).join('\n\n');
-    const selLabel = sel && E.label ? E.label(ctx.m, sel) : '';
-    let p = `You draw ${name} diagrams in Linework.\n\n${langFor(d.type)}\n\nIf the input is code or config (Terraform, SQL, YAML, source code), diagram what it defines. When changing an existing diagram, keep existing ids and everything the request doesn't touch.\n\n`;
-    p += d.code.trim() ? `Current diagram code:\n<<<\n${d.code}\n>>>\n\n` : 'There is no diagram yet. Create a new one.\n\n';
-    if (selLabel) p += `The user has selected "${sel}" (${selLabel}); the request most likely refers to it.\n\n`;
-    if (file.doc && file.doc.trim()) p += `The file's design doc, for context:\n<<<\n${file.doc.slice(0, 6000)}\n>>>\n\n`;
-    if (others) p += `Other diagrams in this file, for context:\n${others.slice(0, 6000)}\n\n`;
-    p += `Request:\n<<<\n${text}\n>>>\n\nReply with ONLY a JSON object, no markdown fences: {"reply": "<one short sentence saying what you drew or changed>", "code": "<the complete diagram code>"}`;
+    let ctxText = '';
+    if (convo) ctxText += `Earlier in this conversation:\n${convo.slice(-3000)}\n\n`;
+    const pic = att && att.image, images = pic ? [{ media_type: pic.media_type, data: pic.data }] : undefined;
+    if (att && !pic) ctxText += `Attached file "${att.name}":\n<<<\n${att.text.slice(0, 40000)}\n>>>\n\n`;
+    if (pic) ctxText += `The attached picture ("${att.name}") shows a diagram. Read every name, label, table, column, type and connection in it, keep its order, and don't add things that aren't there. Where text is unreadable, make a sensible guess.\n\n`;
     try {
-      const res = await sample.json(p, { signal: ctl.current.signal, cache: false, modelTier: 'default' });
-      if (!res || typeof res.code !== 'string' || !engineOf(d).parse(res.code).count) throw { code: 'empty' };
-      setCode(res.code.trim(), { fit: true });
-      addLog('a', typeof res.reply === 'string' && res.reply ? res.reply : 'Diagram updated.');
-      setStatus({ text: '' });
+      if (K && K.k === 'doc') {
+        setStatus('Writing the doc');
+        let p = `You are the writing assistant in Linework, a tool for technical design docs. File title: "${file.title}".\n\n`;
+        p += `Diagrams in this file:\n${others || '(none yet)'}\n\n`;
+        if (file.doc && file.doc.trim()) p += `Current doc (keep anything still useful):\n<<<\n${file.doc.slice(0, 12000)}\n>>>\n\n`;
+        p += ctxText + `Request:\n<<<\n${text}\n>>>\n\nWrite the design doc in markdown, 300 to 700 words, with sections: Context, Goals, Non-goals, Proposal, Alternatives considered, Risks and open questions. Start with a "# " heading. Reply with only the markdown.`;
+        const { text: out } = await sample(p, { signal: ctl.current.signal, cache: false, images });
+        const clean = out.replace(/^```(?:markdown|md)?\s*\n/, '').replace(/\n```\s*$/, '').trim();
+        if (!clean) throw { code: 'empty' };
+        updateFile(c => { c.doc = clean + '\n'; if (c.view === 'canvas') c.view = 'both'; });
+        addMsg('a', 'Wrote the design doc. It’s open beside the canvas.');
+        return;
+      }
+      // A picture with no chosen type: the AI picks the type that matches it.
+      const auto = !!pic && !K;
+      let type = K ? K.type : d.type;
+      // A chosen type (or a picture) fills this diagram only while it's blank; otherwise it becomes a new tab.
+      const here = K || pic ? isBlank : true, editing = here && !K && !pic && d.code.trim();
+      setStatus(pic ? 'Reading the picture' : editing ? 'Updating the diagram' : 'Drawing');
+      const tname = K && K.k === 'bpmn' ? 'BPMN-style process' : TYPES[type].name.toLowerCase();
+      const selLabel = editing && sel && E.label ? E.label(ctx.m, sel) : '';
+      let p = auto
+        ? `You turn pictures of diagrams into Linework diagram code. First choose the type that matches the picture: "erd" for database tables and their relationships, "sequence" for messages between participants over time, "flowchart" for steps and decisions, or "architecture" for systems and services.\n\n${LANG.graph}\n${LANG.architecture}\n${LANG.flowchart}\n\n${LANG.sequence}\n\n${LANG.erd}\n\n`
+        : `You draw ${tname} diagrams in Linework.\n\n${langFor(type)}\n\n`;
+      if (K && K.k === 'bpmn') p += 'Draw it as a business process: put each role, team or system in its own group so the groups show as swimlanes, use start and end nodes, and decision nodes for gateways.\n\n';
+      p += 'If the input is code or config (Terraform, SQL, YAML, source code), diagram what it defines. When changing an existing diagram, keep existing ids and everything the request doesn\'t touch.\n\n';
+      p += editing ? `Current diagram code:\n<<<\n${d.code}\n>>>\n\n` : 'There is no diagram yet. Create a new one.\n\n';
+      if (selLabel) p += `The user has selected "${sel}" (${selLabel}); the request most likely refers to it.\n\n`;
+      if (!pic && file.doc && file.doc.trim()) p += `The file's design doc, for context:\n<<<\n${file.doc.slice(0, 6000)}\n>>>\n\n`;
+      if (!pic && others) p += `Diagrams in this file, for context:\n${others.slice(0, 6000)}\n\n`;
+      p += ctxText + `Request:\n<<<\n${text}\n>>>\n\nReply with ONLY a JSON object, no markdown fences: {${auto ? '"type": "erd" | "sequence" | "flowchart" | "architecture", ' : ''}"reply": "<one short sentence saying what you drew or changed>", "name": "<short tab name, under 24 characters>", "code": "<the complete diagram code>"}`;
+      const res = await sample.json(p, { signal: ctl.current.signal, cache: false, modelTier: 'default', images });
+      if (auto) type = TYPES[res && res.type] ? res.type : 'architecture';
+      if (!res || typeof res.code !== 'string' || !TYPES[type].E.parse(res.code).count) throw { code: 'empty' };
+      const reply = typeof res.reply === 'string' && res.reply ? res.reply : 'Done.';
+      if (here) {
+        if (type !== d.type) updateDiagram(x => { x.type = type; x.manual = {}; if (type === 'flowchart') x.dir = 'TB'; });
+        setCode(res.code.trim(), { fit: true });
+        addMsg('a', reply);
+      } else {
+        const name = String(res.name || (K && K.k === 'bpmn' ? 'BPMN' : TYPES[type].name)).slice(0, 40);
+        onAddDiagram(type, name, res.code.trim());
+        addMsg('a', `${reply} Added it as a new “${name}” tab.`);
+      }
     } catch (e) {
-      addLog('e', copyFor(e && e.code));
-      setStatus({ text: '' });
+      addMsg('e', e && (e.code === 'cancelled' || e.name === 'AbortError') ? 'Stopped.' : copyFor(e && e.code));
     } finally {
-      ctl.current = null; setBusy(false);
+      ctl.current = null; setBusy(false); setStatus('');
     }
   };
 
@@ -643,13 +997,26 @@ export default function Canvas({ file, d, visible, updateDiagram, history, onAdd
     }
   };
   const iconSet = icons();
+  const packTile = it => ({
+    key: 'ic-' + it.key, glyph: it.body, vb: it.vb, filled: it.fill, color: it.fill ? brandColor(it.hex) || undefined : undefined,
+    label: it.label, words: it.words, act: () => place('icon', { v: it.key }),
+  });
   const tree = [
     { key: 'ai', icon: 'ai', label: 'AI chat', note: 'Ask AI to draw or change this diagram', act: focusAI },
-    { key: 'code', icon: 'diagram', label: 'Diagram as code', note: 'Create diagrams using code', children: Object.entries(TYPES).map(([k, v]) => ({
-      key: 'code-' + k, icon: 'diagram', label: v.name,
-      note: k === d.type ? 'Open the code for this diagram' : isBlank ? 'Switch this diagram and open its code' : 'Add a new diagram tab',
-      act: () => (k === d.type ? setDrawer(true) : loadDiagram(k, v.name, '')),
-    })) },
+    { key: 'code', icon: 'diagram', label: 'Diagram as Code', note: 'Create diagrams using code', children: [
+      ...CODE_KINDS.map(c => ({
+        key: 'code-' + c.key, icon: c.icon, label: c.label, note: c.note,
+        act: () => {
+          if (c.starter) { loadDiagram(c.type, c.label, c.starter); setDrawer(true); }
+          else if (c.type === d.type) setDrawer(true);
+          else loadDiagram(c.type, TYPES[c.type].name, '');
+        },
+      })),
+      { key: 'code-free', icon: 'dFree', label: 'Freeform', note: 'Draw freely or generate with AI', act: () => {
+        if (isBlank) focusAI();
+        else { onAddDiagram('architecture', 'Freeform'); toast('Added a blank “Freeform” diagram. Draw with the toolbar, or describe it to AI.'); }
+      } },
+    ] },
     { key: 'catalog', icon: 'catalog', label: 'Diagram catalog', note: 'Start from a ready-made diagram', children: TEMPLATES.filter(t => t.key !== 'blank' && t.key !== 'doc').map(t => ({
       key: 'cat-' + t.key, icon: 'catalog', label: t.name, note: t.note,
       act: () => { const x = t.make().diagrams[0]; loadDiagram(x.type, x.name, x.code); },
@@ -657,10 +1024,15 @@ export default function Canvas({ file, d, visible, updateDiagram, history, onAdd
     { key: 'shape', icon: 'shapes', label: 'Shape', note: 'Explore shapes', children: SHAPE_LIST.map(s => ({
       key: 'sh-' + s.t, svg: shapeIcon(s.t), label: s.name, act: () => place(s.t),
     })) },
-    { key: 'icon', icon: 'smile', label: 'Icon', note: `${Object.keys(iconSet).length} icons available`, grid: true, children: Object.keys(iconSet).map(k => ({
-      key: 'ic-' + k, glyph: iconSet[k], label: k, act: () => place('icon', { v: k }),
-    })) },
-    { key: 'device', icon: 'device', label: 'Device frame', note: 'Phone, tablet, browser frames', children: DEVICES.map(x => ({
+    { key: 'icon', icon: 'smile', label: 'Icon', grid: true,
+      note: `${(Object.keys(iconSet).length + (packs ? packs.general.length + packs.tech.length + packs.cloud.length : 2100)).toLocaleString()}+ icons available`,
+      children: [
+        { key: 'ic-general', icon: 'smile', label: 'General Icon', note: `${packs ? packs.general.length.toLocaleString() : '1,800'}+ icons available`, grid: true, empty: 'Loading icons…', children: packs ? packs.general.map(packTile) : [] },
+        { key: 'ic-tech', icon: 'bolt', label: 'Tech Logo', note: 'Popular tools and libraries', grid: true, empty: 'Loading logos…', children: packs ? packs.tech.map(packTile) : [] },
+        { key: 'ic-cloud', icon: 'cloud', label: 'Cloud Provider Icon', note: 'Google Cloud, Cloudflare, Vercel and more', grid: true, empty: 'Loading logos…', children: packs ? packs.cloud.map(packTile) : [] },
+        ...Object.keys(iconSet).map(k => ({ key: 'ic-' + k, glyph: iconSet[k], label: k, act: () => place('icon', { v: k }) })),
+      ] },
+    { key: 'device', icon: 'device', label: 'Device Frame', note: 'Phone, tablet, browser frames', grid: true, children: DEVICES.map(x => ({
       key: 'dev-' + x.v, svg: DEVICE_ICON[x.v], label: x.name, act: () => place('device', { v: x.v }),
     })) },
     { key: 'figure', icon: 'frame', label: 'Figure', note: 'A labeled frame to group things', tile: true, act: () => place('frame', { text: 'Figure' }) },
@@ -678,6 +1050,7 @@ export default function Canvas({ file, d, visible, updateDiagram, history, onAdd
   const selLabel = sel && E.label ? E.label(ctx.m, sel) : null;
   const helpText = d.type === 'sequence' ? HELP.sequence : d.type === 'erd' ? HELP.erd : d.type === 'flowchart' ? HELP.flowchart : HELP.graph;
   const errs = ctx.m.errors.slice(0, 3);
+  const errLines = new Set(ctx.m.errors.map(x => x.line));
 
   // Text editor laid over the shape being edited.
   let editor = null;
@@ -707,7 +1080,7 @@ export default function Canvas({ file, d, visible, updateDiagram, history, onAdd
   }
 
   return (
-    <div className={'cwrap' + (drawer ? ' has-drawer' : '')}
+    <div className={'cwrap' + (drawer ? ' has-drawer side-open' : '') + (aiOpen ? ' ai-open side-open' : '')}
       onDragOver={e => { if ([...e.dataTransfer.types].includes('Files')) e.preventDefault(); }}
       onDrop={e => {
         const f = [...e.dataTransfer.files].find(x => /^image\//.test(x.type));
@@ -740,8 +1113,9 @@ export default function Canvas({ file, d, visible, updateDiagram, history, onAdd
         </div>
       )}
 
-      <Toolbar tool={tool} onTool={pickTool} panelOpen={panel != null} onInsert={() => setPanel(p => (p == null ? '' : null))} onAI={focusAI} />
+      <Toolbar tool={tool} onTool={pickTool} panelOpen={panel != null} onInsert={() => setPanel(p => (p == null ? '' : null))} onAI={toggleAI} />
       {panel != null && <InsertPanel tree={tree} start={panel} onClose={closePanel} />}
+      <input ref={sqlFileRef} type="file" accept=".sql,.txt,.ddl" hidden onChange={e => { const f = e.target.files[0]; e.target.value = ''; if (f) f.text().then(importSqlText); }} />
       <input ref={fileRef} type="file" accept="image/*" hidden onChange={e => { addImageFile(e.target.files[0]); e.target.value = ''; }} />
 
       <div className="ctools">
@@ -751,44 +1125,62 @@ export default function Canvas({ file, d, visible, updateDiagram, history, onAdd
         <button className="btn" onClick={toggleStyle} aria-label={'Diagram style: ' + (d.style === 'mono' ? 'Mono' : 'Color')}>{d.style === 'mono' ? 'Mono' : 'Color'}</button>
       </div>
 
-      {selShapes.length > 0 && !editing && (
-        <div className="sbar" role="toolbar" aria-label={selShapes.length > 1 ? `${selShapes.length} objects selected` : 'Selected object'}>
-          {selShapes.length > 1 && <span className="scount">{selShapes.length} selected</span>}
-          {selShapes.some(s => s.t !== 'image') && COLOR_NAMES.map((n, i) => (
-            <button key={n} className="sw" style={{ background: colorOf(i) }} aria-label={n + ' color'} title={n}
-              aria-pressed={selShapes.every(s => (s.c || 0) === i)} onClick={() => patchSel({ c: i })} />
-          ))}
-          {selS && selS.t === 'text' && (<>
-            <span className="sep" />
-            <button className="sbtn" aria-label="Smaller text" onClick={() => { const fs = Math.max(8, (selS.fs || 20) - 4); patchSel({ fs, ...measure(selS.text, fs) }); }}>A−</button>
-            <button className="sbtn" aria-label="Larger text" onClick={() => { const fs = Math.min(200, (selS.fs || 20) + 4); patchSel({ fs, ...measure(selS.text, fs) }); }}>A+</button>
-            <button className="sbtn" aria-pressed={!!selS.bold} onClick={() => patchSel({ bold: !selS.bold })}><b>B</b></button>
-          </>)}
-          {selS && (selS.t === 'line' || selS.t === 'arrow' || selS.t === 'rect' || selS.t === 'ellipse' || selS.t === 'diamond') && (
-            <button className="sbtn" aria-pressed={!!selS.dash} onClick={() => patchSel({ dash: !selS.dash })}>Dashed</button>
-          )}
-          {selS && isLink(selS) && (
-            <>{selS.pts.length > 2 && (<>
-              <button className="sbtn" aria-pressed={!!selS.sharp} onClick={() => patchSel({ sharp: !selS.sharp })} title="Sharp corners at bend points">Sharp</button>
-              <button className="sbtn" onClick={() => patchSel({ pts: [selS.pts[0], selS.pts[selS.pts.length - 1]] })} title="Remove all bend points">Straighten</button>
-            </>)}
-            <button className="sbtn" aria-pressed={!!selS.anim} onClick={() => patchSel({ anim: selS.anim ? 0 : 1 })} title="Flowing dashes along the line">Animate</button>
-            {!!selS.anim && <button className="sbtn" aria-pressed={selS.anim === 'fast'} onClick={() => patchSel({ anim: selS.anim === 'fast' ? 1 : 'fast' })}>Fast</button>}
-            <button className="sbtn" onClick={() => patchSel({ t: selS.t === 'line' ? 'arrow' : 'line' })}>{selS.t === 'line' ? 'Add arrow' : 'No arrow'}</button></>
-          )}
-          <span className="sep" />
-          {selS && hasText(selS) && <button className="sbtn" onClick={() => startEdit(selS)}>Edit text</button>}
-          <button className="sbtn" onClick={() => reorder(true)} title="Bring to front">Front</button>
-          <button className="sbtn" onClick={() => reorder(false)} title="Send to back">Back</button>
-          <button className="sbtn" onClick={duplicateSel} title="Duplicate (Ctrl D)">Duplicate</button>
-          <button className="sbtn danger" onClick={removeSel} title="Delete (Del)">Delete</button>
+      {diagBox && visible && !editing && (
+        <div className="dhdr" style={{ left: Math.max(66, view.x + (diagBox.x - 14) * view.k), top: Math.max(52, view.y + (diagBox.y - 14) * view.k - 34) }}>
+          <button className={diagSel ? 'on' : undefined} onClick={() => { setSelection([]); setDiagSel(true); }} title="Select the diagram">
+            <Ico d={IC[{ architecture: 'dCloud', flowchart: 'dFlow', sequence: 'dSeq', erd: 'dErd' }[d.type] || 'diagram']} />{trunc(d.name, 32)}
+          </button>
+          <button onClick={focusAI}><Ico d={IC.ai} />AI Chat</button>
+          <button aria-pressed={drawer} onClick={() => setDrawer(o => !o)}><Ico d={IC.braces} />Code Editor</button>
         </div>
+      )}
+
+      {d.type === 'erd' && field && !selShapes.length && !editing && (() => {
+        const col = getColumn(d.code, field.t, field.f);
+        return col && (
+          <FieldBar key={field.t + '.' + field.f} table={field.t} col={col}
+            onChange={columnSet} onAdd={columnAdd} onDelete={columnDelete}
+            onMove={columnMove} onTable={() => setSelField(null)} />
+        );
+      })()}
+
+      {d.type === 'erd' && sel && !field && !selShapes.length && !editing && ctx.m.tables.get(sel) && (() => {
+        const t = ctx.m.tables.get(sel), ic = tableIcon(t.icon);
+        return (
+          <TableBar key={sel} table={{ ...t, iconBody: ic.body, iconVb: ic.vb }} packs={packs}
+            hue={tableHue(t, [...ctx.m.tables.keys()].indexOf(sel), d.style === 'mono')}
+            onRename={to => renameNode(sel, to)} onAttr={(k, v) => tableAttr(sel, k, v)}
+            onCode={() => setDrawer(true)} onDelete={() => removeTable(sel)} onAddColumn={columnAdd} />
+        );
+      })()}
+
+      {diagSel && !selection.length && diagBox && (
+        <DiagramBar name={d.name} type={d.type} notation={notationOf(d.code)} directional={E.directional} dir={d.dir} mono={d.style === 'mono'}
+          onReset={tidy} onRename={v => updateDiagram(x => { x.name = v.slice(0, 40); })}
+          onNotation={v => setCode(setNotation(dRef.current.code, v))} onDir={toggleDir} onMono={toggleStyle}
+          onCode={() => setDrawer(true)} onAI={focusAI}
+          more={d.type === 'erd'
+            ? [{ label: 'Export as SQL', icon: IC.download, items: sqlMenu }, { label: 'Import SQL…', icon: IC.upload, items: [
+                { label: 'Paste SQL…', act: importSql }, { label: 'Open a .sql file…', act: () => sqlFileRef.current?.click() }] }]
+            : [{ label: 'Generate ER diagram from this', note: 'AI designs the tables behind it', icon: IC.dErd, act: diagramToErd }]} />
+      )}
+
+      {selShapes.length > 0 && !editing && (
+        <SelBar shapes={selShapes} single={selS} act={{
+          patch: patchSel, edit: startEdit, comment: addComment, route: setRoute,
+          straighten: () => putShapes(baseShapes().map(x => (selSet.has(x.id) ? { ...x, pts: [x.pts[0], x.pts[x.pts.length - 1]] } : x))),
+          order: reorder, step, figure: createFigure, duplicate: duplicateSel, remove: removeSel,
+          copyPng, copySvg, exportPng, copyStyles, pasteStyles,
+          convert: selShapes.some(x => drawn.includes(x)) ? { hasCode: !!d.code.trim(), type: d.type, run: (t, newTab) => convertDrawing(t, selShapes, newTab) } : null,
+        }} />
       )}
 
       <div className="zoom" role="group" aria-label="Zoom">
         <button onClick={() => zoomCenter(1.2)} aria-label="Zoom in">+</button>
         <button onClick={() => zoomCenter(1 / 1.2)} aria-label="Zoom out">−</button>
         <button className="pct" onClick={e => zoomMenu(e.currentTarget)} aria-haspopup="menu" aria-label={`Zoom ${Math.round(view.k * 100)}%, zoom options`}>{Math.round(view.k * 100)}%</button>
+        <button onClick={undo} disabled={hist.i <= 0} aria-label="Undo (Ctrl Z)" title="Undo  Ctrl Z"><Ico d={IC.undo} /></button>
+        <button onClick={redo} disabled={hist.i >= hist.stack.length - 1} aria-label="Redo (Ctrl Y)" title="Redo  Ctrl Y"><Ico d={IC.redo} /></button>
         <button className="kbtn" onClick={() => setShowKeys(true)} aria-label="Keyboard shortcuts (?)" title="Keyboard shortcuts  ?">?</button>
       </div>
 
@@ -815,52 +1207,71 @@ export default function Canvas({ file, d, visible, updateDiagram, history, onAdd
       )}
 
       {drawer && (
-        <aside className="drawer" aria-label="Diagram code">
+        <aside className="drawer" aria-label="Code editor">
           <div className="dhead">
-            <strong>Diagram code</strong>
-            <button className="link" onClick={copyCode}>Copy</button>
-            <button className="link" onClick={() => setDrawer(false)}>Close</button>
+            <Ico d={IC[CODE_TITLE[d.type]?.[2] || 'diagram']} />
+            <strong>{CODE_TITLE[d.type]?.[0] || 'Diagram'}</strong>
+            <span className="dsub">{CODE_TITLE[d.type]?.[1]}</span>
+            <button className="ai-ib" aria-label="Copy code" title="Copy code" onClick={copyCode}><Ico d={IC.copy} /></button>
+            <button className="ai-ib" aria-label="Close code editor" title="Close" onClick={() => setDrawer(false)}><Ico d={IC.close} /></button>
           </div>
-          <textarea id="code" value={d.code} spellCheck="false" autoCapitalize="off" autoComplete="off" aria-label="Diagram code" autoFocus
-            onChange={e => onCodeInput(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Tab') {
-                e.preventDefault();
-                const t = e.target, s = t.selectionStart;
-                onCodeInput(t.value.slice(0, s) + '  ' + t.value.slice(t.selectionEnd));
-                requestAnimationFrame(() => { t.selectionStart = t.selectionEnd = s + 2; });
-              }
-            }} />
+          {drawn.length > 0 && (
+            <div className="code-convert">
+              <span>{drawn.length} drawn shape{drawn.length === 1 ? '' : 's'} on the canvas {drawn.length === 1 ? 'isn’t' : 'aren’t'} in the code yet.</span>
+              <button className="btn" onClick={() => convertDrawing(d.type, drawn)}>Convert to code</button>
+            </div>
+          )}
+          <div className="code-ed">
+            <div className="code-gut" ref={gutRef} aria-hidden="true">
+              {d.code.split('\n').map((_, i) => <div key={i} className={errLines.has(i + 1) ? 'err' : undefined}>{i + 1}</div>)}
+            </div>
+            <div className="code-area">
+              <pre className="code-hl" ref={hlRef} aria-hidden="true" dangerouslySetInnerHTML={{ __html: highlight(d.code, d.type) + '\n' }} />
+              <textarea id="code" ref={codeRef} value={d.code} spellCheck="false" autoCapitalize="off" autoComplete="off" aria-label="Diagram code" autoFocus wrap="off"
+                placeholder={HELP_HINT[d.type]}
+                onChange={e => onCodeInput(e.target.value)} onScroll={syncCode}
+                onKeyDown={e => {
+                  if (e.key === 'Tab') {
+                    e.preventDefault();
+                    const t = e.target, s = t.selectionStart;
+                    onCodeInput(t.value.slice(0, s) + '  ' + t.value.slice(t.selectionEnd));
+                    requestAnimationFrame(() => { t.selectionStart = t.selectionEnd = s + 2; });
+                  }
+                }} />
+            </div>
+          </div>
           {errs.length > 0 && (
             <div className="errs" role="status"
               dangerouslySetInnerHTML={{ __html: errs.map(x => `Line ${x.line} isn’t recognized: <code>${esc(trunc(x.text, 60))}</code>`).join('<br>') }} />
           )}
-          <details className="help"><summary>How the code works</summary><pre>{helpText}</pre></details>
+          {codeHelp && (
+            <div className="code-help">
+              <pre>{helpText}</pre>
+              <button className="link" onClick={() => onGuide(d.type === 'erd' ? 'erd' : 'app')}>{d.type === 'erd' ? 'Open the full database schema guide' : 'Open the full guide'}</button>
+            </div>
+          )}
+          <div className="code-foot">
+            <button className="code-q" aria-pressed={codeHelp} aria-label="How the code works" title="How the code works" onClick={() => setCodeHelp(o => !o)}>&lt;?&gt;</button>
+            <div className="code-cheat" aria-label={d.type === 'erd' ? 'Insert a relationship' : 'Insert a connection'}>
+              {(CHEATS[d.type] || CHEATS.architecture).map(([op, n]) => (
+                <button key={op} onClick={() => insertCode(` ${op} `)} title={`Insert “${op}” (${n})`}><code>{op}</code>{n}</button>
+              ))}
+            </div>
+            <button className="ai-ib" aria-haspopup="menu" aria-label="Download" title="Download" onClick={e => popup(e.currentTarget, [
+              { label: 'Download code', note: slug(d.name) + '.txt', act: () => downloads.save({ filename: slug(file.title) + '-' + slug(d.name) + '.txt', data: d.code }) },
+              { label: 'Copy code', act: copyCode },
+              ...(d.type === 'erd' ? ['-', ...sqlMenu, '-', { label: 'Import SQL…', icon: IC.upload, act: importSql }] : []),
+            ])}><Ico d={IC.download} /><Ico d={IC.caret} className="caret" /></button>
+          </div>
         </aside>
       )}
 
-      <div className="dock" ref={dockRef}>
-        {log.length > 0 && (
-          <div className="log" ref={logRef} aria-live="polite">
-            {log.map(l => <p key={l.id} className={l.cls}><span>{l.text}</span></p>)}
-          </div>
-        )}
-        {selLabel && (
-          <span className="chip">Editing {selLabel}<button onClick={() => setSelection([])} aria-label="Clear selection">×</button></span>
-        )}
-        <div className="row">
-          <textarea id="prompt" ref={promptRef} rows={1} value={prompt} placeholder={PLACEHOLDER[d.type] || 'Describe a diagram'} aria-label="Ask AI to draw or change the diagram"
-            style={{ height: Math.min(140, 22 + 20 * Math.max(1, prompt.split('\n').length)) }}
-            onChange={e => setPrompt(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); generate(); } }} />
-          <button className={'go' + (busy ? ' stop' : '')} onClick={generate}>{busy ? 'Stop' : empty ? 'Generate' : 'Update'}</button>
-        </div>
-        <div className="meta">
-          <button className="link" onClick={undo} disabled={hist.i <= 0}>Undo</button>
-          <button className="link" onClick={redo} disabled={hist.i >= hist.stack.length - 1}>Redo</button>
-          <span className={'status' + (status.busy ? ' busy' : '')}>{status.text}</span>
-        </div>
-      </div>
+      {aiOpen && visible && (
+        <AIChat chat={chats[0]} chats={chats} busy={busy} status={status} aiOff={aiOff}
+          hasDoc={!!(file.doc && file.doc.trim())} selLabel={selLabel} onClearSel={() => setSelection([])}
+          onSend={send} onStop={() => ctl.current?.abort()} onNew={startChat} onLoad={loadChat}
+          onClose={() => onAIOpen(false)} focusKey={aiFocus} />
+      )}
     </div>
   );
 }

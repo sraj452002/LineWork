@@ -23,12 +23,46 @@ export const IC = {
   device: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 8.5h18M6 6.3h.01M8.5 6.3h.01"/>',
   codeblock: '<rect x="3.5" y="3.5" width="17" height="17" rx="2"/><path d="m10 9-3 3 3 3M14 9l3 3-3 3"/>',
   image: '<rect x="3.5" y="4" width="17" height="16" rx="2"/><circle cx="15" cy="9" r="2"/><path d="m3.5 17 5-5.5 4.5 4.5 2.5-2 5 4"/>',
+  dFlow: '<rect x="9" y="3" width="6" height="4.5" rx="1"/><rect x="3" y="16.5" width="6" height="4.5" rx="1"/><rect x="15" y="16.5" width="6" height="4.5" rx="1"/><path d="M12 7.5v4.5M6 16.5V12h12v4.5"/>',
+  dCloud: '<rect x="8.5" y="3.5" width="9" height="17" rx="1.5"/><path d="M5.5 7v10M3.5 9v6"/><circle cx="13" cy="8" r=".6"/><circle cx="13" cy="12" r=".6"/><circle cx="13" cy="16" r=".6"/>',
+  dBpmn: '<rect x="3.5" y="3.5" width="17" height="17" rx="1.5"/><path d="M8 3.5v17M8 12h12.5"/><rect x="11" y="6" width="6" height="3.5" rx=".8"/><rect x="11" y="14.5" width="6" height="3.5" rx=".8"/>',
+  dErd: '<rect x="3" y="8.5" width="7" height="7" rx="1"/><rect x="15" y="3" width="6" height="6" rx="1"/><rect x="15" y="15" width="6" height="6" rx="1"/><path d="M10 12h2.5M12.5 6v12M12.5 6H15M12.5 18H15"/>',
+  dSeq: '<rect x="3" y="3" width="6" height="4" rx="1"/><rect x="15" y="3" width="6" height="4" rx="1"/><rect x="3" y="17" width="6" height="4" rx="1"/><rect x="15" y="17" width="6" height="4" rx="1"/><path d="M6 7v10M18 7v10M6 12h12M15.5 10l2.5 2-2.5 2"/>',
+  dFree: '<rect x="3" y="3.5" width="11" height="9" rx="2"/><ellipse cx="15.5" cy="13" rx="5.5" ry="2"/><path d="M10 13v6c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2v-6"/>',
+  bolt: '<path d="M13 2.5 4.5 13.5H11l-1 8 8.5-11H12z"/>',
+  cloud: '<path d="M7 18.5a4.5 4.5 0 0 1-.6-9 6 6 0 0 1 11.4 1.6A3.8 3.8 0 0 1 17.5 18.5z"/>',
+  clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+  upload: '<path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M4.5 15v4.5h15V15"/>',
+  doc: '<path d="M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6"/>',
+  send: '<path d="M12 19V5M6 11l6-6 6 6"/>',
+  undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>',
+  redo: '<path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/>',
+  copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5.5A1.5 1.5 0 0 0 14.5 4h-9A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8"/>',
+  download: '<path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M4.5 19.5h15"/>',
+  figurePlus: '<path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M12 4h1M4 12v1M4 17v1.5A1.5 1.5 0 0 0 5.5 20H8M12 20h1M17 4h1.5A1.5 1.5 0 0 1 20 5.5V8M20 12v1"/><path d="M18 16v6M15 19h6"/>',
+  layers: '<path d="M12 3 3 8l9 5 9-5zM3 12.5l9 5 9-5M3 17l9 5 9-5"/>',
+  braces: '<path d="M8.5 4C6.5 4 6 5 6 7v2c0 1.6-1 2.6-2.2 3 1.2.4 2.2 1.4 2.2 3v2c0 2 .5 3 2.5 3M15.5 4c2 0 2.5 1 2.5 3v2c0 1.6 1 2.6 2.2 3-1.2.4-2.2 1.4-2.2 3v2c0 2-.5 3-2.5 3"/>',
+  caret: '<path d="m8 10 4 4 4-4"/>',
+  rCurve: '<path d="M5 19c0-8 14-6 14-14"/>',
+  rElbow: '<path d="M6 4v6a3 3 0 0 0 3 3h6a3 3 0 0 1 3 3v4"/>',
+  rStraight: '<path d="M5 19 19 5"/>',
+  width: '<path d="M4 6h16" stroke-width="1.2"/><path d="M4 11.5h16" stroke-width="2.2"/><path d="M4 18h16" stroke-width="3.6"/>',
+  wThin: '<path d="M4 12h16" stroke-width="1.2"/>',
+  wMed: '<path d="M4 12h16" stroke-width="2.2"/>',
+  wThick: '<path d="M4 12h16" stroke-width="3.8"/>',
+  headL: '<path d="M20 12H5M10 7l-5 5 5 5"/>',
+  headR: '<path d="M4 12h15M14 7l5 5-5 5"/>',
+  dash: '<path d="M3 12h3.5M10.25 12h3.5M17.5 12H21"/>',
+  more: '<circle cx="5.5" cy="12" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="18.5" cy="12" r="1.4" fill="currentColor"/>',
+  textSm: '<path d="M4 18 8.5 6 13 18M5.7 14h5.6M16 15h5"/>',
+  textLg: '<path d="M3 18 8 5l5 13M4.8 14h6.4M15 15h6M18 12v6"/>',
+  bold: '<path d="M7 5h6a3.5 3.5 0 0 1 0 7H7zM7 12h7a3.5 3.5 0 0 1 0 7H7z"/>',
   search: '<circle cx="10.5" cy="10.5" r="6"/><path d="m15 15 5 5"/>',
   back: '<path d="m14 6-6 6 6 6"/>',
   chev: '<path d="m10 6 6 6-6 6"/>',
 };
-export const Ico = ({ d, vb = 24, className }) => (
-  <svg viewBox={`0 0 ${vb} ${vb}`} className={className} aria-hidden="true" dangerouslySetInnerHTML={{ __html: d }} />
+export const Ico = ({ d, vb = 24, className, style }) => (
+  <svg viewBox={`0 0 ${vb} ${vb}`} className={className} style={style} aria-hidden="true" dangerouslySetInnerHTML={{ __html: d }} />
 );
 
 const TOOLS = [
@@ -76,49 +110,104 @@ export function Toolbar({ tool, onTool, panelOpen, onInsert, onAI }) {
   </>);
 }
 
-const flat = tree => tree.flatMap(x => (x.children ? [x, ...x.children] : [x]));
+// Every item that can be inserted, however deeply it's nested.
+const leaves = list => list.flatMap(x => (x.children ? leaves(x.children) : [x]));
+const norm = s => s.toLowerCase().replace(/[-_.]+/g, ' ');
+const PAGE = 150;
 
-// tree: [{key, label, note, icon | svg | glyph, act?, children?, tile?, grid?}]
+// tree: [{key, label, note, words, icon | svg | glyph (+vb, filled, color), act?, children?, tile?, grid?, empty?}]
+// A group's children that have children of their own show as rows; the rest show as rows,
+// or as a grid of tiles when the group has `grid` (or, at the top level, the item has `tile`).
 export function InsertPanel({ tree, start, onClose }) {
-  const [cat, setCat] = useState(start || null);
+  const [path, setPath] = useState(start ? [start] : []);
   const [q, setQ] = useState('');
   const [on, setOn] = useState(0);
-  const ref = useRef(null), inputRef = useRef(null);
+  const [limit, setLimit] = useState(PAGE);
+  const ref = useRef(null), inputRef = useRef(null), bodyRef = useRef(null), moreRef = useRef(null);
 
-  useEffect(() => { setCat(start || null); setQ(''); setOn(0); }, [start]);
-  useEffect(() => { inputRef.current?.focus(); }, [cat]);
+  useEffect(() => { setPath(start ? [start] : []); setQ(''); setOn(0); }, [start]);
+  useEffect(() => { inputRef.current?.focus(); bodyRef.current?.scrollTo(0, 0); setLimit(PAGE); }, [path]);
   useEffect(() => {
     const down = e => { if (ref.current && !ref.current.contains(e.target) && !e.target.closest('[data-insert-toggle]')) onClose(); };
     document.addEventListener('pointerdown', down);
     return () => document.removeEventListener('pointerdown', down);
   }, [onClose]);
 
-  const group = cat && tree.find(x => x.key === cat);
-  const needle = q.trim().toLowerCase();
-  const list = needle
-    ? flat(tree).filter(x => !x.children && (x.label + ' ' + (x.note || '')).toLowerCase().includes(needle))
-    : group ? group.children : tree;
+  // Walk the path; stop early if a group has gone away.
+  const trail = [];
+  let level = tree;
+  for (const k of path) {
+    const g = level.find(x => x.key === k);
+    if (!g || !g.children) break;
+    trail.push(g);
+    level = g.children;
+  }
+  const group = trail[trail.length - 1] || null;
+  const needle = norm(q.trim());
+
+  let rows, tiles, gridCols;
+  if (needle) {
+    const words = needle.split(/\s+/);
+    const hits = leaves(level).filter(x => { const t = norm(x.label + ' ' + (x.note || '') + ' ' + (x.words || '')); return words.every(w => t.includes(w)); });
+    rows = hits.filter(x => !x.glyph);
+    tiles = hits.filter(x => x.glyph);
+    gridCols = 5;
+  } else if (group) {
+    rows = level.filter(x => x.children || !group.grid);
+    tiles = group.grid ? level.filter(x => !x.children) : [];
+    gridCols = 5;
+  } else {
+    rows = level.filter(x => !x.tile);
+    tiles = level.filter(x => x.tile);
+    gridCols = 3;
+  }
+  const shown = tiles.slice(0, limit);
+  const list = [...rows, ...shown];
   const cur = list[Math.min(on, list.length - 1)];
 
+  // Load more tiles as the end of the grid scrolls into view.
+  useEffect(() => {
+    const el = moreRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) setLimit(l => l + PAGE); }, { root: bodyRef.current, rootMargin: '200px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [shown.length < tiles.length, path, needle]);
+  useEffect(() => { bodyRef.current?.querySelector('[data-on="true"]')?.scrollIntoView({ block: 'nearest' }); }, [on]);
+
+  const go = p => { setPath(p); setQ(''); setOn(0); };
   const pick = it => {
     if (!it) return;
-    if (it.children) { setCat(it.key); setQ(''); setOn(0); return; }
+    if (it.children) { go([...trail.map(x => x.key), it.key]); return; }
     onClose();
     it.act();
   };
-  const back = () => { setCat(null); setQ(''); setOn(0); };
+  const back = () => go(trail.slice(0, -1).map(x => x.key));
+  const move = i => {
+    const n = Math.max(0, Math.min(list.length - 1, i));
+    if (n >= list.length - gridCols && shown.length < tiles.length) setLimit(l => l + PAGE);
+    setOn(n);
+  };
   const key = e => {
-    const cols = !needle && group && group.grid ? 4 : 1;
-    if (e.key === 'ArrowDown') { e.preventDefault(); setOn(i => Math.min(list.length - 1, i + cols)); }
-    else if (e.key === 'ArrowUp') { e.preventDefault(); setOn(i => Math.max(0, i - cols)); }
-    else if (cols > 1 && e.key === 'ArrowRight' && !q) { e.preventDefault(); setOn(i => Math.min(list.length - 1, i + 1)); }
-    else if (cols > 1 && e.key === 'ArrowLeft' && !q) { e.preventDefault(); setOn(i => Math.max(0, i - 1)); }
+    const r = rows.length, inGrid = on >= r;
+    if (e.key === 'ArrowDown') { e.preventDefault(); move(inGrid ? on + gridCols : on + 1); }
+    else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      // In the grid, go up a row; from the grid's top row, step back into the list above it.
+      if (!inGrid) move(on - 1);
+      else if (on - gridCols >= r) move(on - gridCols);
+      else if (r) move(r - 1);
+    }
+    else if (inGrid && e.key === 'ArrowRight' && !q) { e.preventDefault(); move(on + 1); }
+    else if (inGrid && e.key === 'ArrowLeft' && !q) { e.preventDefault(); move(Math.max(r, on - 1)); }
     else if (e.key === 'Enter') { e.preventDefault(); pick(cur); }
-    else if (e.key === 'Escape') { e.preventDefault(); group ? back() : onClose(); }
+    else if (e.key === 'Escape') { e.preventDefault(); q ? setQ('') : group ? back() : onClose(); }
     else if (e.key === 'Backspace' && !q && group) { e.preventDefault(); back(); }
   };
 
-  const art = it => it.glyph ? <Ico d={it.glyph} vb={20} className="glyph" /> : it.svg ? <Ico d={it.svg} /> : <Ico d={IC[it.icon || 'plus']} />;
+  const art = it => it.glyph
+    ? <Ico d={it.glyph} vb={it.vb || 20} className={'glyph' + (it.filled ? ' filled' : '')} style={it.color ? { color: it.color } : undefined} />
+    : it.svg ? <Ico d={it.svg} /> : <Ico d={IC[it.icon || 'plus']} />;
   const row = (it, i) => (
     <button key={it.key} className="ins-item" data-on={i === on} onMouseEnter={() => setOn(i)} onClick={() => pick(it)}>
       {art(it)}
@@ -132,31 +221,31 @@ export function InsertPanel({ tree, start, onClose }) {
     </button>
   );
 
-  let body;
-  if (needle) body = list.length ? list.map(row) : <p className="ins-none">Nothing matches “{q.trim()}”.</p>;
-  else if (group && group.grid) body = <div className="ins-grid">{list.map(tile)}</div>;
-  else if (group) body = list.map(row);
-  else {
-    const n = tree.filter(x => !x.tile).length;
-    body = (<>
-      <h4>All categories</h4>
-      {tree.slice(0, n).map(row)}
-      <div className="ins-tiles">{tree.slice(n).map((it, j) => tile(it, n + j))}</div>
-    </>);
-  }
-
   return (
     <div className="ins" ref={ref} role="dialog" aria-label="Insert">
       <div className="ins-q">
         {group && !needle
-          ? <button className="ins-back" onClick={back} aria-label="Back to all categories"><Ico d={IC.back} /></button>
+          ? <button className="ins-back" onClick={back} aria-label="Back"><Ico d={IC.back} /></button>
           : <Ico d={IC.search} />}
         <input ref={inputRef} value={q} placeholder={group ? `Search ${group.label.toLowerCase()}` : 'Insert item'} aria-label="Search items"
-          onChange={e => { setQ(e.target.value); setOn(0); }} onKeyDown={key} />
+          onChange={e => { setQ(e.target.value); setOn(0); setLimit(PAGE); }} onKeyDown={key} />
       </div>
-      <div className="ins-body">
-        {group && !needle && <h4>{group.label}</h4>}
-        {body}
+      <div className="ins-body" ref={bodyRef}>
+        {needle ? null : group ? (
+          <h4 className="ins-crumb">
+            <button onClick={() => go([])}>All Categories</button>
+            {trail.map((g, i) => (
+              <span key={g.key} className="ins-crumb-step">
+                <span aria-hidden="true">/</span>
+                {i < trail.length - 1 ? <button onClick={() => go(trail.slice(0, i + 1).map(x => x.key))}>{g.label}</button> : g.label}
+              </span>
+            ))}
+          </h4>
+        ) : <h4>All Categories</h4>}
+        {rows.map(row)}
+        {shown.length > 0 && <div className={gridCols === 3 ? 'ins-tiles' : 'ins-grid'}>{shown.map((it, j) => tile(it, rows.length + j))}</div>}
+        {shown.length < tiles.length && <div ref={moreRef} className="ins-more">Loading more…</div>}
+        {!list.length && <p className="ins-none">{needle ? `Nothing matches “${q.trim()}”.` : (group && group.empty) || 'Nothing here yet.'}</p>}
       </div>
       <div className="ins-foot"><span>{cur ? cur.label : ''}</span><span><b>↑↓</b> to navigate · <b>enter</b> to insert</span></div>
     </div>

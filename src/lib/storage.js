@@ -19,3 +19,18 @@ export function saveFiles(files) {
     return false;
   }
 }
+
+const FOLDERS = 'linework:folders:v1';
+
+export function loadFolders() {
+  try {
+    const a = JSON.parse(localStorage.getItem(FOLDERS) || '[]');
+    return Array.isArray(a) ? a.filter(k => k && k.id && typeof k.name === 'string') : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+export function saveFolders(folders) {
+  try { localStorage.setItem(FOLDERS, JSON.stringify(folders)); } catch (e) {}
+}

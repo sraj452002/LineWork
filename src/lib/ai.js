@@ -3,10 +3,11 @@ function createSample(){
   const sample = async (input, opts = {}) => {
     const prompt = typeof input === 'string' ? input : input.map(t => t.content).join('\n\n');
     let res;
-    try{ res = await fetch('/api/ai', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({prompt, tier:opts.modelTier || 'default'}), signal:opts.signal}); }
+    try{ res = await fetch('/api/ai', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({prompt, tier:opts.modelTier || 'default', ...(opts.images && opts.images.length ? {images:opts.images} : {})}), signal:opts.signal}); }
     catch(e){ throw {code: e && e.name === 'AbortError' ? 'cancelled' : 'unavailable'}; }
         if(res.status === 429) throw {code:'rate_limited'};
     if(res.status === 413) throw {code:'prompt_too_large'};
+    if(res.status === 400 && opts.images) throw {code:'image_unsupported'};
     if(!res.ok) throw {code:'unavailable'};
     const reader = res.body.getReader(), dec = new TextDecoder();
     let buf = '', text = '';
@@ -37,6 +38,23 @@ function createSample(){
     try{ return JSON.parse(a >= 0 ? t.slice(a, b+1) : t); }catch(_){ throw {code:'empty'}; }
   };
   return fetch('/api/ai/status', {cache:'no-store'}).then(r => r.ok ? r.json() : null).then(j => j && j.enabled ? sample : null).catch(() => null);
+}
+// Shrink a picture so its long side is at most `max` pixels, as base64 JPEG for the AI.
+export function prepImage(file, max = 1568){
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+      const cv = document.createElement('canvas');
+      cv.width = Math.max(1, Math.round(img.naturalWidth * k)); cv.height = Math.max(1, Math.round(img.naturalHeight * k));
+      const g = cv.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, cv.width, cv.height); g.drawImage(img, 0, 0, cv.width, cv.height);
+      URL.revokeObjectURL(url);
+      const dataUrl = cv.toDataURL('image/jpeg', .9);
+      res({media_type:'image/jpeg', data:dataUrl.split(',')[1], preview:cv.toDataURL('image/jpeg', .6)});
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('bad image')); };
+    img.src = url;
+  });
 }
 export const downloads = {
   async save({filename, data}){
@@ -91,7 +109,8 @@ export function copyFor(code){
     rate_limited:'Too many requests right now. Wait a moment, then try again.',
     prompt_too_large:'That input is too long. Paste a smaller excerpt.',
     cancelled:'Stopped.',
-    empty:'The reply had no usable diagram. Try describing it differently.'
+    empty:'The reply had no usable diagram. Try describing it differently.',
+    image_unsupported:'That picture couldn’t be read. Try a PNG or JPEG screenshot.'
   })[code] || 'That didn\u2019t work. Try rephrasing your request.';
 }
 

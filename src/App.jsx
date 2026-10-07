@@ -2,11 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Login from './components/Login.jsx';
 import Home from './components/Home.jsx';
 import Editor from './components/Editor.jsx';
+import Guide from './components/Guide.jsx';
 import { UIProvider, useUI } from './components/ui.jsx';
 import { isSignedIn, signIn, signOut } from './lib/auth.js';
 import { loadFiles, saveFiles } from './lib/storage.js';
 import { tidyImages } from './lib/images.js';
 import { clone, rid } from './lib/utils.js';
+import { dg } from './lib/engines.js';
 
 export default function App() {
   const [authed, setAuthed] = useState(isSignedIn);
@@ -23,6 +25,7 @@ function Workspace({ onSignOut }) {
   const { toast, ask } = useUI();
   const [files, setFiles] = useState(loadFiles);
   const [openId, setOpenId] = useState(null);
+  const [guide, setGuide] = useState(null); // null | 'app' | 'erd'
   const [saveState, setSaveState] = useState('Saved');
   const filesRef = useRef(files);
   filesRef.current = files;
@@ -93,17 +96,28 @@ function Workspace({ onSignOut }) {
   const updateOpen = useCallback(fn => update(openId, fn), [openId, update]);
   const file = files.find(f => f.id === openId);
 
+  if (guide) {
+    return (
+      <Guide which={guide} onWhich={setGuide} onClose={() => setGuide(null)}
+        onTry={(code, title) => {
+          const now = Date.now();
+          create({ id: rid('f'), title, created: now, updated: now, doc: '', diagrams: [dg('erd', 'Schema', code)], active: 0, view: 'canvas' });
+          setGuide(null);
+        }} />
+    );
+  }
   if (file) {
     return (
       <Editor key={file.id} file={file} update={updateOpen} saveState={saveState}
         onBack={() => setOpenId(null)}
         onRename={() => rename(file)}
         onDuplicate={() => { const c = duplicate(file); setOpenId(c.id); }}
-        onDelete={() => remove(file)} />
+        onDelete={() => remove(file)}
+        onGuide={setGuide} />
     );
   }
   return (
-    <Home files={files} onOpen={setOpenId} onCreate={create} onRename={rename}
-      onDuplicate={duplicate} onDelete={remove} onSignOut={onSignOut} />
+    <Home files={files} onOpen={setOpenId} onCreate={create} onUpdate={update} onRename={rename}
+      onDuplicate={duplicate} onDelete={remove} onSignOut={onSignOut} onGuide={setGuide} />
   );
 }

@@ -2,17 +2,22 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { TYPES, dg, prep, svgDoc } from '../lib/engines.js';
 import { downloads } from '../lib/ai.js';
 import { imageKeys, loadImages } from '../lib/images.js';
+import { isPackIcon, loadIconPacks } from '../lib/iconpacks.js';
 import { clone, rid, slug, trunc } from '../lib/utils.js';
 import DocPane from './DocPane.jsx';
 import Canvas from './Canvas.jsx';
 import { useUI } from './ui.jsx';
 
 const narrow = () => innerWidth <= 760;
+const AI_KEY = 'linework:ai-open';
+const aiPref = () => { try { const v = localStorage.getItem(AI_KEY); return v == null ? innerWidth > 1000 : v === '1'; } catch (e) { return false; } };
 
-export default function Editor({ file, update, saveState, onBack, onRename, onDuplicate, onDelete }) {
+export default function Editor({ file, update, saveState, onBack, onRename, onDuplicate, onDelete, onGuide }) {
   const { popup, ask, toast } = useUI();
   const history = useRef(new Map()).current;
   const [isNarrow, setNarrow] = useState(narrow);
+  const [aiOpen, setAiOpenState] = useState(aiPref);
+  const setAiOpen = useCallback(v => { setAiOpenState(v); try { localStorage.setItem(AI_KEY, v ? '1' : '0'); } catch (e) {} }, []);
   useEffect(() => {
     const r = () => setNarrow(narrow());
     addEventListener('resize', r);
@@ -33,9 +38,9 @@ export default function Editor({ file, update, saveState, onBack, onRename, onDu
   }), [update]);
   const updateDiagram = useCallback(fn => updateDiagramById(d.id, fn), [d.id, updateDiagramById]);
 
-  const addDiagram = (type, name, code = '') => update(c => {
+  const addDiagram = (type, name, code = '', extra) => update(c => {
     const n = c.diagrams.filter(x => x.type === type).length;
-    c.diagrams.push(dg(type, name || TYPES[type].name + (n ? ' ' + (n + 1) : ''), code));
+    c.diagrams.push(Object.assign(dg(type, name || TYPES[type].name + (n ? ' ' + (n + 1) : ''), code), extra || {}));
     c.active = c.diagrams.length - 1;
   });
 
@@ -66,6 +71,7 @@ export default function Editor({ file, update, saveState, onBack, onRename, onDu
   /* ---- export ---- */
   const exportDiagram = async kind => {
     await loadImages(imageKeys(d.shapes));
+    if ((d.shapes || []).some(s => s.t === 'icon' && isPackIcon(s.v)) || (d.type === 'erd' && /\bicon\s*:/.test(d.code))) await loadIconPacks().catch(() => {});
     const doc = svgDoc(prep(d));
     if (!doc) { toast('This diagram is empty'); return; }
     const name = slug(file.title) + '-' + slug(d.name);
@@ -112,12 +118,22 @@ export default function Editor({ file, update, saveState, onBack, onRename, onDu
           {!isNarrow && <button aria-pressed={view === 'both'} onClick={() => setView('both')}>Both</button>}
           <button aria-pressed={view === 'canvas'} onClick={() => setView('canvas')}>Canvas</button>
         </div>
+        {view !== 'doc' && (
+          <button className={'btn ai-toggle' + (aiOpen ? ' on' : '')} aria-pressed={aiOpen} onClick={() => setAiOpen(!aiOpen)}
+            title={aiOpen ? 'Close AI chat  Esc' : 'Open AI chat  Ctrl J'}>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 3.5l1.6 4.9 4.9 1.6-4.9 1.6L10 16.5l-1.6-4.9L3.5 10l4.9-1.6z"/><path d="M18 3v4M16 5h4M17.5 15.5v4M15.5 17.5h4"/></svg>
+            {aiOpen ? 'Close' : 'AI Chat'}
+          </button>
+        )}
         <button className="btn" aria-haspopup="menu" onClick={e => exportMenu(e.currentTarget)}>Export</button>
         <button className="btn" aria-haspopup="menu" aria-label="More actions" onClick={e => popup(e.currentTarget, [
           { label: 'Rename file', act: onRename },
           { label: 'Duplicate file', act: onDuplicate },
           '-',
           { label: 'Delete file', danger: true, act: onDelete },
+          '-',
+          { label: 'How to use Linework', note: 'Guide to the whole app', act: () => onGuide('app') },
+          { label: 'Database schema guide', note: 'Tables, columns, relationships', act: () => onGuide('erd') },
         ])}>⋯</button>
       </div>
 
@@ -139,7 +155,8 @@ export default function Editor({ file, update, saveState, onBack, onRename, onDu
             <button className="addtab" aria-haspopup="menu"
               onClick={e => popup(e.currentTarget, Object.entries(TYPES).map(([k, v]) => ({ label: v.name, act: () => addDiagram(k) })))}>+ Diagram</button>
           </div>
-          <Canvas key={d.id} file={file} d={d} visible={view !== 'doc'} updateDiagram={updateDiagram} history={history} onAddDiagram={addDiagram} />
+          <Canvas key={d.id} file={file} d={d} visible={view !== 'doc'} updateDiagram={updateDiagram} updateFile={update} history={history} onAddDiagram={addDiagram} onGuide={onGuide}
+            aiOpen={aiOpen} onAIOpen={setAiOpen} />
         </div>
       </div>
     </section>

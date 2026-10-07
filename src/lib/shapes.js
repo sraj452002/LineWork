@@ -1,6 +1,7 @@
 import { C, PAL, GLYPH } from './engines.js';
 import { esc, rid, trunc } from './utils.js';
 import { imageMissing, imageSrc } from './images.js';
+import { isPackIcon, packIcon } from './iconpacks.js';
 
 /* Freehand objects drawn on top of a diagram: shapes, lines, text, icons, frames, images.
    Box objects have {x,y,w,h}; lines, arrows and pen strokes have pts:[[x,y],...].
@@ -48,10 +49,24 @@ const EXTRA_ICONS = {
 let _icons = null;
 export const icons = () => _icons || (_icons = { ...GLYPH, ...EXTRA_ICONS });
 
+// A brand colour, unless it would vanish against the current background; then null (use ink).
+function lum(h){
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(h || '').trim());
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  return (0.2126 * (n >> 16) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255)) / 255;
+}
+export function brandColor(hex) {
+  const a = lum(hex), bg = lum(C.paper);
+  if (a == null) return null;
+  return Math.abs(a - (bg == null ? 1 : bg)) < 0.28 ? null : hex;
+}
+
 export const SHAPE_LIST = [
   {t:'rect', name:'Rectangle'}, {t:'ellipse', name:'Ellipse'}, {t:'diamond', name:'Diamond'},
   {t:'triangle', name:'Triangle'}, {t:'hexagon', name:'Hexagon'}, {t:'para', name:'Parallelogram'},
-  {t:'cylinder', name:'Cylinder'}, {t:'sticky', name:'Sticky note'},
+  {t:'cylinder', name:'Cylinder'}, {t:'pill', name:'Pill'}, {t:'trapezoid', name:'Trapezoid'},
+  {t:'doc', name:'Document'}, {t:'star', name:'Star'}, {t:'sticky', name:'Sticky note'},
   {t:'arrow', name:'Arrow'}, {t:'line', name:'Line'},
 ];
 export const DEVICES = [
@@ -59,14 +74,26 @@ export const DEVICES = [
   {v:'browser', name:'Browser', w:880, h:560}, {v:'desktop', name:'Desktop', w:900, h:640},
 ];
 const SIZE = {rect:[160,90], ellipse:[140,100], diamond:[150,110], triangle:[140,110], hexagon:[160,96], para:[170,90],
-  cylinder:[120,130], sticky:[180,160], frame:[480,320], code:[380,210], icon:[56,56]};
+  cylinder:[120,130], pill:[170,70], trapezoid:[170,96], doc:[160,110], star:[130,124], sticky:[180,160], frame:[480,320], code:[380,210], icon:[56,56]};
 const CODE_SAMPLE = 'function greet(name) {\n  return `Hello, ${name}`;\n}';
 
-export const COLOR_NAMES = ['Ink', 'Blue', 'Green', 'Orange', 'Purple', 'Red', 'Olive'];
-export const colorOf = c => (!c ? C.ink : PAL[(c - 1) % PAL.length]);
+// c is an index into these names (0 = ink, 1-6 = the diagram palette, 7-8 below) or a custom "#rrggbb".
+export const COLOR_NAMES = ['Ink', 'Blue', 'Green', 'Orange', 'Purple', 'Red', 'Olive', 'Yellow', 'Grey'];
+const MORE_L = ['#9A7B00', '#6B7280'], MORE_D = ['#E3C84A', '#A3A9B3'];
+const darkBg = () => (lum(C.paper) ?? 1) < .5;
+export const colorOf = c => typeof c === 'string' ? c
+  : !c ? C.ink
+  : c <= PAL.length ? PAL[c - 1]
+  : (darkBg() ? MORE_D : MORE_L)[(c - PAL.length - 1) % 2];
+// Box stroke widths. Lines use the same names with their own default.
+export const WIDTHS = [{k:'S', v:1}, {k:'M', v:2}, {k:'L', v:3.5}, {k:'XL', v:5}];
 
 export const isPath = s => !!s.pts;
-const TEXT_KINDS = new Set(['rect','ellipse','diamond','triangle','hexagon','para','cylinder','sticky','frame','code','text','comment','line','arrow']);
+// Box shapes that share an outline, fill and stroke, and can be swapped for one another.
+export const BOX_KINDS = ['rect','ellipse','diamond','triangle','pill','para','trapezoid','cylinder','doc','hexagon','star'];
+const BOX = new Set(BOX_KINDS);
+export const isBox = s => BOX.has(s.t);
+const TEXT_KINDS = new Set([...BOX_KINDS, 'sticky','frame','code','text','comment','line','arrow']);
 export const hasText = s => TEXT_KINDS.has(s.t);
 // Resizing these keeps their proportions.
 export const KEEP_RATIO = new Set(['icon','image','text']);
@@ -96,10 +123,10 @@ function lines(ls, {x, y, fs, fill, anchor, weight, mono}){
     + `>${esc(l)}</text>`).join('');
 }
 // Where text sits inside a box shape, relative to the shape.
-const TF = {ellipse:.72, diamond:.56, triangle:.56, hexagon:.74, para:.76};
+const TF = {ellipse:.72, diamond:.56, triangle:.56, hexagon:.74, para:.76, trapezoid:.74, star:.46, pill:.86};
 function inner(s, text){
   const fs = s.fs || 15, tw = Math.max(24, s.w * (TF[s.t] || 1) - 20), ls = wrap(text, tw, fs);
-  const cy = s.t === 'triangle' ? s.h * .64 : s.h / 2;
+  const cy = s.t === 'triangle' ? s.h * .64 : s.t === 'star' ? s.h * .56 : s.t === 'doc' ? s.h * .45 : s.h / 2;
   return {fs, tw, ls, top: cy - ls.length * fs * LH / 2};
 }
 const COMMENT_W = 220, COMMENT_FS = 13;
@@ -112,7 +139,8 @@ function commentCard(s, text){
 const r0 = n => Math.round(n);
 export function make(t, cx, cy, extra = {}){
   const id = rid('s');
-  if(t === 'line' || t === 'arrow') return {id, t, pts:[[r0(cx - 80), r0(cy)], [r0(cx + 80), r0(cy)]], ...extra};
+  // New arrows are elbows (right-angle runs); lines stay straight.
+  if(t === 'line' || t === 'arrow') return {id, t, ...(t === 'arrow' ? {route:'elbow'} : {}), pts:[[r0(cx - 80), r0(cy)], [r0(cx + 80), r0(cy)]], ...extra};
   if(t === 'text'){ const fs = extra.fs || 20, text = extra.text || ''; return {id, t, x:r0(cx), y:r0(cy - fs * .65), fs, text, ...measure(text || ' ', fs)}; }
   if(t === 'comment') return {id, t, x:r0(cx), y:r0(cy - 28), w:28, h:28, text:''};
   const dev = t === 'device' && DEVICES.find(x => x.v === extra.v);
@@ -127,7 +155,7 @@ export function drawn(t, a, b, shift, id){
   if(t === 'line' || t === 'arrow'){
     let x = b.x, y = b.y;
     if(shift){ const ang = Math.round(Math.atan2(y - a.y, x - a.x) / (Math.PI / 4)) * Math.PI / 4, d = Math.hypot(x - a.x, y - a.y); x = a.x + d * Math.cos(ang); y = a.y + d * Math.sin(ang); }
-    return {id, t, pts:[[r0(a.x), r0(a.y)], [r0(x), r0(y)]]};
+    return {id, t, ...(t === 'arrow' ? {route:'elbow'} : {}), pts:[[r0(a.x), r0(a.y)], [r0(x), r0(y)]]};
   }
   let w = Math.abs(b.x - a.x), h = Math.abs(b.y - a.y);
   if(shift) w = h = Math.max(w, h);
@@ -138,14 +166,42 @@ export function drawn(t, a, b, shift, id){
 
 /* ---- geometry ---- */
 /* A line or arrow runs through all its pts: the two ends plus any bend points in between.
-   It's drawn as a smooth curve through them, or with sharp corners when s.sharp is set. */
+   s.route picks how: 'curve' (default) is a smooth curve through them, 'straight' joins them
+   with straight lines, and 'elbow' uses only horizontal and vertical runs with rounded corners.
+   Older files stored straight lines as s.sharp. */
 const lerp = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+export const routeOf = s => s.route || (s.sharp ? 'straight' : 'curve');
+const swOf = s => s.sw || 2;
+
+// The corner points of an elbow route. o0/o1 ('h' or 'v') are the directions the line leaves its
+// start and enters its end; resolveLinks sets them from the sides it attached to.
+function elbowPts(s){
+  const p = s.pts, out = [p[0]], last = p.length - 2;
+  for(let i = 0; i < p.length - 1; i++){
+    const a = p[i], b = p[i + 1], dom = Math.abs(b[0] - a[0]) >= Math.abs(b[1] - a[1]) ? 'h' : 'v';
+    const os = (i === 0 && s.o0) || dom, oe = (i === last && s.o1) || dom;
+    if(a[0] === b[0] || a[1] === b[1]){ out.push(b); continue; }
+    if(os === 'h' && oe === 'h'){ const mx = r0((a[0] + b[0]) / 2); out.push([mx, a[1]], [mx, b[1]]); }
+    else if(os === 'v' && oe === 'v'){ const my = r0((a[1] + b[1]) / 2); out.push([a[0], my], [b[0], my]); }
+    else if(os === 'h') out.push([b[0], a[1]]);
+    else out.push([a[0], b[1]]);
+    out.push(b);
+  }
+  // Keep a corner only where the line actually turns.
+  const pts = out.filter((q, i) => !(i && q[0] === out[i - 1][0] && q[1] === out[i - 1][1]));
+  return pts.filter((q, i) => {
+    const pr = pts[i - 1], nx = pts[i + 1];
+    return !(pr && nx && ((pr[0] === q[0] && q[0] === nx[0]) || (pr[1] === q[1] && q[1] === nx[1])));
+  });
+}
+const routePts = s => (routeOf(s) === 'elbow' ? elbowPts(s) : s.pts);
+
 // Cubic segments [from, c1, c2, to] of the path (Catmull-Rom, so the curve passes through every point).
 export function segments(s){
-  const p = s.pts, out = [];
+  const route = routeOf(s), p = routePts(s), out = [];
   for(let i = 0; i < p.length - 1; i++){
     const a = p[i], b = p[i + 1];
-    if(s.sharp || p.length === 2){ out.push([a, lerp(a, b, 1/3), lerp(a, b, 2/3), b]); continue; }
+    if(route !== 'curve' || p.length === 2){ out.push([a, lerp(a, b, 1/3), lerp(a, b, 2/3), b]); continue; }
     const pa = p[i - 1] || a, pb = p[i + 2] || b;
     out.push([a, [a[0] + (b[0] - pa[0]) / 6, a[1] + (b[1] - pa[1]) / 6], [b[0] - (pb[0] - a[0]) / 6, b[1] - (pb[1] - a[1]) / 6], b]);
   }
@@ -156,26 +212,39 @@ const bez = ([a, c1, c2, b], t) => {
   return [u*u*u*a[0] + 3*u*u*t*c1[0] + 3*u*t*t*c2[0] + t*t*t*b[0], u*u*u*a[1] + 3*u*u*t*c1[1] + 3*u*t*t*c2[1] + t*t*t*b[1]];
 };
 // Middle of each segment, where the "add a bend" handles sit.
-export const segMids = s => segments(s).map(g => bez(g, .5));
+export const segMids = s => (routeOf(s) === 'elbow' ? [] : segments(s).map(g => bez(g, .5)));
 // Point halfway along the path (by segment count), for the label.
 export function pathMid(s){
   const g = segments(s), n = g.length;
   return n % 2 ? bez(g[(n - 1) / 2], .5) : g[n / 2][0];
 }
 const f1 = n => +n.toFixed(1);
-// SVG path data; endBack pulls the last point in so a line doesn't poke through its arrowhead.
-function pathD(s, endBack){
-  const g = segments(s), last = g[g.length - 1], straight = s.sharp || s.pts.length === 2;
-  let d = `M${s.pts[0][0]} ${s.pts[0][1]}`;
-  g.forEach((x, i) => {
-    let b = x[3];
-    if(i === g.length - 1 && endBack){
-      const a = Math.atan2(b[1] - x[2][1], b[0] - x[2][0]);
-      b = [f1(b[0] - endBack * Math.cos(a)), f1(b[1] - endBack * Math.sin(a))];
+// The point `by` along from p toward q.
+function toward(p, q, by){
+  const len = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1;
+  return [f1(p[0] + (q[0] - p[0]) * by / len), f1(p[1] + (q[1] - p[1]) * by / len)];
+}
+// SVG path data. back0/back1 pull the first/last point in so the line doesn't poke through an arrowhead.
+// Also returns each end point and a point just before it, for the arrowhead's angle.
+function pathD(s, back0 = 0, back1 = 0){
+  const g = segments(s), route = routeOf(s), n = g.length;
+  const start = g[0][0], end = g[n - 1][3];
+  const s0 = back0 ? toward(start, g[0][1], back0) : start, s1 = back1 ? toward(end, g[n - 1][2], back1) : end;
+  let d = `M${s0[0]} ${s0[1]}`;
+  if(route === 'curve' && n > 1){
+    g.forEach((x, i) => { const b = i === n - 1 ? s1 : x[3]; d += `C${f1(x[1][0])} ${f1(x[1][1])} ${f1(x[2][0])} ${f1(x[2][1])} ${b[0]} ${b[1]}`; });
+  } else {
+    const pts = [s0, ...g.slice(0, -1).map(x => x[3]), s1];
+    for(let i = 1; i < pts.length; i++){
+      const q = pts[i], nx = pts[i + 1];
+      if(route !== 'elbow' || !nx){ d += `L${q[0]} ${q[1]}`; continue; }
+      // Round each elbow corner, never by more than half of either run.
+      const pr = pts[i - 1], r = Math.min(10, Math.hypot(q[0] - pr[0], q[1] - pr[1]) / 2, Math.hypot(nx[0] - q[0], nx[1] - q[1]) / 2);
+      const a = toward(q, pr, r), b = toward(q, nx, r);
+      d += `L${a[0]} ${a[1]}Q${q[0]} ${q[1]} ${b[0]} ${b[1]}`;
     }
-    d += straight ? `L${b[0]} ${b[1]}` : `C${f1(x[1][0])} ${f1(x[1][1])} ${f1(x[2][0])} ${f1(x[2][1])} ${b[0]} ${b[1]}`;
-  });
-  return {d, from:last[2], to:last[3]};
+  }
+  return {d, from:g[n - 1][2], to:end, from0:g[0][1], to0:start};
 }
 // The previous version stored one sideways `bend`; turn it into a bend point.
 function unbend(s){
@@ -259,6 +328,14 @@ function edgePoint(r, kind, to){
   const k = Math.min(1, t + 6 / len);
   return [r0(cx + dx * k), r0(cy + dy * k)];
 }
+// Middle of the side of rect r that faces `to` (with a small gap), and whether the line
+// leaves that side horizontally or vertically.
+function sidePoint(r, to){
+  const cx = r.x + r.w / 2, cy = r.y + r.h / 2, dx = to[0] - cx, dy = to[1] - cy;
+  return Math.abs(dx) >= Math.abs(dy)
+    ? {p:[r0(cx + Math.sign(dx || 1) * (r.w / 2 + 6)), r0(cy)], o:'h'}
+    : {p:[r0(cx), r0(cy + Math.sign(dy || 1) * (r.h / 2 + 6))], o:'v'};
+}
 // Returns the shapes with attached ends placed on their targets. nodeRect(id) gives a diagram node's box.
 export function resolveLinks(shapes, nodeRect){
   if(!shapes.some(s => s.a0 || s.a1 || s.bend)) return shapes;
@@ -277,9 +354,15 @@ export function resolveLinks(shapes, nodeRect){
     if(!A && !B) return s;
     const n = s.pts.length, inner = s.pts.slice(1, -1);
     const ref0 = A ? mid(A) : s.pts[0], ref1 = B ? mid(B) : s.pts[n - 1];
+    const to0 = inner.length ? inner[0] : ref1, to1 = inner.length ? inner[inner.length - 1] : ref0;
+    if(routeOf(s) === 'elbow'){
+      // Elbows leave and enter from the middle of a side. o0/o1 are only for drawing, never saved.
+      const e0 = A ? sidePoint(A.r, to0) : null, e1 = B ? sidePoint(B.r, to1) : null;
+      return {...s, pts:[e0 ? e0.p : s.pts[0], ...inner, e1 ? e1.p : s.pts[n - 1]], o0:e0 && e0.o, o1:e1 && e1.o};
+    }
     // Each attached end points toward its nearest bend point, or the other end.
-    const p0 = A ? edgePoint(A.r, A.kind, inner.length ? inner[0] : ref1) : s.pts[0];
-    const p1 = B ? edgePoint(B.r, B.kind, inner.length ? inner[inner.length - 1] : ref0) : s.pts[n - 1];
+    const p0 = A ? edgePoint(A.r, A.kind, to0) : s.pts[0];
+    const p1 = B ? edgePoint(B.r, B.kind, to1) : s.pts[n - 1];
     return {...s, pts:[p0, ...inner, p1]};
   });
 }
@@ -320,6 +403,14 @@ function outline(t, w, h, attr, stroke){
     case 'triangle': return `<polygon points="${P([[w/2,0],[w,h],[0,h]])}" ${attr}/>`;
     case 'hexagon': { const i = Math.min(w * .25, h * .45); return `<polygon points="${P([[i,0],[w-i,0],[w,h/2],[w-i,h],[i,h],[0,h/2]])}" ${attr}/>`; }
     case 'para': { const i = Math.min(w * .2, 22); return `<polygon points="${P([[i,0],[w,0],[w-i,h],[0,h]])}" ${attr}/>`; }
+    case 'pill': return `<rect width="${w}" height="${h}" rx="${Math.min(w, h) / 2}" ${attr}/>`;
+    case 'trapezoid': { const i = Math.min(w * .2, 26); return `<polygon points="${P([[i,0],[w-i,0],[w,h],[0,h]])}" ${attr}/>`; }
+    case 'doc': { const k = Math.min(12, h * .14); return `<path d="M0 0H${w}V${h-k}C${w*.75} ${h-2.6*k} ${w*.3} ${h+1.2*k} 0 ${h-k*.6}Z" ${attr}/>`; }
+    case 'star': {
+      const pts = [];
+      for(let i = 0; i < 10; i++){ const a = -Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? .42 : 1; pts.push([+(w/2 + Math.cos(a) * w/2 * r).toFixed(1), +(h * .53 + Math.sin(a) * h * .53 * r).toFixed(1)]); }
+      return `<polygon points="${P(pts)}" ${attr}/>`;
+    }
     case 'cylinder': { const r = Math.min(14, h * .18); return `<path d="M0 ${r}A${w/2} ${r} 0 0 1 ${w} ${r}V${h-r}A${w/2} ${r} 0 0 1 0 ${h-r}Z" ${attr}/><path d="M0 ${r}A${w/2} ${r} 0 0 0 ${w} ${r}" fill="none" ${stroke}/>`; }
     default: return `<rect width="${w}" height="${h}" rx="8" ${attr}/>`;
   }
@@ -330,7 +421,8 @@ export function shapeIcon(t){
   if(t === 'arrow') return '<path d="M5 19 19 5M10 5h9v9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>';
   if(t === 'sticky') return '<path d="M4 4h16v11l-5 5H4z M15 20v-5h5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>';
   const st = 'stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"';
-  return `<g transform="translate(3 5)">${outline(t, 18, 14, `fill="none" ${st}`, st)}</g>`;
+  const [w, h] = {ellipse:[16,16], diamond:[18,16], triangle:[18,16], star:[18,17], cylinder:[14,17], doc:[16,16]}[t] || [18,13];
+  return `<g transform="translate(${(24 - w) / 2} ${(24 - h) / 2})">${outline(t, w, h, `fill="none" ${st}`, st)}</g>`;
 }
 function smooth(pts){
   if(pts.length < 3) return 'M' + pts.map(p => p.join(' ')).join('L');
@@ -342,8 +434,8 @@ function smooth(pts){
   const l = pts[pts.length - 1];
   return d + `L${l[0]} ${l[1]}`;
 }
-function head(x1, y1, x2, y2, col){
-  const a = Math.atan2(y2 - y1, x2 - x1), L = 13, W = 6, c = Math.cos(a), s = Math.sin(a);
+function head(x1, y1, x2, y2, col, sw = 2){
+  const a = Math.atan2(y2 - y1, x2 - x1), L = 9 + 2 * sw, W = 4 + sw, c = Math.cos(a), s = Math.sin(a);
   return `<polygon points="${x2},${y2} ${(x2 - L*c + W*s).toFixed(1)},${(y2 - L*s - W*c).toFixed(1)} ${(x2 - L*c - W*s).toFixed(1)},${(y2 - L*s + W*c).toFixed(1)}" fill="${col}"/>`;
 }
 function device(s, col){
@@ -366,13 +458,15 @@ function device(s, col){
 function one(s, opt){
   const col = colorOf(s.c), open = `<g data-shape="${esc(s.id)}"`, text = opt.editing === s.id ? '' : (s.text || '');
   if(s.t === 'line' || s.t === 'arrow'){
-    const full = pathD(s, 0), line = pathD(s, s.t === 'arrow' ? 8 : 0), [mx, my] = pathMid(s);
+    const sw = swOf(s), back = 6 + sw, h0 = !!s.h0, h1 = s.t === 'arrow';
+    const full = pathD(s), line = pathD(s, h0 ? back : 0, h1 ? back : 0), [mx, my] = pathMid(s);
     let m = `<path d="${full.d}" stroke="transparent" stroke-width="16" fill="none"/>`;
     // Animated lines show dashes flowing from start to end (still when the viewer prefers less motion).
     const flow = s.anim && !STILL();
-    m += `<path d="${line.d}" stroke="${col}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"${s.anim ? ' stroke-dasharray="9 7"' : s.dash ? ' stroke-dasharray="7 6"' : ''}>`
+    m += `<path d="${line.d}" stroke="${col}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" fill="none"${s.anim ? ' stroke-dasharray="9 7"' : s.dash ? ` stroke-dasharray="${f1(3.5 * sw)} ${f1(3 * sw)}"` : ''}>`
       + (flow ? `<animate attributeName="stroke-dashoffset" from="32" to="0" dur="${s.anim === 'fast' ? .45 : .9}s" repeatCount="indefinite"/>` : '') + `</path>`;
-    if(s.t === 'arrow') m += head(line.from[0], line.from[1], full.to[0], full.to[1], col);
+    if(h1) m += head(full.from[0], full.from[1], full.to[0], full.to[1], col, sw);
+    if(h0) m += head(full.from0[0], full.from0[1], full.to0[0], full.to0[1], col, sw);
     if(text){
       const ls = wrap(text, 160, 13), tw = Math.max(...ls.map(l => l.length)) * 13 * CW + 14, th = ls.length * 13 * LH + 6;
       m += `<rect x="${mx - tw/2}" y="${my - th/2}" width="${tw}" height="${th}" rx="5" fill="${C.paper}"/>` + lines(ls, {x:mx, y:my - th/2 + 3, fs:13, fill:C.ink2, anchor:'middle'});
@@ -416,8 +510,17 @@ function one(s, opt){
       m = device(s, col);
       break;
     case 'icon': {
-      const k = Math.min(w, h) / 20, sw = Math.max(1, 3.2 / k);
-      m = `<rect width="${w}" height="${h}" fill="transparent"/><g transform="translate(${(w - 20*k)/2} ${(h - 20*k)/2}) scale(${k})" fill="none" stroke="${col}" stroke-width="${sw.toFixed(2)}" stroke-linecap="round" stroke-linejoin="round">${icons()[s.v] || GLYPH.service}</g>`;
+      const p = isPackIcon(s.v) ? packIcon(s.v) : null;
+      if (isPackIcon(s.v) && !p) {
+        // The icon set is still loading (or failed to); hold the space.
+        m = `<rect width="${w}" height="${h}" rx="6" fill="none" stroke="${C.line}" stroke-dasharray="4 4"/>`;
+        break;
+      }
+      const vb = p ? p.vb : 20, k = Math.min(w, h) / vb, sw = Math.max(1, 3.2 / k);
+      const paint = p && p.fill
+        ? `fill="${(!s.c && brandColor(p.hex)) || col}" stroke="none"`
+        : `fill="none" stroke="${col}" stroke-width="${sw.toFixed(2)}" stroke-linecap="round" stroke-linejoin="round"`;
+      m = `<rect width="${w}" height="${h}" fill="transparent"/><g transform="translate(${(w - vb*k)/2} ${(h - vb*k)/2}) scale(${k})" ${paint}>${p ? p.body : icons()[s.v] || GLYPH.service}</g>`;
       break;
     }
     case 'comment': {
@@ -426,17 +529,34 @@ function one(s, opt){
       break;
     }
     default: {
-      const st = `stroke="${col}" stroke-width="1.8" stroke-linejoin="round"`;
-      m = outline(s.t, w, h, `fill="${col}" fill-opacity=".07" ${st}${s.dash ? ' stroke-dasharray="7 6"' : ''}`, st);
-      if(text){ const t = inner(s, text); m += lines(t.ls, {x:w/2, y:t.top, fs:t.fs, fill:C.ink, anchor:'middle', weight:500}); }
+      // fm: 'tint' (default), 'solid' or 'none'. sc: stroke colour (defaults to c, 'none' hides it).
+      // sw: stroke width. fx: 'shadow' or 'watercolor'.
+      const fm = s.fm || 'tint', sc = s.sc === 'none' ? null : s.sc != null ? colorOf(s.sc) : col, sw = s.sw || 1.8;
+      const fillA = fm === 'solid' ? 1 : fm === 'none' ? 0 : s.fx === 'watercolor' ? .32 : .12;
+      const st = sc ? `stroke="${sc}" stroke-width="${sw}" stroke-linejoin="round"` : 'stroke="none"';
+      const dash = s.dash && sc ? ` stroke-dasharray="${f1(3.5 * sw + 1)} ${f1(3 * sw + 1)}"` : '';
+      if(s.fx === 'shadow') m += `<g transform="translate(6 6)" opacity=".55">${outline(s.t, w, h, `fill="${C.line}" stroke="none"`, 'stroke="none"')}</g>`;
+      const wc = s.fx === 'watercolor' ? ' filter="url(#lw-wc)"' : '';
+      m += `<g${wc}>${outline(s.t, w, h, `fill="${col}" fill-opacity="${fillA}" ${st}${dash}`, st)}</g>`;
+      const ink = fm === 'solid' ? ((lum(col) ?? 0) > .55 ? '#1D2320' : '#FFFFFF') : C.ink;
+      if(text){ const t = inner(s, text); m += lines(t.ls, {x:w/2, y:t.top, fs:t.fs, fill:ink, anchor:'middle', weight:500}); }
     }
   }
   return `${open} transform="translate(${s.x} ${s.y})">${m}</g>`;
 }
 
+// A standalone SVG of the given shapes, for copying or exporting a selection.
+export function shapesDoc(shapes, margin = 24){
+  const list = (shapes || []).filter(s => s.t !== 'comment'), b = shapeBounds(list);
+  if(!b) return null;
+  const L = shapesMarkup(list), w = Math.ceil(b.w + 2 * margin), h = Math.ceil(b.h + 2 * margin);
+  return {w, h, text:`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" font-family="Bricolage Grotesque, system-ui, -apple-system, Segoe UI, sans-serif"><rect width="100%" height="100%" fill="${C.paper}"/><g transform="translate(${margin - b.x} ${margin - b.y})">${L.under}${L.over}</g></svg>`};
+}
+
 // Frames draw under the diagram; everything else draws over it, in list order.
+const WC_DEFS = '<defs><filter id="lw-wc" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency=".035" numOctaves="3" seed="7"/><feDisplacementMap in="SourceGraphic" scale="7"/></filter></defs>';
 export function shapesMarkup(shapes, opt = {}){
-  let under = '', over = '';
+  let under = (shapes || []).some(s => s.fx === 'watercolor') ? WC_DEFS : '', over = '';
   (shapes || []).forEach(s => {
     if(opt.comments === false && s.t === 'comment') return;
     if(s.t === 'frame') under += one(s, opt); else over += one(s, opt);

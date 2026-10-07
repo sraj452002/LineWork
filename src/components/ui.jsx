@@ -53,7 +53,7 @@ function Menu({ anchor, items, onClose }) {
     const top = r.bottom + 6 + h > innerHeight - 8 ? Math.max(8, r.top - h - 6) : r.bottom + 6;
     setPos({ top, left: Math.max(8, Math.min(r.right - w, innerWidth - w - 8)) });
     m.querySelector('button')?.focus();
-  }, [anchor]);
+  }, [anchor, items]);
 
   useEffect(() => {
     const down = e => { if (ref.current && !ref.current.contains(e.target) && !anchor.contains(e.target)) onClose(); };
@@ -65,12 +65,49 @@ function Menu({ anchor, items, onClose }) {
 
   return (
     <div className="menu" role="menu" ref={ref} style={pos}>
-      {items.map((it, i) => it === '-' ? <hr key={i} /> : (
-        <button key={i} role="menuitem" className={it.danger ? 'danger' : undefined} onClick={() => { onClose(); it.act(); }}>
-          {it.label}
-          {it.note && <small>{it.note}</small>}
-        </button>
-      ))}
+      <MenuItems items={items} onClose={onClose} />
+    </div>
+  );
+}
+
+// Menu rows. An item with `items` opens a submenu beside it (on hover, click or →).
+function MenuItems({ items, onClose }) {
+  const [open, setOpen] = useState(-1);
+  const btns = useRef([]);
+  return items.map((it, i) => it === '-' ? <hr key={i} /> : (
+    <div key={i} className="mrow" onMouseEnter={() => setOpen(it.items ? i : -1)}>
+      <button ref={el => { btns.current[i] = el; }} role={it.on === undefined ? 'menuitem' : 'menuitemradio'} aria-checked={it.on}
+        aria-haspopup={it.items ? 'menu' : undefined} aria-expanded={it.items ? open === i : undefined}
+        className={[it.danger && 'danger', (it.swatch || it.icon) && 'has-art', it.items && open === i && 'open'].filter(Boolean).join(' ') || undefined}
+        onClick={() => { if (it.items) { setOpen(i); return; } onClose(); it.act(); }}
+        onKeyDown={e => { if (it.items && (e.key === 'ArrowRight' || e.key === 'Enter')) { e.preventDefault(); setOpen(i); } }}>
+        {it.swatch && <i className="mswatch" style={{ background: it.swatch }} />}
+        {it.icon && <svg className="micon" viewBox="0 0 24 24" aria-hidden="true" dangerouslySetInnerHTML={{ __html: it.icon }} />}
+        <span className="mlabel">{it.label}{it.note && <small>{it.note}</small>}</span>
+        {it.kbd && <kbd>{it.kbd}</kbd>}
+        {it.on && <span className="mcheck" aria-hidden="true">✓</span>}
+        {it.items && <svg className="mchev" viewBox="0 0 24 24" aria-hidden="true"><path d="m10 6 6 6-6 6" /></svg>}
+      </button>
+      {it.items && open === i && (
+        <SubMenu items={it.items} onClose={onClose} onBack={() => { setOpen(-1); btns.current[i]?.focus(); }} />
+      )}
+    </div>
+  ));
+}
+
+function SubMenu({ items, onClose, onBack }) {
+  const ref = useRef(null);
+  const [place, setPlace] = useState({ flip: false, dy: 0, ready: false });
+  useLayoutEffect(() => {
+    const r = ref.current.getBoundingClientRect();
+    setPlace({ flip: r.right > innerWidth - 8, dy: Math.min(0, innerHeight - 8 - r.bottom), ready: true });
+  }, []);
+  useEffect(() => { if (place.ready) ref.current.querySelector('button')?.focus(); }, [place.ready]);
+  return (
+    <div className={'menu sub' + (place.flip ? ' flip' : '')} role="menu" ref={ref}
+      style={{ marginTop: place.dy, visibility: place.ready ? undefined : 'hidden' }}
+      onKeyDown={e => { if (e.key === 'ArrowLeft') { e.preventDefault(); e.stopPropagation(); onBack(); } }}>
+      <MenuItems items={items} onClose={onClose} />
     </div>
   );
 }

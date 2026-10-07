@@ -41,7 +41,8 @@ web > web : Render receipt   self call
 note api : Retries twice
 == Fulfillment ==            divider`,
   erd:`title: Blog
-users {
+notation chen                optional: 1 and * ends
+users [icon: user, color: blue] {
   id uuid pk
   email text unique
 }

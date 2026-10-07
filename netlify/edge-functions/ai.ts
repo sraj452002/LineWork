@@ -19,6 +19,18 @@ export default async (req: Request) => {
   if (!prompt) return json({ error: "bad_request" }, 400);
   if (prompt.length > 400_000) return json({ error: "too_large" }, 413);
 
+  // Optional pictures (a photo or screenshot of a diagram), sent before the text.
+  const IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+  const images = Array.isArray(body?.images) ? body.images : [];
+  if (images.length > 4) return json({ error: "too_many_images" }, 413);
+  for (const im of images) {
+    if (!IMAGE_TYPES.includes(im?.media_type) || typeof im?.data !== "string") return json({ error: "bad_image" }, 400);
+    if (im.data.length > 6_000_000) return json({ error: "too_large" }, 413);
+  }
+  const content = images.length
+    ? [...images.map((im: { media_type: string; data: string }) => ({ type: "image", source: { type: "base64", media_type: im.media_type, data: im.data } })), { type: "text", text: prompt }]
+    : prompt;
+
   const upstream = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
@@ -26,7 +38,7 @@ export default async (req: Request) => {
       model: Netlify.env.get("ANTHROPIC_MODEL") || "claude-sonnet-5-5",
       max_tokens: 8000,
       stream: true,
-      messages: [{ role: "user", content: prompt }],
+      messages: [{ role: "user", content }],
     }),
   });
   if (!upstream.ok || !upstream.body) {
