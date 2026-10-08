@@ -196,7 +196,8 @@ test('text alignment and indent on a box', async ({ page }) => {
 test('code view: VS Code style editor with explorer, tabs and quick open', async ({ page }) => {
   await page.getByRole('button', { name: 'Create a Blank File' }).click();
   await page.getByRole('group', { name: 'View' }).getByRole('button', { name: 'Code' }).click();
-  await page.getByRole('button', { name: 'Start from a sample' }).click({ timeout: 20000 });
+  await page.getByRole('button', { name: /Start from a sample/ }).click({ timeout: 20000 });
+  await page.getByRole('menuitem', { name: 'TypeScript' }).click();
   const tree = page.getByRole('tree', { name: 'Files' });
   await expect(tree.getByRole('treeitem')).toHaveText([/src/, /greet\.ts/, /index\.ts/, /README\.md/]);
   await expect(page.locator('.cw-tab.on')).toContainText('README.md');

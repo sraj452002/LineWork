@@ -31,6 +31,15 @@ Set `ANTHROPIC_API_KEY` in Netlify environment variables. The edge function in `
 
 The AI endpoint isn't behind the sign-in, so anyone who finds the site URL could use it and spend your API credit. Leave the key unset if that's a concern.
 
+## Running code
+
+The Code view's **Run** button, **Terminal** and **Python** prompt run code in the visitor's browser; nothing runs on the server.
+
+- **Node.js** runs in a [StackBlitz WebContainer](https://webcontainers.io): `node`, `npm`, `npx`, `yarn` and `pnpm` in a real shell, with npm packages installed from the npm registry, and a **Preview** of any web server the code starts. WebContainers is free for personal and open-source projects; [commercial production use needs a StackBlitz license](https://webcontainers.io/enterprise).
+- **Python** runs in [Pyodide](https://pyodide.org) (CPython in WebAssembly) in a web worker, loaded from the jsDelivr CDN. `pip install` works for pure-Python packages from PyPI and for packages Pyodide has built (NumPy, pandas and many more). `input()` isn't available.
+- Both need a cross-origin isolated page, so `netlify.toml` (and `vite.config.js` for development) send `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: credentialless`. That works in Chrome, Edge and Firefox on desktop; Safari and phones can edit code but not run it.
+- Native binaries, system packages (`apt-get`) and other languages need a real machine, which this in-browser setup doesn't provide.
+
 ## Project layout
 
 ```
@@ -42,7 +51,8 @@ src/
     Editor.jsx          file view: tabs, export, doc/canvas split
     DocPane.jsx         markdown doc with AI writing help
     Canvas.jsx          pan, zoom, drag, code drawer, AI prompt
-    CodeWorkspace.jsx   Code view: explorer, tabs, Monaco editor, quick open
+    CodeWorkspace.jsx   Code view: explorer, tabs, Monaco editor, quick open, Run
+    RunPanel.jsx        Output, Terminal, Python prompt and Preview (xterm.js)
     ui.jsx              menus, dialogs, toasts, theme
   lib/
     auth.js             hardcoded credentials
@@ -50,6 +60,8 @@ src/
     markdown.js         markdown renderer for docs
     ai.js               AI client and prompt language
     monaco.js           loads Monaco and its language workers
+    runtime.js          running code: Node.js (WebContainers) and Python (Pyodide)
+    python.worker.js    Pyodide in a web worker
     storage.js          browser storage
 ```
 
