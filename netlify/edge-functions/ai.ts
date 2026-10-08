@@ -1,5 +1,6 @@
 import type { Config } from "@netlify/edge-functions";
 import { getUser } from "@netlify/identity";
+import { googleSession } from "../lib/gsession.js";
 
 // Proxies AI requests to Anthropic so the API key stays on the server.
 export default async (req: Request) => {
@@ -9,7 +10,7 @@ export default async (req: Request) => {
     new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
 
   // AI costs money per request, so it's for signed-in accounts only.
-  const user = await getUser().catch(() => null);
+  const user = (await getUser().catch(() => null)) || (await googleSession(req).catch(() => null));
   if (url.pathname === "/api/ai/status") return json({ enabled: Boolean(key) && Boolean(user), reason: !key ? "no_key" : !user ? "signed_out" : null });
 
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);

@@ -2,13 +2,17 @@ import {
   AuthError, getSettings, getUser, handleAuthCallback, login, logout, oauthLogin,
   requestPasswordRecovery, signup, updateUser, acceptInvite,
 } from '@netlify/identity';
+import { googleReturn, restoreGoogle, signOutGoogle } from './gdrive.js';
 
-/* Two ways to use Linework:
+/* Three ways to use Linework:
    - 'cloud': signed in with Netlify Identity. Files are saved to the account (see cloud.js).
+   - 'drive': signed in with Google. Files are saved to the person's Google Drive (see gdrive.js).
    - 'local': no account. Files stay in this browser only (and AI is off, since it costs money per request).
    Identity only works on a deployed site, so local development and the tests use 'local'. */
 
 const LOCAL = 'linework:local-mode';
+// Read once at load: what Google's sign-in page sent back (?google=…), before the URL is tidied.
+const GOOGLE_BACK = googleReturn();
 
 // Whether accounts are available here; null when they aren't (local dev, or Identity not enabled).
 export async function accountSettings() {
@@ -21,8 +25,10 @@ export async function accountSettings() {
 }
 
 // Finish any sign-in link (email confirmation, Google/GitHub, password reset, invite), then
-// work out who's here. Returns {mode, user?, pending?}, or null when nobody is signed in.
+// work out who's here. Returns {mode, user?, pending?}, {mode: null, notice} after a Google
+// sign-in that didn't finish, or null when nobody is signed in.
 export async function startSession() {
+  const google = GOOGLE_BACK;
   let pending = null;
   try {
     const cb = await handleAuthCallback();
@@ -33,6 +39,9 @@ export async function startSession() {
     const user = await getUser();
     if (user) return { mode: 'cloud', user, pending };
   } catch (e) { /* Identity unavailable */ }
+  const g = await restoreGoogle();
+  if (g) return { mode: 'drive', user: g };
+  if (google && google !== 'signed_in') return { mode: null, notice: google };
   if (pending && pending.type === 'invite') return { mode: null, pending };
   try { if (localStorage.getItem(LOCAL) === '1') return { mode: 'local' }; } catch (e) {}
   return null;
@@ -53,6 +62,7 @@ export const saveProfile = data => updateUser({ data });
 export async function signOut(mode) {
   try { localStorage.removeItem(LOCAL); } catch (e) {}
   if (mode === 'cloud') { try { await logout(); } catch (e) {} }
+  if (mode === 'drive') await signOutGoogle();
 }
 
 // Friendly text for Identity errors.
