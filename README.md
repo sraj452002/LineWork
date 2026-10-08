@@ -1,6 +1,6 @@
 # Linework
 
-A React web app for technical design docs and diagrams: architecture diagrams, flowcharts, sequence diagrams and database schemas, with a markdown design doc beside the canvas.
+A React web app for technical design docs and diagrams: architecture diagrams, flowcharts, sequence diagrams and database schemas, with a markdown design doc beside the canvas and a code editor (Monaco, the editor inside VS Code) for the code that goes with them.
 
 ## Run locally
 
@@ -42,12 +42,14 @@ src/
     Editor.jsx          file view: tabs, export, doc/canvas split
     DocPane.jsx         markdown doc with AI writing help
     Canvas.jsx          pan, zoom, drag, code drawer, AI prompt
+    CodeWorkspace.jsx   Code view: explorer, tabs, Monaco editor, quick open
     ui.jsx              menus, dialogs, toasts, theme
   lib/
     auth.js             hardcoded credentials
     engines.js          diagram parsers, layout and SVG rendering
     markdown.js         markdown renderer for docs
     ai.js               AI client and prompt language
+    monaco.js           loads Monaco and its language workers
     storage.js          browser storage
 ```
 

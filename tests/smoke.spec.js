@@ -193,6 +193,48 @@ test('text alignment and indent on a box', async ({ page }) => {
   await expect(box).toBeVisible();
 });
 
+test('code view: VS Code style editor with explorer, tabs and quick open', async ({ page }) => {
+  await page.getByRole('button', { name: 'Create a Blank File' }).click();
+  await page.getByRole('group', { name: 'View' }).getByRole('button', { name: 'Code' }).click();
+  await page.getByRole('button', { name: 'Start from a sample' }).click({ timeout: 20000 });
+  const tree = page.getByRole('tree', { name: 'Files' });
+  await expect(tree.getByRole('treeitem')).toHaveText([/src/, /greet\.ts/, /index\.ts/, /README\.md/]);
+  await expect(page.locator('.cw-tab.on')).toContainText('README.md');
+  await expect(page.locator('.monaco-editor .view-lines')).toContainText('Notes and code');
+
+  // Typing goes into the file and is saved with it.
+  await tree.getByRole('treeitem', { name: /index\.ts/ }).click();
+  await expect(page.locator('.cw-crumbs')).toHaveText(/src›index\.ts/);
+  await page.locator('.monaco-editor .view-lines').click();
+  await page.keyboard.press('Control+End');
+  await page.keyboard.type('// edited in Linework');
+  await expect(page.locator('.monaco-editor .view-lines')).toContainText('edited in Linework');
+  await expect(page.locator('.cw-status')).toContainText('TypeScript');
+
+  // Ctrl P opens a file by name.
+  await page.keyboard.press('Control+p');
+  await page.getByRole('textbox', { name: 'Search files by name' }).fill('grt');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.cw-tab.on')).toContainText('greet.ts');
+  await expect(page.locator('.cw-tab')).toHaveCount(3);
+
+  // New file in a folder, from the folder's menu.
+  await tree.getByRole('treeitem', { name: /^src/ }).getByRole('button', { name: 'Actions for src' }).click();
+  await page.getByRole('menuitem', { name: 'New file' }).click();
+  await page.getByRole('textbox').last().fill('api.sql');
+  await page.getByRole('button', { name: 'Create' }).click();
+  await expect(page.locator('.cw-crumbs')).toHaveText(/src›api\.sql/);
+  await expect(page.locator('.cw-status')).toContainText('SQL');
+
+  // Everything survives going back to the files list and reopening.
+  await page.waitForTimeout(600);
+  await page.getByRole('button', { name: 'Back to files' }).click();
+  await page.locator('.ftable tbody tr').first().click();
+  await expect(page.getByRole('tree', { name: 'Files' }).getByRole('treeitem')).toHaveCount(5);
+  await page.getByRole('tree', { name: 'Files' }).getByRole('treeitem', { name: /index\.ts/ }).click();
+  await expect(page.locator('.monaco-editor .view-lines')).toContainText('edited in Linework');
+});
+
 test('icon picker loads the big icon set', async ({ page }) => {
   await page.getByRole('button', { name: 'Create a Blank File' }).click();
   await page.keyboard.press('/');

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import { TYPES, dg, prep, svgDoc } from '../lib/engines.js';
 import { downloads } from '../lib/ai.js';
 import { imageKeys, loadImages } from '../lib/images.js';
@@ -7,6 +7,9 @@ import { clone, rid, slug, trunc } from '../lib/utils.js';
 import DocPane from './DocPane.jsx';
 import Canvas from './Canvas.jsx';
 import { useUI } from './ui.jsx';
+
+// The code editor (Monaco) is large, so it loads the first time the Code view opens.
+const CodeWorkspace = lazy(() => import('./CodeWorkspace.jsx'));
 
 const narrow = () => innerWidth <= 760;
 const AI_KEY = 'linework:ai-open';
@@ -28,6 +31,9 @@ export default function Editor({ file, update, saveState, onBack, onRename, onDu
   const d = file.diagrams[active];
   let view = file.view || 'both';
   if (isNarrow && view === 'both') view = 'canvas';
+  const onCanvas = view === 'canvas' || view === 'both';
+  const [codeSeen, setCodeSeen] = useState(view === 'code'); // keep the editor mounted once opened
+  useEffect(() => { if (view === 'code') setCodeSeen(true); }, [view]);
 
   const setView = v => update(c => { c.view = v; });
   const activate = i => update(c => { c.active = i; });
@@ -89,6 +95,10 @@ export default function Editor({ file, update, saveState, onBack, onRename, onDu
   const exportMarkdown = () => {
     let out = (file.doc || '').trim() + '\n';
     file.diagrams.filter(x => x.code && x.code.trim()).forEach(x => { out += `\n## Diagram: ${x.name}\n\n\`\`\`linework-${x.type}\n${x.code}\n\`\`\`\n`; });
+    (file.code?.files || []).forEach(f => {
+      const fence = '`'.repeat(Math.max(3, ...((f.text || '').match(/`+/g) || []).map(m => m.length + 1)));
+      out += `\n## Code: ${f.path}\n\n${fence}${(f.path.match(/\.([^./]+)$/) || [])[1] || ''}\n${(f.text || '').replace(/\n$/, '')}\n${fence}\n`;
+    });
     downloads.save({ filename: slug(file.title) + '.md', data: out });
   };
   const copy = async (text, ok) => {
@@ -98,7 +108,7 @@ export default function Editor({ file, update, saveState, onBack, onRename, onDu
   const exportMenu = btn => popup(btn, [
     { label: 'Diagram as PNG', note: 'High resolution, for slides and docs', act: () => exportDiagram('png') },
     { label: 'Diagram as SVG', note: 'Vector, edit in design tools', act: () => exportDiagram('svg') },
-    { label: 'Doc as Markdown', note: 'Includes the diagram code', act: exportMarkdown },
+    { label: 'Doc as Markdown', note: 'Includes the diagram code and code files', act: exportMarkdown },
     '-',
     { label: 'Copy diagram code', act: () => copy(d.code, 'Code copied') },
     { label: 'Copy doc text', act: () => copy(file.doc || '', 'Doc copied') },
@@ -117,8 +127,9 @@ export default function Editor({ file, update, saveState, onBack, onRename, onDu
           <button aria-pressed={view === 'doc'} onClick={() => setView('doc')}>Doc</button>
           {!isNarrow && <button aria-pressed={view === 'both'} onClick={() => setView('both')}>Both</button>}
           <button aria-pressed={view === 'canvas'} onClick={() => setView('canvas')}>Canvas</button>
+          <button aria-pressed={view === 'code'} onClick={() => setView('code')}>Code</button>
         </div>
-        {view !== 'doc' && (
+        {onCanvas && (
           <button className={'btn ai-toggle' + (aiOpen ? ' on' : '')} aria-pressed={aiOpen} onClick={() => setAiOpen(!aiOpen)}
             title={aiOpen ? 'Close AI chat  Esc' : 'Open AI chat  Ctrl J'}>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 3.5l1.6 4.9 4.9 1.6-4.9 1.6L10 16.5l-1.6-4.9L3.5 10l4.9-1.6z"/><path d="M18 3v4M16 5h4M17.5 15.5v4M15.5 17.5h4"/></svg>
@@ -155,9 +166,16 @@ export default function Editor({ file, update, saveState, onBack, onRename, onDu
             <button className="addtab" aria-haspopup="menu"
               onClick={e => popup(e.currentTarget, Object.entries(TYPES).map(([k, v]) => ({ label: v.name, act: () => addDiagram(k) })))}>+ Diagram</button>
           </div>
-          <Canvas key={d.id} file={file} d={d} visible={view !== 'doc'} updateDiagram={updateDiagram} updateFile={update} history={history} onAddDiagram={addDiagram} onGuide={onGuide}
+          <Canvas key={d.id} file={file} d={d} visible={onCanvas} updateDiagram={updateDiagram} updateFile={update} history={history} onAddDiagram={addDiagram} onGuide={onGuide}
             aiOpen={aiOpen} onAIOpen={setAiOpen} />
         </div>
+        {codeSeen && (
+          <div className="codepane">
+            <Suspense fallback={<div className="cw-loading">Loading the code editor…</div>}>
+              <CodeWorkspace file={file} update={update} visible={view === 'code'} />
+            </Suspense>
+          </div>
+        )}
       </div>
     </section>
   );

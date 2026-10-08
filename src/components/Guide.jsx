@@ -188,6 +188,15 @@ function appGuide() {
       </ul>
       <p>Press <K>?</K> on the canvas any time for the full shortcut list.</p>
     </> },
+    { id: 'code', title: 'Code editor', body: <>
+      <ul>
+        <li><b>Code</b> in the top bar (next to Doc, Both and Canvas) opens an editor like VS Code for code, configs and queries that go with the design. It's the same editor VS Code uses.</li>
+        <li>The <b>Explorer</b> on the left holds files and folders: create them with its buttons, or open files from your computer. Right-click, or use <b>⋯</b>, to rename, delete or download. Use slashes in a name to make folders, like <code>src/app.ts</code>.</li>
+        <li>Files open in tabs. You get syntax highlighting for 80+ languages, IntelliSense and error checking for JavaScript, TypeScript, JSON, CSS and HTML, find and replace (<K>Ctrl F</K> <K>Ctrl H</K>), multiple cursors (<K>Alt</K> + click) and the command palette (<K>F1</K>).</li>
+        <li><K>Ctrl P</K> goes to a file by name and <K>Ctrl B</K> shows or hides the Explorer. Changes save on their own as you type. Click the language in the status bar to change it.</li>
+        <li>Code is saved with the file, and <b>Export → Doc as Markdown</b> includes it.</li>
+      </ul>
+    </> },
     { id: 'ai', title: 'Working with AI', body: <>
       <ul>
         <li><b>AI Chat</b> opens on the right of the canvas from <b>AI Chat</b> in the top bar, the sparkle button on the toolbar, or <K>Ctrl J</K>. <K>Esc</K> closes it.</li>
