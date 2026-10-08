@@ -109,6 +109,7 @@ function appGuide() {
         <li>One or more <b>diagrams</b>, each on its own tab: Architecture, Flowchart, Sequence or Database schema.</li>
       </ul>
       <p>You can make diagrams three ways, and mix them freely: write a few lines of <b>diagram code</b>, <b>ask AI</b> to draw them, or <b>draw by hand</b> on the canvas.</p>
+      <p>The <b>theme</b> button (a sun or moon, on the home page and at the top of every file) switches between Light, Dark and your computer's setting. Linework remembers the choice on this device.</p>
     </> },
     { id: 'home', title: 'The home page', body: <>
       <ul>
@@ -201,6 +202,17 @@ function appGuide() {
         <li><code>git</code> keeps history in this browser tab. To push or pull, set a token first: <code>export GITHUB_TOKEN=…</code>.</li>
         <li><b>Python</b> is a Python prompt: type Python, <code>pip install</code> a package, or <code>python main.py</code>. <K>Ctrl C</K> stops a running program.</li>
         <li>Everything runs in your browser, so it needs Chrome, Edge or Firefox on a computer. Files programs create (like <code>package.json</code> or <code>package-lock.json</code>) appear in the Explorer; installed packages (<code>node_modules</code>) don't, and are installed again after the page reloads.</li>
+      </ul>
+    </> },
+    { id: 'visualize', title: 'Visualizing code', body: <>
+      <p>The <b>Visualize</b> button (next to <b>Run</b>) opens a pane beside the editor that draws your Python, JavaScript and TypeScript code.</p>
+      <ul>
+        <li><b>Structure → Flowchart</b> charts one function: its steps, decisions (yes/no), loops (repeat/done), returns and errors. It follows your cursor; pick another function from the list to jump to it. <b>(whole file)</b> charts the top-level code.</li>
+        <li><b>Structure → Classes</b> shows every class in the project with its fields and methods, and which class extends which.</li>
+        <li><b>Structure → Imports</b> shows how the files import each other, grouped by folder, with outside packages on the side.</li>
+        <li><b>Open on canvas</b> adds the diagram to this file as a canvas tab, where you can edit, restyle and export it like any other.</li>
+        <li><b>Step through</b> runs the open file and records it, line by line. Then move with <b>◀ ▶</b>, the slider, or the arrow keys: the editor highlights the line, and the pane shows the call stack, the variables at that moment, and the output so far. Click a function on the stack to see its variables.</li>
+        <li>A recording stops after 2,000 steps, so a loop that never ends can't hang the page. JavaScript recordings run on their own and can't use npm packages or <code>node:</code> modules; Python recordings use the same Python as the <b>Run</b> button.</li>
       </ul>
     </> },
     { id: 'ai', title: 'Working with AI', body: <>

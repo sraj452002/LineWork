@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { readColors } from '../lib/engines.js';
+import { THEMES, setTheme, themePref } from '../lib/theme.js';
 
 const Ctx = createContext(null);
 export const useUI = () => useContext(Ctx);
@@ -139,6 +140,25 @@ function Dialog({ title, text, value = '', ok = 'OK', multiline = false, input =
         </div>
       </div>
     </div>
+  );
+}
+
+// Light / Dark / System. Shows the theme in use; a menu picks another.
+const THEME_ICON = {
+  light: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  dark: '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>',
+  system: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
+};
+export function ThemeButton({ className = 'btn icon-only', withLabel = false }) {
+  const { popup } = useUI();
+  const [pref, setPref] = useState(themePref);
+  const name = THEMES.find(t => t[0] === pref)[1];
+  return (
+    <button className={className} aria-haspopup="menu" aria-label={`Theme: ${name}`} title={`Theme: ${name}`}
+      onClick={e => popup(e.currentTarget, THEMES.map(([k, n]) => ({ label: n, on: pref === k, act: () => { setTheme(k); setPref(k); } })))}>
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" dangerouslySetInnerHTML={{ __html: THEME_ICON[pref] }} />
+      {withLabel && <span>{name} theme</span>}
+    </button>
   );
 }
 

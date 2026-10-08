@@ -194,7 +194,7 @@ function pyWorker() {
 function call(type, data) {
   const p = py;
   // Each command starts uninterrupted; Ctrl C any time after this stops it (even before it starts running).
-  if ((type === 'run' || type === 'exec' || type === 'line' || type === 'pip') && p.interrupt) Atomics.store(p.interrupt, 0, 0);
+  if ((type === 'run' || type === 'exec' || type === 'line' || type === 'pip' || type === 'trace') && p.interrupt) Atomics.store(p.interrupt, 0, 0);
   return new Promise((res, rej) => {
     const id = ++p.n;
     p.calls.set(id, { res, rej });
@@ -227,4 +227,7 @@ export class PythonProject {
   // One line typed at the Python prompt. Resolves to {more: true} while a block is still open.
   async line(src, ws) { await this.sync(ws); return call('line', { dir: this.dir, line: src }); }
   async pip(pkgs, ws) { await this.sync(ws); return call('pip', { dir: this.dir, pkgs }); }
+  // Code visualiser: the structure of some Python source, and a step-by-step recording of a run.
+  async analyze(code) { pyWorker(); return call('analyze', { code }); }
+  async trace(path, ws) { await this.sync(ws); return call('trace', { dir: this.dir, path }); }
 }
