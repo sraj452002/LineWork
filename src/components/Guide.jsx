@@ -195,6 +195,10 @@ function appGuide() {
         <li>Files open in tabs. You get syntax highlighting for 80+ languages, IntelliSense and error checking for JavaScript, TypeScript, JSON, CSS and HTML, find and replace (<K>Ctrl F</K> <K>Ctrl H</K>), multiple cursors (<K>Alt</K> + click) and the command palette (<K>F1</K>).</li>
         <li><K>Ctrl P</K> goes to a file by name and <K>Ctrl B</K> shows or hides the Explorer. Changes save on their own as you type. Click the language in the status bar to change it.</li>
         <li>Code is saved with the file, and <b>Export → Doc as Markdown</b> includes it.</li>
+        <li><b>Run</b> (or <K>F5</K>) runs the open file: JavaScript with Node.js, TypeScript with tsx, Python, or an HTML page in a preview. Its menu (<b>▾</b>) also runs <b>npm install</b> and the scripts in <b>package.json</b>. Output appears in the panel below; <K>Ctrl `</K> shows or hides it.</li>
+        <li><b>Terminal</b> is a Node.js shell: <code>node</code>, <code>npm</code>, <code>npx</code>, <code>yarn</code> and <code>pnpm</code> all work, so you can install any npm package or start a dev server. When something starts a web server, <b>Preview</b> shows it.</li>
+        <li><b>Python</b> is a Python prompt: type Python, <code>pip install</code> a package, or <code>python main.py</code>. <K>Ctrl C</K> stops a running program.</li>
+        <li>Everything runs in your browser, so it needs Chrome, Edge or Firefox on a computer. Files programs create (like <code>package.json</code> or <code>package-lock.json</code>) appear in the Explorer; installed packages (<code>node_modules</code>) don't, and are installed again after the page reloads.</li>
       </ul>
     </> },
     { id: 'ai', title: 'Working with AI', body: <>

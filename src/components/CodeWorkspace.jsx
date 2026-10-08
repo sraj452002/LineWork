@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { downloads } from '../lib/ai.js';
 import { rid } from '../lib/utils.js';
 import { useUI } from './ui.jsx';
+import RunPanel from './RunPanel.jsx';
 
 /* A small VS Code inside each Linework file: an explorer, tabs and the Monaco editor.
    Code lives on the file as  code: {files: [{id, path, text, lang?}], folders: [path], open: [id], active: id}
@@ -10,11 +11,21 @@ import { useUI } from './ui.jsx';
 
 const EMPTY = { files: [], folders: [], open: [], active: null };
 const MAX_UPLOAD = 1_000_000;
-const SAMPLE = [
-  { path: 'README.md', text: '# Service\n\nNotes and code that go with this design.\n' },
-  { path: 'src/index.ts', text: "import { greet } from './greet';\n\nconsole.log(greet('Linework'));\n" },
-  { path: 'src/greet.ts', text: 'export function greet(name: string): string {\n  return `Hello, ${name}`;\n}\n' },
-];
+const SAMPLES = {
+  ts: { label: 'TypeScript', files: [
+    { path: 'README.md', text: '# Service\n\nNotes and code that go with this design.\n' },
+    { path: 'src/index.ts', text: "import { greet } from './greet';\n\nconsole.log(greet('Linework'));\n" },
+    { path: 'src/greet.ts', text: 'export function greet(name: string): string {\n  return `Hello, ${name}`;\n}\n' },
+  ] },
+  node: { label: 'Node.js web server', files: [
+    { path: 'package.json', text: JSON.stringify({ name: 'demo', private: true, type: 'module', scripts: { start: 'node server.js' } }, null, 2) + '\n' },
+    { path: 'server.js', text: "import { createServer } from 'node:http';\n\nconst port = 3000;\ncreateServer((req, res) => {\n  res.writeHead(200, { 'content-type': 'text/html' });\n  res.end('<h1>Hello from Node.js</h1><p>Edit server.js and run it again.</p>');\n}).listen(port, () => console.log(`Listening on http://localhost:${port}`));\n" },
+  ] },
+  py: { label: 'Python', files: [
+    { path: 'main.py', text: 'from stats import summary\n\nnumbers = [3, 1, 4, 1, 5, 9, 2, 6]\nprint("Numbers:", numbers)\nprint(summary(numbers))\n' },
+    { path: 'stats.py', text: 'from statistics import mean, median\n\n\ndef summary(xs):\n    return {"count": len(xs), "mean": mean(xs), "median": median(xs)}\n' },
+  ] },
+};
 // Short badges for the explorer and tabs, by extension.
 const BADGE = {
   js: ['JS', '#C9A400'], mjs: ['JS', '#C9A400'], cjs: ['JS', '#C9A400'], jsx: ['JSX', '#1E9BC2'], ts: ['TS', '#2F74C0'], tsx: ['TSX', '#1E9BC2'],
@@ -67,6 +78,15 @@ export default function CodeWorkspace({ file, update, visible }) {
   const [explorer, setExplorer] = useState(() => innerWidth > 760);
   const [quick, setQuick] = useState(null); // quick-open search text, or null when closed
   const [pos, setPos] = useState({ ln: 1, col: 1, sel: 0 });
+  // The bottom panel: Output, Terminal, Python and Preview.
+  const PANEL_KEY = 'linework:code-panel';
+  const [panel, setPanel] = useState(() => { try { return JSON.parse(localStorage.getItem(PANEL_KEY)) || { open: false, h: 240 }; } catch (e) { return { open: false, h: 240 }; } });
+  useEffect(() => { try { localStorage.setItem(PANEL_KEY, JSON.stringify(panel)); } catch (e) {} }, [panel]);
+  const [panelTab, setPanelTab] = useState('output');
+  const [running, setRunning] = useState(false);
+  const runRef = useRef(null);
+  const filesRef = useRef(files);
+  filesRef.current = files;
   const hostRef = useRef(null), edRef = useRef(null), models = useRef(new Map()), views = useRef(new Map());
   const uploadRef = useRef(null);
 
@@ -117,6 +137,8 @@ export default function CodeWorkspace({ file, update, visible }) {
     });
     ed.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => { flushRef.current(); toast('Saved'); });
     ed.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyP, () => setQuick(''));
+    ed.addCommand(monaco.KeyCode.F5, () => runKey.current());
+    ed.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Backquote, () => setPanel(p => ({ ...p, open: !p.open })));
     return () => {
       flushRef.current();
       ed.dispose();
@@ -163,7 +185,7 @@ export default function CodeWorkspace({ file, update, visible }) {
   }, [monaco, files, langOf]);
 
   // Show the active file, back where it was left.
-  const shown = useRef(null);
+  const shown = useRef(null), focusKey = useRef('');
   useEffect(() => {
     const ed = edRef.current;
     if (!ed) return;
@@ -175,11 +197,16 @@ export default function CodeWorkspace({ file, update, visible }) {
       const vs = views.current.get(active);
       if (vs) ed.restoreViewState(vs);
     }
+    // Focus the editor when a file is opened or the view shown, not when files change underneath
+    // (a program writing files must not pull focus from the terminal).
+    const key = active + '|' + visible;
+    if (visible && focusKey.current !== key) ed.focus();
+    focusKey.current = key;
     shown.current = active;
-    if (visible) ed.focus();
   }, [active, monaco, files, visible]);
 
   useEffect(() => () => flushRef.current(), []);
+  const runKey = useRef(() => {});
 
   /* ---- files and folders ---- */
   const taken = (p, except) => files.some(f => f.path === p && f.id !== except) || folders.includes(p);
@@ -189,7 +216,7 @@ export default function CodeWorkspace({ file, update, visible }) {
     c.open = c.open.filter(x => x !== id);
     if (c.active === id) c.active = c.open[Math.min(i, c.open.length - 1)] || null;
   });
-  // Add files (renamed on a clash). open: 'all' opens a tab for each, 'first' just the first one.
+  // Add files (renamed on a clash). open: 'all' opens a tab for each, 'first' just the first one, 'none' none.
   const addFiles = (list, open = 'all') => mut(c => {
     const made = list.map(({ path, text }) => {
       let p = path, n = 1;
@@ -197,7 +224,7 @@ export default function CodeWorkspace({ file, update, visible }) {
       return { id: rid('cf'), path: p, text };
     });
     c.files = [...c.files, ...made];
-    const show = open === 'first' ? made.slice(0, 1) : made;
+    const show = open === 'none' ? [] : open === 'first' ? made.slice(0, 1) : made;
     if (show.length) { c.open = [...c.open, ...show.map(f => f.id)]; c.active = show[show.length - 1].id; }
   });
   const newFile = async (dir = '') => {
@@ -267,6 +294,68 @@ export default function CodeWorkspace({ file, update, visible }) {
     }
     if (got.length) addFiles(got);
   };
+  /* ---- running code ---- */
+  // A file a program created, changed or deleted (in Node or Python) comes back into the workspace.
+  const onBack = useCallback(({ path, text }) => {
+    const f = filesRef.current.find(x => x.path === path);
+    if (text == null) {
+      if (!f) return;
+      pending.current.delete(f.id);
+      mut(c => { c.files = c.files.filter(x => x.id !== f.id); c.open = c.open.filter(id => id !== f.id); if (c.active === f.id) c.active = c.open[c.open.length - 1] || null; });
+      return;
+    }
+    if (!f) { addFiles([{ path, text }], 'none'); return; }
+    const m = models.current.get(f.id);
+    const now = m ? m.model.getValue() : f.text;
+    if (now === text) return;
+    if (m) m.model.pushEditOperations([], [{ range: m.model.getFullModelRange(), text }], () => null); // stays undoable
+    else mut(c => { c.files = c.files.map(x => (x.id === f.id ? { ...x, text } : x)); });
+  }, [mut]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const pkg = useMemo(() => {
+    const f = files.find(x => x.path === 'package.json');
+    try { return f ? JSON.parse(f.text || '{}') : null; } catch (e) { return null; }
+  }, [files]);
+  const specFor = f => {
+    if (!f) return null;
+    const e = extOf(f.path), name = baseOf(f.path);
+    if (['js', 'mjs', 'cjs'].includes(e)) return { kind: 'node', cmd: 'node', args: [f.path], label: `Run ${name}` };
+    if (['ts', 'mts', 'cts', 'tsx'].includes(e)) return { kind: 'node', cmd: 'npx', args: ['-y', 'tsx', f.path], label: `Run ${name}` };
+    if (e === 'py') return { kind: 'python', path: f.path, label: `Run ${name}` };
+    if (e === 'html' || e === 'htm') return { kind: 'node', cmd: 'npx', args: ['-y', 'http-server', '-c-1', '-p', '8080', '.'], server: f.path, port: 8080, label: `Preview ${name}` };
+    return null;
+  };
+  const scripts = pkg && pkg.scripts && typeof pkg.scripts === 'object' ? Object.keys(pkg.scripts) : [];
+  const scriptSpec = n => ({ kind: 'node', cmd: 'npm', args: ['run', n], label: `npm run ${n}` });
+  const mainSpec = specFor(activeFile) || (scripts.includes('dev') ? scriptSpec('dev') : scripts.includes('start') ? scriptSpec('start') : null);
+  const openPanel = tab => { setPanel(p => ({ ...p, open: true })); if (tab) setPanelTab(tab); };
+  const runSpec = spec => {
+    if (!spec) return;
+    flush();
+    openPanel('output');
+    // The panel mounts with the first open; wait a frame for it.
+    requestAnimationFrame(() => requestAnimationFrame(() => runRef.current?.run({ ...spec })));
+  };
+  runKey.current = () => (running ? runRef.current?.stop() : runSpec(mainSpec));
+  const runMenu = anchor => popup(anchor, [
+    ...(specFor(activeFile) ? [{ label: specFor(activeFile).label, note: 'The open file', act: () => runSpec(specFor(activeFile)) }] : []),
+    ...(pkg ? [{ label: 'npm install', note: 'Install the packages in package.json', act: () => runSpec({ kind: 'node', cmd: 'npm', args: ['install'], label: 'npm install' }) }] : []),
+    ...scripts.map(n => ({ label: `npm run ${n}`, note: String(pkg.scripts[n]).slice(0, 60), act: () => runSpec(scriptSpec(n)) })),
+    ...(specFor(activeFile) || pkg ? ['-'] : []),
+    { label: 'Open a terminal', note: 'Node.js shell: node, npm, npx, yarn, pnpm', act: () => openPanel('terminal') },
+    { label: 'Open the Python prompt', note: 'Python with pip install', act: () => openPanel('python') },
+  ]);
+
+  // Drag the panel's top edge to resize it.
+  const dragPanel = e => {
+    e.preventDefault();
+    const y0 = e.clientY, h0 = panel.h, host = e.currentTarget.closest('.cw-editor');
+    const max = Math.max(120, (host ? host.clientHeight : 600) - 80);
+    const move = ev => setPanel(p => ({ ...p, h: Math.max(100, Math.min(max, h0 + y0 - ev.clientY)) }));
+    const up = () => { removeEventListener('pointermove', move); removeEventListener('pointerup', up); };
+    addEventListener('pointermove', move); addEventListener('pointerup', up);
+  };
+
   const nodeMenu = (anchor, node) => popup(anchor, node.type === 'dir' ? [
     { label: 'New file', act: () => newFile(node.path) },
     { label: 'New folder', act: () => newFolder(node.path) },
@@ -299,6 +388,8 @@ export default function CodeWorkspace({ file, update, visible }) {
       if (mod && k === 'p') { e.preventDefault(); setQuick(''); }
       else if (mod && k === 'b' && !e.shiftKey) { e.preventDefault(); setExplorer(x => !x); }
       else if (mod && k === 's' && !e.target.closest?.('.monaco-editor')) { e.preventDefault(); flushRef.current(); toast('Saved'); }
+      else if (mod && (e.key === '`' || e.code === 'Backquote')) { e.preventDefault(); setPanel(p => ({ ...p, open: !p.open })); }
+      else if (e.key === 'F5' && !e.shiftKey) { e.preventDefault(); runKey.current(); }
     };
     document.addEventListener('keydown', key);
     return () => document.removeEventListener('keydown', key);
@@ -348,7 +439,8 @@ export default function CodeWorkspace({ file, update, visible }) {
         )}
 
         <section className="cw-editor">
-          {open.length > 0 && (
+          {files.length > 0 && (
+          <div className="cw-tabbar">
             <div className="cw-tabs" role="tablist" aria-label="Open files">
               {open.map(id => {
                 const f = byId.get(id);
@@ -364,12 +456,26 @@ export default function CodeWorkspace({ file, update, visible }) {
                 );
               })}
             </div>
+            <div className="cw-actions">
+              <div className="cw-run">
+                <button className="cw-runbtn" onClick={() => (running ? runRef.current?.stop() : runSpec(mainSpec))} disabled={!running && !mainSpec}
+                  title={running ? 'Stop the running program' : mainSpec ? `${mainSpec.label}  F5` : 'Open a .js, .ts, .py or .html file, or add scripts to package.json, to run it'}>
+                  {running ? <><i className="cw-stop" aria-hidden="true" />Stop</> : <><i className="cw-play" aria-hidden="true" />Run</>}
+                </button>
+                <button className="cw-runmore" aria-label="More ways to run" aria-haspopup="menu" onClick={e => runMenu(e.currentTarget)}>▾</button>
+              </div>
+              <button className="cw-ib" aria-pressed={panel.open} title="Toggle the panel  Ctrl `" aria-label="Toggle the panel" onClick={() => setPanel(p => ({ ...p, open: !p.open }))}>
+                <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 14h18M7 17h4" /></svg>
+              </button>
+            </div>
+          </div>
           )}
           {activeFile && (
             <div className="cw-crumbs" aria-label="Path">
               {activeFile.path.split('/').map((p, i, a) => <span key={i}>{p}{i < a.length - 1 && <i>›</i>}</span>)}
             </div>
           )}
+          <div className="cw-code">
           <div className="cw-host" ref={hostRef} style={{ visibility: activeFile ? 'visible' : 'hidden' }} />
           {!activeFile && (
             <div className="cw-welcome">
@@ -379,10 +485,18 @@ export default function CodeWorkspace({ file, update, visible }) {
                 <div className="cw-start">
                   <button className="btn dark" onClick={() => newFile()}>New file</button>
                   <button className="btn" onClick={() => uploadRef.current?.click()}>Open files from your computer</button>
-                  {!files.length && <button className="btn" onClick={() => addFiles(SAMPLE.map(x => ({ ...x })), 'first')}>Start from a sample</button>}
+                  {!files.length && <button className="btn" aria-haspopup="menu" onClick={e => popup(e.currentTarget, Object.values(SAMPLES).map(x => ({ label: x.label, act: () => addFiles(x.files.map(f => ({ ...f })), 'first') })))}>Start from a sample ▾</button>}
                 </div>
               )}
               {files.length > 0 && <p className="cw-hint">Or pick a file in the explorer. <kbd>Ctrl P</kbd> finds files by name.</p>}
+            </div>
+          )}
+          </div>
+          {panel.open && (
+            <div className="cw-panel" style={{ height: panel.h }}>
+              <div className="cw-grip" onPointerDown={dragPanel} role="separator" aria-orientation="horizontal" aria-label="Resize the panel" />
+              <RunPanel ref={runRef} fileId={file.id} files={files} theme={theme} tab={panelTab} setTab={setPanelTab}
+                onBack={onBack} onBusy={setRunning} onClose={() => setPanel(p => ({ ...p, open: false }))} />
             </div>
           )}
         </section>
@@ -397,6 +511,7 @@ export default function CodeWorkspace({ file, update, visible }) {
           <span>UTF-8</span>
           {monaco && <button onClick={e => langMenu(e.currentTarget)} title="Change the language">{langName}</button>}
         </>)}
+        <button onClick={() => setPanel(p => ({ ...p, open: !p.open }))} title="Toggle the panel  Ctrl `">{running ? 'Running…' : 'Terminal'}</button>
         <button onClick={() => setQuick('')} title="Go to file  Ctrl P">Go to file</button>
       </footer>
 

@@ -6,3 +6,11 @@
   from = "/*"
   to = "/index.html"
   status = 200
+
+# Cross-origin isolation, which running code in the Code view needs (WebContainers for Node.js,
+# and stopping Python). "credentialless" still lets cross-origin fonts and images load.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Cross-Origin-Opener-Policy = "same-origin"
+    Cross-Origin-Embedder-Policy = "credentialless"
