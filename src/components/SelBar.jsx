@@ -50,6 +50,8 @@ export default function SelBar({ shapes, single, act }) {
   const all = f => shapes.every(f);
   const links = all(isLink), boxes = all(isBox), first = shapes[0];
   const colorable = shapes.some(x => x.t !== 'image');
+  // Group unless the selection is already exactly one group; ungroup if anything selected is grouped.
+  const grouped = shapes.some(x => x.gid), canGroup = shapes.length > 1 && !(first.gid && all(x => x.gid === first.gid));
   const toggle = (k, e) => { const b = e.currentTarget; setStrokePal(false); setPop(p => (p && p.k === k ? null : { k, x: b.offsetLeft })); };
 
   // Close the panel on a click elsewhere (menus opened from it don't count) or Escape.
@@ -96,6 +98,8 @@ export default function SelBar({ shapes, single, act }) {
         : [{ label: 'Convert to code', note: 'Boxes become nodes, arrows connections', icon: IC.braces, items: kinds.map((x, i) => (Object.keys(TYPES)[i] === type ? { ...x, on: true } : x)) }];
     })() : []),
     '-',
+    ...(canGroup ? [{ label: 'Group', icon: IC.group, kbd: 'Ctrl G', act: act.group }] : []),
+    ...(grouped ? [{ label: 'Ungroup', icon: IC.ungroup, kbd: 'Ctrl ⇧ G', act: act.ungroup }] : []),
     { label: 'Create Figure', icon: IC.figurePlus, kbd: '⇧ F', act: act.figure },
     '-',
     { label: 'Change Order', icon: IC.layers, items: [

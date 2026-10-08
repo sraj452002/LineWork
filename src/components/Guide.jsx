@@ -176,12 +176,14 @@ function appGuide() {
         <li>Drag an <b>arrow</b> from one box to another and it stays attached when they move.</li>
         <li><b>+</b> at the top of the toolbar (or <K>/</K>) opens <b>Insert</b>: shapes, 2,000+ icons (general icons, tech logos and cloud provider logos, all searchable), phone/tablet/desktop/browser frames, figures, code blocks, images and the diagram catalogue.</li>
         <li>Select something to get a toolbar at the bottom. For shapes: <b>Shape</b> swaps between 11 shapes (rectangle, pill, star and so on); <b>Fill and style</b> sets the colour (or a custom one), a tinted, solid or no fill, and a plain, shadow or watercolor look; <b>Stroke</b> sets dashed, the border colour and thickness (S, M, L, XL). For lines: colour, curved/elbow/straight, thickness and arrowheads. <b>⋯</b> copies as PNG or SVG, copies and pastes styles, exports the selection, wraps it in a figure and changes the stacking order.</li>
+        <li><b>Group</b> several objects (<K>Ctrl G</K>, or <b>Group</b> in the <b>⋯</b> menu) so they select and move together. Click a group again to pick one object inside it; <K>Ctrl Shift G</K> ungroups.</li>
         <li>To edit a shape's text, select it and press <K>Enter</K>, or choose <b>Edit text</b> from the <b>⋯</b> menu on the toolbar.</li>
       </ul>
       <h4>Moving around</h4>
       <ul className="gkeys">
         <li><K>Space + drag</K> Pan</li><li><K>+</K> <K>−</K> Zoom</li><li><K>Shift 1</K> Fit</li><li><K>Shift 0</K> 100%</li>
         <li><K>Ctrl Z</K> Undo</li><li><K>Ctrl Y</K> Redo</li><li><K>Ctrl A</K> Select all</li><li><K>Ctrl D</K> Duplicate</li>
+        <li><K>Ctrl G</K> Group</li><li><K>Ctrl Shift G</K> Ungroup</li>
       </ul>
       <p>Press <K>?</K> on the canvas any time for the full shortcut list.</p>
     </> },
