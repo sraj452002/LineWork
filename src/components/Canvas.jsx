@@ -12,7 +12,7 @@ import { esc, rid, slug, trunc } from '../lib/utils.js';
 import {
   DEVICES, KEEP_RATIO, SHAPE_LIST, bbox, contains, drawn, dropDeadLinks, editBox, handlesMarkup,
   brandColor, hasText, icons, isBox, shapesDoc, isLink, make, marqueeMarkup, measure, moved, outlinesMarkup, overlaps, resized, resolveLinks, selKey,
-  shapeAt, shapeBounds, shapeIcon, shapesMarkup, targetMarkup, unionBox,
+  shapeAt, shapeBounds, shapeIcon, shapesMarkup, targetMarkup, unionBox, groupMarkup,
 } from '../lib/shapes.js';
 import { IC, Ico, InsertPanel, TOOL_KEYS, Toolbar } from './Toolbar.jsx';
 import AIChat, { KINDS } from './AIChat.jsx';
@@ -100,7 +100,7 @@ const STYLE_KEYS = { link: ['c', 'sw', 'dash', 'route', 'h0', 'anim'], box: ['c'
 const SHORTCUTS = [
   ['Tools', [['V', 'Select'], ['H', 'Hand'], ['R', 'Rectangle'], ['O', 'Ellipse'], ['A', 'Arrow'], ['L', 'Line'], ['D', 'Draw'], ['T', 'Text'], ['I', 'Icon'], ['F', 'Frame'], ['C', 'Comment']]],
   ['Canvas', [['/', 'Insert menu'], ['Ctrl J', 'Ask AI'], ['Space + drag', 'Pan'], ['+  −', 'Zoom in / out'], ['Shift 1', 'Zoom to fit'], ['Shift 0', 'Zoom to 100%'], ['Ctrl Z', 'Undo'], ['Ctrl Y', 'Redo']]],
-  ['Selection', [['Shift + drag', 'Select an area'], ['Shift + click', 'Add or remove'], ['Ctrl A', 'Select all'], ['Ctrl D', 'Duplicate'], ['Delete', 'Delete'], ['Enter', 'Edit text'], ['Arrow keys', 'Nudge (Shift: 10px)'], ['Esc', 'Deselect / cancel']]],
+  ['Selection', [['Shift + drag', 'Select an area'], ['Shift + click', 'Add or remove'], ['Ctrl A', 'Select all'], ['Ctrl D', 'Duplicate'], ['Ctrl G', 'Group'], ['Ctrl Shift G', 'Ungroup'], ['Delete', 'Delete'], ['Enter', 'Edit text'], ['Arrow keys', 'Nudge (Shift: 10px)'], ['Esc', 'Deselect / cancel']]],
   ['Arrange and copy', [['[  ]', 'Send to back / bring to front'], ['Ctrl [  ]', 'Send backward / bring forward'], ['Shift F', 'Wrap in a figure'], ['Shift Alt C', 'Copy as PNG'], ['Ctrl Alt C', 'Copy styles'], ['Ctrl Alt V', 'Paste styles']]],
   ['Table columns', [['Click a row', 'Select a column'], ['↑  ↓', 'Previous / next column'], ['Alt ↑  ↓', 'Move the column'], ['Enter', 'Rename the column'], ['Delete', 'Delete the column'], ['Esc', 'Back to the whole table']]],
 ];
@@ -166,6 +166,12 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
   const selS = selection.length === 1 && selShapes.length === 1 ? selShapes[0] : null;
   const sel = selection.length === 1 && selNodes.length === 1 ? selNodes[0] : null;
   const editS = editing ? shapes.find(s => s.id === editing) || null : null;
+  // Groups: shapes that share a `gid` select and move together. groupOf gives every key in key's group.
+  const groupOf = key => {
+    const s = shapes.find(x => x.id === key);
+    return s && s.gid ? shapes.filter(x => x.gid === s.gid).map(x => x.id) : [key];
+  };
+  const withGroups = keys => [...new Set(keys.flatMap(groupOf))];
   useEffect(() => { if (selection.length) setDiagSel(false); }, [selection]);
   // The code editor and AI chat share the right-hand side, so opening one closes the other.
   useEffect(() => { if (drawer && aiOpen) onAIOpen(false); }, [drawer]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -180,8 +186,11 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
     if (editing) return '';
     const k = view.k;
     let m = selS ? handlesMarkup(selS, k)
-      : selection.length > 1 ? outlinesMarkup([...selShapes.map(bbox), ...selNodes.map(nodeRect).filter(Boolean)], k) : '';
+      : selection.length > 1 ? outlinesMarkup([...selShapes.filter(s => !s.gid).map(bbox), ...selNodes.map(nodeRect).filter(Boolean)], k) : ''; // groups get one box, below
     // A light frame around the diagram, highlighted while the diagram is selected.
+    // A box around each group with a selected member.
+    const gids = [...new Set(selShapes.map(s => s.gid).filter(Boolean))];
+    if (gids.length) m = groupMarkup(gids.map(g => shapes.filter(s => s.gid === g).map(bbox).reduce((u, r) => unionBox(u, r), null)), k) + m;
     if (diagBox) m = `<rect x="${diagBox.x - 14}" y="${diagBox.y - 14}" width="${diagBox.w + 28}" height="${diagBox.h + 28}" rx="${10 / k}" fill="none" stroke="${diagSel ? C.hi : C.line}" stroke-width="${(diagSel ? 2.5 : 1.2) / k}" pointer-events="none"/>` + m;
     if (marquee) m += marqueeMarkup(marquee, k);
     if (target) m += targetMarkup(target, k);
@@ -207,6 +216,10 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
   const putShapes = (next, record = true) => {
     // o0/o1 are drawing hints that resolveLinks adds to elbow lines; don't save them.
     next = dropDeadLinks(next).map(s => ('o0' in s || 'o1' in s ? (({ o0, o1, ...rest }) => rest)(s) : s));
+    // A group needs two or more members; drop the gid from any left on its own.
+    const members = {};
+    next.forEach(s => { if (s.gid) members[s.gid] = (members[s.gid] || 0) + 1; });
+    next = next.map(s => (s.gid && members[s.gid] < 2 ? (({ gid, ...rest }) => rest)(s) : s));
     // Update the ref now so a second change in the same event builds on this one.
     dRef.current = { ...dRef.current, shapes: next };
     updateDiagram(x => { x.shapes = next; });
@@ -446,8 +459,10 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
     const src = baseShapes().filter(s => selSet.has(s.id));
     if (!src.length) return;
     const map = new Map(src.map(s => [s.id, rid('s')]));
+    const gmap = new Map(src.filter(s => s.gid).map(s => [s.gid, rid('g')]));
     const copies = src.map(s => {
       const c = { ...moved(s, 24, 24), id: map.get(s.id) };
+      if (c.gid) c.gid = gmap.get(c.gid); // copies form their own group
       // Copied arrows stay attached only to copied shapes.
       ['a0', 'a1'].forEach(k => { if (c[k]) { if (c[k].s && map.has(c[k].s)) c[k] = { s: map.get(c[k].s) }; else delete c[k]; } });
       return c;
@@ -466,6 +481,21 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
     if (up) { for (let i = a.length - 2; i >= 0; i--) if (on(a[i]) && !on(a[i + 1])) [a[i], a[i + 1]] = [a[i + 1], a[i]]; }
     else { for (let i = 1; i < a.length; i++) if (on(a[i]) && !on(a[i - 1])) [a[i - 1], a[i]] = [a[i], a[i - 1]]; }
     putShapes(a);
+  };
+  // Group the selected shapes (any groups among them merge into the new one), keeping them
+  // together in the stack where the topmost of them was.
+  const groupSel = () => {
+    if (selShapes.length < 2) return;
+    const gid = rid('g'), all = baseShapes(), on = x => selSet.has(x.id);
+    let top = -1;
+    all.forEach((x, i) => { if (on(x)) top = i; });
+    putShapes([...all.slice(0, top + 1).filter(x => !on(x)), ...all.filter(on).map(x => ({ ...x, gid })), ...all.slice(top + 1)]);
+  };
+  // Break up every group that has a selected member; the shapes stay selected.
+  const ungroupSel = () => {
+    const gids = new Set(selShapes.map(s => s.gid).filter(Boolean));
+    if (!gids.size) return;
+    putShapes(baseShapes().map(x => (gids.has(x.gid) ? (({ gid, ...rest }) => rest)(x) : x)));
   };
   // Wrap the selection in a labelled frame.
   const createFigure = () => {
@@ -583,25 +613,26 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
   const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y), mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
 
   // Start dragging the given selection (shapes and diagram nodes move together).
-  const startMove = (keys, key, w, at) => {
+  const startMove = (keys, key, w, at, drill = false) => {
     drag.current = {
-      t: 'move', key, keys: new Set(keys), a: w, shapes: baseShapes(),
+      t: 'move', key, drill, keys: new Set(keys), a: w, shapes: baseShapes(),
       nodes: keys.filter(k => k.startsWith(NODE)).map(k => k.slice(NODE.length)).filter(id => ids.has(id)).map(id => ({ id, p: ctx.P(id) })),
       ...at,
     };
     setGrabbing(true);
   };
-  // Click (or shift-click) on a shape or node.
+  // Click (or shift-click) on a shape or node. A grouped shape brings its whole group.
   const pickItem = (key, e, w, at) => {
+    const g = groupOf(key);
     if (e.shiftKey) {
-      const next = selSet.has(key) ? selection.filter(k => k !== key) : [...selection, key];
+      const next = selSet.has(key) ? selection.filter(k => !g.includes(k)) : [...new Set([...selection, ...g])];
       setSelection(next);
       if (next.includes(key)) startMove(next, null, w, at);
       return;
     }
-    const keys = selSet.has(key) ? selection : [key];
-    if (!selSet.has(key)) setSelection(keys);
-    startMove(keys, key, w, at);
+    if (selSet.has(key)) { startMove(selection, key, w, at, true); return; }
+    setSelection(g);
+    startMove(g, key, w, at);
   };
 
   const onPointerDown = e => {
@@ -768,7 +799,7 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
       setMarquee(r);
       const hit = shapes.filter(s => (s.t === 'frame' ? contains(r, bbox(s)) : overlaps(r, bbox(s)))).map(s => s.id);
       if (E.draggable) ids.forEach(id => { const nr = nodeRect(id); if (nr && overlaps(r, nr)) hit.push(NODE + id); });
-      setSelection([...new Set([...dr.keep, ...hit])]);
+      setSelection(withGroups([...dr.keep, ...hit]));
     } else setView(v => ({ ...v, x: dr.vx + dx, y: dr.vy + dy }));
   };
   const onPointerEnd = e => {
@@ -789,7 +820,11 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
           if (dr.pos) { const pos = dr.pos; updateDiagram(x => { x.manual = { ...(x.manual || {}), ...pos }; }); }
           setDragManual(null);
         } else {
-          if (dr.key && selection.length > 1) setSelection([dr.key]); // plain click inside a group picks one
+          // A plain click inside a multi-selection picks that object (or its group);
+          // clicking a group that's already selected picks the one object inside it.
+          const g = dr.key ? groupOf(dr.key) : [];
+          if (dr.key && selection.length > g.length) setSelection(g);
+          else if (dr.drill && g.length > 1 && selection.length === g.length && g.every(k => selSet.has(k))) setSelection([dr.key]);
           // A click on a table row selects that column; a click on the header selects the whole table.
           if (dr.key && dr.key.startsWith(NODE)) setSelField(dr.field || null);
         }
@@ -825,6 +860,7 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
       if (mod && k === 'y') { e.preventDefault(); redo(); return; }
       if (mod && k === 'a') { e.preventDefault(); selectAll(); return; }
       if (mod && k === 'd' && selShapes.length) { e.preventDefault(); duplicateSel(); return; }
+      if (mod && k === 'g' && selShapes.length) { e.preventDefault(); e.shiftKey ? ungroupSel() : groupSel(); return; }
       if (field) {
         const cols = ctx.m.tables.get(field.t).fields.map(x => x.name), i = cols.indexOf(field.f);
         if (e.key === 'Escape') { setSelField(null); return; }
@@ -1169,7 +1205,7 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
         <SelBar shapes={selShapes} single={selS} act={{
           patch: patchSel, edit: startEdit, comment: addComment, route: setRoute,
           straighten: () => putShapes(baseShapes().map(x => (selSet.has(x.id) ? { ...x, pts: [x.pts[0], x.pts[x.pts.length - 1]] } : x))),
-          order: reorder, step, figure: createFigure, duplicate: duplicateSel, remove: removeSel,
+          order: reorder, step, figure: createFigure, duplicate: duplicateSel, remove: removeSel, group: groupSel, ungroup: ungroupSel,
           copyPng, copySvg, exportPng, copyStyles, pasteStyles,
           convert: selShapes.some(x => drawn.includes(x)) ? { hasCode: !!d.code.trim(), type: d.type, run: (t, newTab) => convertDrawing(t, selShapes, newTab) } : null,
         }} />

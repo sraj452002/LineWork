@@ -40,6 +40,8 @@ export const IC = {
   copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5.5A1.5 1.5 0 0 0 14.5 4h-9A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8"/>',
   download: '<path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M4.5 19.5h15"/>',
   figurePlus: '<path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M12 4h1M4 12v1M4 17v1.5A1.5 1.5 0 0 0 5.5 20H8M12 20h1M17 4h1.5A1.5 1.5 0 0 1 20 5.5V8M20 12v1"/><path d="M18 16v6M15 19h6"/>',
+  group: '<rect x="3" y="3" width="18" height="18" rx="2" stroke-dasharray="3 2.5"/><rect x="6.5" y="6.5" width="6" height="5" rx="1"/><rect x="11.5" y="12.5" width="6" height="5" rx="1"/>',
+  ungroup: '<rect x="3" y="3" width="9" height="8" rx="1.5"/><rect x="12" y="13" width="9" height="8" rx="1.5"/>',
   layers: '<path d="M12 3 3 8l9 5 9-5zM3 12.5l9 5 9-5M3 17l9 5 9-5"/>',
   braces: '<path d="M8.5 4C6.5 4 6 5 6 7v2c0 1.6-1 2.6-2.2 3 1.2.4 2.2 1.4 2.2 3v2c0 2 .5 3 2.5 3M15.5 4c2 0 2.5 1 2.5 3v2c0 1.6 1 2.6 2.2 3-1.2.4-2.2 1.4-2.2 3v2c0 2-.5 3-2.5 3"/>',
   caret: '<path d="m8 10 4 4 4-4"/>',

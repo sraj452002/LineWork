@@ -106,6 +106,51 @@ test('draw a box, style it, and convert the drawing to code', async ({ page }) =
   await expect(page.locator('#code')).toHaveValue(/orders-db \[Orders DB\] database/);
 });
 
+test('group and ungroup shapes', async ({ page }) => {
+  await page.getByRole('button', { name: 'Create a Blank File' }).click();
+  const svg = page.locator('#svg'), shapes = page.locator('g[data-shape]');
+  const empty = () => svg.click({ position: { x: 1000, y: 700 } });
+  const one = page.getByRole('toolbar', { name: 'Selected object' }), two = page.getByRole('toolbar', { name: '2 objects selected' });
+  for (const x of [400, 700]) { await page.keyboard.press('r'); await svg.click({ position: { x, y: 300 } }); }
+  await expect(shapes).toHaveCount(2);
+  await shapes.nth(0).click();
+  await shapes.nth(1).click({ modifiers: ['Shift'] });
+  await expect(two).toBeVisible();
+  await page.keyboard.press('Control+g');
+
+  // A click on one member selects the whole group; a second click picks just that one.
+  await empty();
+  await shapes.nth(0).click();
+  await expect(two).toBeVisible();
+  await page.waitForTimeout(450); // not a double-click
+  await shapes.nth(0).click();
+  await expect(one).toBeVisible();
+
+  // Dragging one member moves the group.
+  await empty();
+  const before = await shapes.nth(1).boundingBox();
+  const a = await shapes.nth(0).boundingBox();
+  await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(a.x + a.width / 2 + 60, a.y + a.height / 2 + 40, { steps: 5 });
+  await page.mouse.up();
+  const after = await shapes.nth(1).boundingBox();
+  expect(Math.round(after.x - before.x)).toBeGreaterThan(30);
+
+  // Ungroup from the menu: members select on their own again.
+  await two.getByRole('button', { name: 'More' }).click();
+  await page.getByRole('menuitem', { name: /^Ungroup/ }).click();
+  await empty();
+  await shapes.nth(0).click();
+  await expect(one).toBeVisible();
+
+  // Undo brings the group back.
+  await page.keyboard.press('Control+z');
+  await empty();
+  await shapes.nth(1).click();
+  await expect(two).toBeVisible();
+});
+
 test('icon picker loads the big icon set', async ({ page }) => {
   await page.getByRole('button', { name: 'Create a Blank File' }).click();
   await page.keyboard.press('/');

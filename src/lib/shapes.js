@@ -384,6 +384,10 @@ export const selKey = a => (a.s ? a.s : 'n:' + a.n);
 export function outlinesMarkup(rects, k){
   return rects.map(r => `<rect x="${r.x - 5/k}" y="${r.y - 5/k}" width="${r.w + 10/k}" height="${r.h + 10/k}" rx="${4/k}" fill="none" stroke="${C.ink}" stroke-width="${1.4/k}" stroke-dasharray="${4/k} ${3/k}" pointer-events="none"/>`).join('');
 }
+// The outline around a group: solid, so it reads apart from the dashed per-object outlines.
+export function groupMarkup(rects, k){
+  return rects.filter(Boolean).map(r => `<rect x="${r.x - 9/k}" y="${r.y - 9/k}" width="${r.w + 18/k}" height="${r.h + 18/k}" rx="${6/k}" fill="none" stroke="${C.hi}" stroke-width="${1.4/k}" pointer-events="none"/>`).join('');
+}
 export function marqueeMarkup(r, k){
   return `<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" fill="${C.hi}" fill-opacity=".1" stroke="${C.hi}" stroke-width="${1.2/k}" pointer-events="none"/>`;
 }
