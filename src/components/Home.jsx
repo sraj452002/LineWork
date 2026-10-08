@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { TEMPLATES, TYPES, dg, newFile } from '../lib/engines.js';
+import { TEMPLATES, TYPES, dg, newFile, thumb } from '../lib/engines.js';
 import { LANG, NO_AI, copyFor, sampleP } from '../lib/ai.js';
 import { ago, rid } from '../lib/utils.js';
 import { Brand, useUI } from './ui.jsx';
@@ -32,6 +32,15 @@ const COLS = [
   { key: 'diagrams', label: 'Diagrams', cls: 'c-num' },
 ];
 const WEEK = 7 * 864e5;
+const greeting = () => { const h = new Date().getHours(); return h < 5 ? 'Working late' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'; };
+// A small preview of a file's first diagram, cached until the file or the theme changes.
+const thumbs = new Map();
+function fileThumb(f, theme) {
+  const d = f.diagrams.find(x => (x.code && x.code.trim()) || (x.shapes && x.shapes.length));
+  const key = f.id + ':' + f.updated + ':' + theme;
+  if (!thumbs.has(key)) { try { thumbs.set(key, d ? thumb(d) : ''); } catch (e) { thumbs.set(key, ''); } }
+  return thumbs.get(key);
+}
 
 const typing = e => {
   const t = e.target;
@@ -39,7 +48,7 @@ const typing = e => {
 };
 
 export default function Home({ files, folders, setFolders, account, saveState, onOpen, onCreate, onUpdate, onRename, onDuplicate, onDelete, onSignOut, onGuide }) {
-  const { popup, ask, toast } = useUI();
+  const { popup, ask, toast, theme } = useUI();
   const [q, setQ] = useState('');
   const [view, setView] = useState('all'); // 'all' | 'archive' | folder id
   const [tab, setTab] = useState('all'); // 'all' | 'recent'
@@ -256,22 +265,27 @@ Reply with ONLY a JSON object: {"title": "...", "doc": "...", "diagrams": [...]}
             <div className="avatar" title={who}>{initial}</div>
           </header>
 
+          <div className="hello">
+            <h1>{greeting()}{account && (account.name || account.userMetadata?.full_name) ? ', ' + String(account.name || account.userMetadata.full_name).split(' ')[0] : ''}</h1>
+            <p>{files.length ? 'Pick up where you left off, or start something new.' : 'Start a design: a diagram, a doc, and the code that goes with them.'}</p>
+          </div>
+
           <div className="actions">
-            <button className="action" onClick={() => createFrom(TEMPLATES[0])}>
-              <Ico d={IC.plus} size={44} /><span>Create a Blank File</span>
+            <button className="action a-blue" aria-label="Create a Blank File" onClick={() => createFrom(TEMPLATES[0])}>
+              <i className="a-ico"><Ico d={IC.plus} size={24} /></i><span>Create a Blank File</span><small>An empty doc and canvas</small>
             </button>
-            <button className={'action' + (busy ? ' working' : '')} onClick={generate}>
-              <Ico d={IC.sparkle} size={44} /><span className={busy ? 'busy' : undefined}>{busy ? 'Generating… click to stop' : 'Generate an AI Diagram'}</span>
+            <button className={'action a-purple' + (busy ? ' working' : '')} aria-label={busy ? 'Generating, click to stop' : 'Generate an AI Diagram'} onClick={generate}>
+              <i className="a-ico"><Ico d={IC.sparkle} size={24} /></i><span className={busy ? 'busy' : undefined}>{busy ? 'Generating… click to stop' : 'Generate an AI Diagram'}</span><small>Describe a system, AI draws it</small>
             </button>
-            <button className="action" onClick={() => doc && createFrom(doc)}>
-              <Ico d={IC.doc} size={44} /><span>Write a Design Doc</span>
+            <button className="action a-green" aria-label="Write a Design Doc" onClick={() => doc && createFrom(doc)}>
+              <i className="a-ico"><Ico d={IC.doc} size={24} /></i><span>Write a Design Doc</span><small>Sections ready to fill in</small>
             </button>
-            <button className="action" aria-haspopup="menu" onClick={e => popup(e.currentTarget, TEMPLATES.filter(t => t.key !== 'blank' && t.key !== 'doc').map(t => ({ label: t.name, note: t.note, act: () => createFrom(t) })))}>
-              <Ico d={IC.layers} size={44} /><span>Start from a Template</span>
+            <button className="action a-orange" aria-label="Start from a Template" aria-haspopup="menu" onClick={e => popup(e.currentTarget, TEMPLATES.filter(t => t.key !== 'blank' && t.key !== 'doc').map(t => ({ label: t.name, note: t.note, act: () => createFrom(t) })))}>
+              <i className="a-ico"><Ico d={IC.layers} size={24} /></i><span>Start from a Template</span><small>Architecture, flows, schemas</small>
             </button>
           </div>
 
-          <h1 className="list-title">{heading}</h1>
+          <h2 className="list-title">{heading}</h2>
           {!list.length ? <div className="nofiles">{empty}</div> : (
             <table className="ftable">
               <thead>
@@ -292,7 +306,10 @@ Reply with ONLY a JSON object: {"title": "...", "doc": "...", "diagrams": [...]}
                 {list.map(f => (
                   <tr key={f.id} tabIndex={0} onClick={() => onOpen(f.id)}
                     onKeyDown={e => { if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) { e.preventDefault(); onOpen(f.id); } }}>
-                    <td className="c-name">{f.title || 'Untitled'}</td>
+                    <td className="c-name"><span className="f-cell">
+                      <span className="f-thumb" aria-hidden="true" dangerouslySetInnerHTML={{ __html: fileThumb(f, theme) || '' }} />
+                      <span className="f-name">{f.title || 'Untitled'}<small>{f.diagrams.map(x => TYPES[x.type]?.name).filter((v, i, a) => v && a.indexOf(v) === i).join(' · ')}{f.code?.files?.length ? ` · ${f.code.files.length} code file${f.code.files.length === 1 ? '' : 's'}` : ''}</small></span>
+                    </span></td>
                     <td className="c-loc">{folderName(f.folder) || <span className="dash-mark">—</span>}</td>
                     <td className="c-date" title={new Date(f.created || f.updated).toLocaleString()}>{ago(f.created || f.updated)}</td>
                     <td className="c-date" title={new Date(f.updated).toLocaleString()}>{ago(f.updated)}</td>
