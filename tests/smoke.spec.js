@@ -151,6 +151,48 @@ test('group and ungroup shapes', async ({ page }) => {
   await expect(two).toBeVisible();
 });
 
+test('text alignment and indent on a box', async ({ page }) => {
+  await page.getByRole('button', { name: 'Create a Blank File' }).click();
+  const svg = page.locator('#svg'), shape = page.locator('g[data-shape]').first();
+  await page.keyboard.press('r');
+  await svg.click({ position: { x: 500, y: 300 } });
+  await page.keyboard.press('Enter');
+  // Enter while typing starts a new line.
+  await page.keyboard.type('Orders');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('service');
+  await expect(page.getByRole('textbox', { name: 'Edit text' })).toHaveValue('Orders\nservice');
+  await page.keyboard.press('Escape');
+  await expect(shape.locator('text')).toHaveCount(2);
+  await shape.click();
+  const text = shape.locator('text').first(), box = shape.locator('path, rect').first();
+  const bar = page.getByRole('toolbar', { name: 'Selected object' });
+  await bar.getByRole('button', { name: 'Text alignment and indent' }).click();
+  // Centered and middle by default.
+  await expect(page.getByRole('button', { name: 'Align center' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(text).toHaveAttribute('text-anchor', 'middle');
+
+  await page.getByRole('button', { name: 'Align left' }).click();
+  await expect(text).toHaveAttribute('text-anchor', 'start');
+  const x0 = +(await text.getAttribute('x'));
+  await page.getByRole('button', { name: 'Increase indent' }).click();
+  await expect.poll(async () => +(await text.getAttribute('x'))).toBeGreaterThan(x0);
+  await page.getByRole('button', { name: 'Decrease indent' }).click();
+  await expect.poll(async () => +(await text.getAttribute('x'))).toBe(x0);
+  await page.getByRole('button', { name: 'Align right' }).click();
+  await expect(text).toHaveAttribute('text-anchor', 'end');
+
+  const y = async () => +(await text.getAttribute('y'));
+  const mid = await y();
+  await page.getByRole('button', { name: 'Align top' }).click();
+  await expect.poll(y).toBeLessThan(mid);
+  await page.getByRole('button', { name: 'Align bottom' }).click();
+  await expect.poll(y).toBeGreaterThan(mid);
+  await page.getByRole('button', { name: 'Align middle' }).click();
+  await expect.poll(y).toBe(mid);
+  await expect(box).toBeVisible();
+});
+
 test('icon picker loads the big icon set', async ({ page }) => {
   await page.getByRole('button', { name: 'Create a Blank File' }).click();
   await page.keyboard.press('/');

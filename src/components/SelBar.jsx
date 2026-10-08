@@ -1,10 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { BOX_KINDS, COLOR_NAMES, WIDTHS, colorOf, hasText, isBox, isLink, measure, routeOf, shapeIcon } from '../lib/shapes.js';
+import { BOX_KINDS, COLOR_NAMES, MAX_INDENT, WIDTHS, alignable, colorOf, hasText, isBox, isLink, routeOf, shapeIcon, taOf, textSize, vaOf } from '../lib/shapes.js';
 import { TYPES } from '../lib/engines.js';
 import { IC, Ico } from './Toolbar.jsx';
 import { useUI } from './ui.jsx';
 
 const ROUTES = [['curve', 'Curved', 'rCurve'], ['elbow', 'Elbow', 'rElbow'], ['straight', 'Straight', 'rStraight']];
+const H_ALIGN = [['left', 'Align left', 'alignL'], ['center', 'Align center', 'alignC'], ['right', 'Align right', 'alignR']];
+const V_ALIGN = [['top', 'Align top', 'alignT'], ['middle', 'Align middle', 'alignM'], ['bottom', 'Align bottom', 'alignB']];
 const FILLS = [['tint', 'Tinted fill'], ['solid', 'Solid fill'], ['none', 'No fill']];
 const EFFECTS = [
   ['plain', 'Plain', '<circle cx="12" cy="12" r="7"/>'],
@@ -50,6 +52,8 @@ export default function SelBar({ shapes, single, act }) {
   const all = f => shapes.every(f);
   const links = all(isLink), boxes = all(isBox), first = shapes[0];
   const colorable = shapes.some(x => x.t !== 'image');
+  // Text alignment applies when everything selected is a box, a sticky note or a text object.
+  const textual = all(alignable), vertical = textual && shapes.some(x => x.t !== 'text');
   // Group unless the selection is already exactly one group; ungroup if anything selected is grouped.
   const grouped = shapes.some(x => x.gid), canGroup = shapes.length > 1 && !(first.gid && all(x => x.gid === first.gid));
   const toggle = (k, e) => { const b = e.currentTarget; setStrokePal(false); setPop(p => (p && p.k === k ? null : { k, x: b.offsetLeft })); };
@@ -145,6 +149,30 @@ export default function SelBar({ shapes, single, act }) {
       <Palette value={first.c} none={boxes} noneOn={boxes && all(x => x.fm === 'none')}
         onPick={v => act.patch(v === 'none' ? { fm: 'none' } : boxes && fm === 'none' ? { c: v, fm: 'tint' } : { c: v })} />
     </>);
+  } else if (pop && pop.k === 'text') {
+    const ind = shapes.map(x => x.ind || 0);
+    panel = (<>
+      <div className="spop-row">
+        {H_ALIGN.map(([v, n, ic]) => (
+          <button key={v} className="spop-cell" aria-label={n} title={n} aria-pressed={all(x => taOf(x) === v)}
+            onClick={() => act.text(() => ({ ta: v }))}><Ico d={IC[ic]} /></button>
+        ))}
+      </div>
+      {vertical && (
+        <div className="spop-row">
+          {V_ALIGN.map(([v, n, ic]) => (
+            <button key={v} className="spop-cell" aria-label={n} title={n} aria-pressed={all(x => x.t === 'text' || vaOf(x) === v)}
+              onClick={() => act.text(x => (x.t === 'text' ? {} : { va: v }))}><Ico d={IC[ic]} /></button>
+          ))}
+        </div>
+      )}
+      <div className="spop-row last">
+        <button className="spop-cell" aria-label="Decrease indent" title="Decrease indent" disabled={ind.every(i => i <= 0)}
+          onClick={() => act.text(x => ({ ind: Math.max(0, (x.ind || 0) - 1) || undefined }))}><Ico d={IC.indentDec} /></button>
+        <button className="spop-cell" aria-label="Increase indent" title="Increase indent" disabled={ind.every(i => i >= MAX_INDENT)}
+          onClick={() => act.text(x => ({ ind: Math.min(MAX_INDENT, (x.ind || 0) + 1) }))}><Ico d={IC.indentInc} /></button>
+      </div>
+    </>);
   } else if (pop && pop.k === 'stroke') {
     const sc = first.sc;
     panel = (<>
@@ -186,6 +214,7 @@ export default function SelBar({ shapes, single, act }) {
         }))); }} />
       )}
       {(boxes || links) && <B label="Stroke" icon="width" caret open={pop?.k === 'stroke'} onClick={e => toggle('stroke', e)} />}
+      {textual && <B label="Text alignment and indent" icon={{ left: 'alignL', right: 'alignR' }[taOf(first)] || 'alignC'} caret open={pop?.k === 'text'} onClick={e => toggle('text', e)} />}
       {links && (<>
         <span className="sep" />
         <B label="Arrow at start" icon="headL" pressed={all(x => !!x.h0)} onClick={() => act.patch({ h0: !all(x => !!x.h0) })} />
@@ -194,8 +223,8 @@ export default function SelBar({ shapes, single, act }) {
       </>)}
       {single && single.t === 'text' && (<>
         <span className="sep" />
-        <B label="Smaller text" icon="textSm" onClick={() => { const fs = Math.max(8, (single.fs || 20) - 4); act.patch({ fs, ...measure(single.text, fs) }); }} />
-        <B label="Larger text" icon="textLg" onClick={() => { const fs = Math.min(200, (single.fs || 20) + 4); act.patch({ fs, ...measure(single.text, fs) }); }} />
+        <B label="Smaller text" icon="textSm" onClick={() => { const fs = Math.max(8, (single.fs || 20) - 4); act.patch({ fs, ...textSize(single, single.text, fs) }); }} />
+        <B label="Larger text" icon="textLg" onClick={() => { const fs = Math.min(200, (single.fs || 20) + 4); act.patch({ fs, ...textSize(single, single.text, fs) }); }} />
         <B label="Bold" icon="bold" pressed={!!single.bold} onClick={() => act.patch({ bold: !single.bold })} />
       </>)}
       <span className="sep" />

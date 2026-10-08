@@ -122,12 +122,44 @@ function lines(ls, {x, y, fs, fill, anchor, weight, mono}){
     + (mono ? ` font-family="JetBrains Mono, ui-monospace, monospace" xml:space="preserve" style="white-space:pre"` : '')
     + `>${esc(l)}</text>`).join('');
 }
+/* Text layout on boxes, sticky notes and text objects:
+   ta: 'left' | 'center' | 'right'; va: 'top' | 'middle' | 'bottom' (not for text objects, which fit their text);
+   ind: indent steps, each about 1.6 em, applied to the left edge of every line. */
+export const alignable = s => isBox(s) || s.t === 'sticky' || s.t === 'text';
+export const taOf = s => s.ta || (isBox(s) ? 'center' : 'left');
+export const vaOf = s => s.va || (s.t === 'sticky' ? 'top' : 'middle');
+export const MAX_INDENT = 8;
+const indentPx = (s, fs) => Math.max(0, Math.min(MAX_INDENT, s.ind || 0)) * Math.round(fs * 1.6);
+// x and text-anchor for lines set between left and right.
+const alignX = (ta, left, right) => ta === 'left' ? [left, 'start'] : ta === 'right' ? [right, 'end'] : [(left + right) / 2, 'middle'];
+// A text object's size: its text plus any indent.
+export function textSize(s, text = s.text, fs = s.fs || 20){
+  const m = measure(text || ' ', fs);
+  return {w: m.w + indentPx(s, fs), h: m.h};
+}
+
 // Where text sits inside a box shape, relative to the shape.
 const TF = {ellipse:.72, diamond:.56, triangle:.56, hexagon:.74, para:.76, trapezoid:.74, star:.46, pill:.86};
+// Space kept clear above and below top- or bottom-aligned text, as a fraction of the height.
+const VI = {cylinder:[.17, .06], doc:[.06, .17], triangle:[.44, .04], star:[.32, .24]};
 function inner(s, text){
-  const fs = s.fs || 15, tw = Math.max(24, s.w * (TF[s.t] || 1) - 20), ls = wrap(text, tw, fs);
-  const cy = s.t === 'triangle' ? s.h * .64 : s.t === 'star' ? s.h * .56 : s.t === 'doc' ? s.h * .45 : s.h / 2;
-  return {fs, tw, ls, top: cy - ls.length * fs * LH / 2};
+  const fs = s.fs || 15, full = Math.max(24, s.w * (TF[s.t] || 1) - 20);
+  const ip = Math.min(indentPx(s, fs), full - 24), tw = full - ip, ls = wrap(text, tw, fs), bh = ls.length * fs * LH, va = vaOf(s);
+  let top;
+  if(va === 'middle'){
+    const cy = s.t === 'triangle' ? s.h * .64 : s.t === 'star' ? s.h * .56 : s.t === 'doc' ? s.h * .45 : s.h / 2;
+    top = cy - bh / 2;
+  } else {
+    const e = (1 - (TF[s.t] || 1)) / 2, [a, b] = VI[s.t] || [e, e];
+    top = va === 'top' ? s.h * a + 10 : s.h - s.h * b - 10 - bh;
+  }
+  return {fs, tw, full, ip, ls, top, left:(s.w - full) / 2 + ip, right:(s.w + full) / 2};
+}
+// The same for a sticky note, whose text sits in a 14px margin.
+function stickyText(s, text){
+  const fs = s.fs || 15, ip = Math.min(indentPx(s, fs), s.w - 52), ls = wrap(text, s.w - 28 - ip, fs), bh = ls.length * fs * LH, va = vaOf(s);
+  const top = va === 'top' ? 14 : va === 'bottom' ? s.h - 14 - bh : (s.h - bh) / 2;
+  return {fs, ip, ls, top, left:14 + ip, right:s.w - 14};
 }
 const COMMENT_W = 220, COMMENT_FS = 13;
 function commentCard(s, text){
@@ -295,7 +327,7 @@ export function resized(o, handle, p, ratio){
     return {...o, pts:o.pts.map(([px, py]) => [r0(x + (px - b.x) * sx), r0(y + (py - b.y) * sy)])};
   }
   if(o.t === 'text'){
-    const fs = Math.max(8, Math.min(200, Math.round((o.fs || 20) * h / (b.h || 1)))), m = measure(o.text || ' ', fs);
+    const fs = Math.max(8, Math.min(200, Math.round((o.fs || 20) * h / (b.h || 1)))), m = textSize(o, o.text, fs);
     return {...o, fs, w:m.w, h:m.h, x:r0(p.x < fx ? fx - m.w : fx), y:r0(p.y < fy ? fy - m.h : fy)};
   }
   return {...o, x, y, w, h};
@@ -491,12 +523,15 @@ function one(s, opt){
       break;
     }
     case 'text':
-      m = `<rect width="${w}" height="${h}" fill="transparent"/>` + lines(text.split('\n'), {x:0, y:0, fs:s.fs || 20, fill:col, weight:s.bold ? 700 : 500});
+      {
+        const fs = s.fs || 20, [x, anchor] = alignX(taOf(s), indentPx(s, fs), w - 6);
+        m = `<rect width="${w}" height="${h}" fill="transparent"/>` + lines(text.split('\n'), {x, y:0, fs, fill:col, anchor, weight:s.bold ? 700 : 500});
+      }
       break;
     case 'sticky': {
       const fill = s.c ? col : C.hi, f = 22;
       m = `<path d="M0 0H${w}V${h-f}L${w-f} ${h}H0z" fill="${fill}" fill-opacity="${s.c ? .22 : .6}" stroke="${fill}" stroke-opacity=".5"/><path d="M${w} ${h-f}H${w-f}V${h}" fill="${fill}" fill-opacity=".35" stroke="${fill}" stroke-opacity=".5"/>`;
-      m += lines(wrap(text, w - 28, s.fs || 15), {x:14, y:14, fs:s.fs || 15, fill:C.ink});
+      if(text){ const t = stickyText(s, text), [x, anchor] = alignX(taOf(s), t.left, t.right); m += lines(t.ls, {x, y:t.top, fs:t.fs, fill:C.ink, anchor}); }
       break;
     }
     case 'code': {
@@ -543,7 +578,7 @@ function one(s, opt){
       const wc = s.fx === 'watercolor' ? ' filter="url(#lw-wc)"' : '';
       m += `<g${wc}>${outline(s.t, w, h, `fill="${col}" fill-opacity="${fillA}" ${st}${dash}`, st)}</g>`;
       const ink = fm === 'solid' ? ((lum(col) ?? 0) > .55 ? '#1D2320' : '#FFFFFF') : C.ink;
-      if(text){ const t = inner(s, text); m += lines(t.ls, {x:w/2, y:t.top, fs:t.fs, fill:ink, anchor:'middle', weight:500}); }
+      if(text){ const t = inner(s, text), [x, anchor] = alignX(taOf(s), t.left, t.right); m += lines(t.ls, {x, y:t.top, fs:t.fs, fill:ink, anchor, weight:500}); }
     }
   }
   return `${open} transform="translate(${s.x} ${s.y})">${m}</g>`;
@@ -589,12 +624,12 @@ export function handlesMarkup(s, k){
 // Where the text editor sits for a shape, in world units, so it lines up with the drawn text.
 export function editBox(s, text){
   switch(s.t){
-    case 'text': { const fs = s.fs || 20, m = measure(text || ' ', fs); return {x:s.x, y:s.y, w:m.w + fs * 2, h:m.h + 4, fs, align:'left', color:colorOf(s.c), weight:s.bold ? 700 : 500}; }
+    case 'text': { const fs = s.fs || 20, m = textSize(s, text, fs), ta = taOf(s); return {x:s.x - (ta === 'left' ? 0 : fs), y:s.y, w:Math.max(s.w, m.w) + fs * 2, h:m.h + 4, fs, align:ta, padL:indentPx(s, fs) + (ta === 'left' ? 0 : fs), padX:ta === 'left' ? 0 : fs, color:colorOf(s.c), weight:s.bold ? 700 : 500}; }
     case 'comment': { const c = commentCard(s, text || ' '); return {x:s.x + 36, y:s.y - 2, w:COMMENT_W + 20, h:Math.max(40, c.h + COMMENT_FS * LH), fs:COMMENT_FS, align:'left', pad:7, padX:10, card:true}; }
     case 'frame': return {x:s.x, y:s.y - 30, w:Math.max(200, s.w), h:24, fs:13, align:'left', weight:600, color:colorOf(s.c)};
     case 'code': return {x:s.x + 12, y:s.y + 34, w:s.w - 24, h:s.h - 40, fs:12.5, align:'left', mono:true};
-    case 'sticky': return {x:s.x + 14, y:s.y + 14, w:s.w - 28, h:s.h - 28, fs:s.fs || 15, align:'left'};
+    case 'sticky': { const t = stickyText(s, text || ' '); return {x:s.x, y:s.y, w:s.w, h:s.h, fs:t.fs, align:taOf(s), pad:Math.max(0, t.top), padX:14, padL:t.left}; }
     case 'line': case 'arrow': { const [mx, my] = pathMid(s); return {x:mx - 90, y:my - 12, w:180, h:Math.max(24, wrap(text, 160, 13).length * 13 * LH + 6), fs:13, align:'center', card:true}; }
-    default: { const t = inner(s, text || ' '); return {x:s.x + (s.w - t.tw) / 2, y:s.y, w:t.tw, h:s.h, fs:t.fs, align:'center', pad:Math.max(0, t.top), weight:500}; }
+    default: { const t = inner(s, text || ' '); return {x:s.x + (s.w - t.full) / 2, y:s.y, w:t.full, h:s.h, fs:t.fs, align:taOf(s), pad:Math.max(0, t.top), padL:t.ip, weight:500}; }
   }
 }

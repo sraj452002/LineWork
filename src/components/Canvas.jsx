@@ -12,7 +12,7 @@ import { esc, rid, slug, trunc } from '../lib/utils.js';
 import {
   DEVICES, KEEP_RATIO, SHAPE_LIST, bbox, contains, drawn, dropDeadLinks, editBox, handlesMarkup,
   brandColor, hasText, icons, isBox, shapesDoc, isLink, make, marqueeMarkup, measure, moved, outlinesMarkup, overlaps, resized, resolveLinks, selKey,
-  shapeAt, shapeBounds, shapeIcon, shapesMarkup, targetMarkup, unionBox, groupMarkup,
+  shapeAt, shapeBounds, shapeIcon, shapesMarkup, targetMarkup, unionBox, groupMarkup, textSize,
 } from '../lib/shapes.js';
 import { IC, Ico, InsertPanel, TOOL_KEYS, Toolbar } from './Toolbar.jsx';
 import AIChat, { KINDS } from './AIChat.jsx';
@@ -437,7 +437,7 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
     if (!text && (s.t === 'text' || s.t === 'comment')) { putShapes(base.filter(x => x.id !== id)); setSelection([]); return; }
     if (text === (s.text || '')) return;
     const n = { ...s, text };
-    if (s.t === 'text') Object.assign(n, measure(text, s.fs || 20));
+    if (s.t === 'text') Object.assign(n, textSize(s, text));
     putShapes(base.map(x => (x.id === id ? n : x)));
   };
   const place = (t, extra, at) => {
@@ -449,6 +449,15 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
   const patchSel = p => {
     if (!selShapes.length) return;
     putShapes(baseShapes().map(s => (selSet.has(s.id) ? { ...s, ...p } : s)));
+  };
+  // Text alignment and indent: fn(shape) gives the change for each selected shape; text objects resize to fit.
+  const patchText = fn => {
+    if (!selShapes.length) return;
+    putShapes(baseShapes().map(s => {
+      if (!selSet.has(s.id)) return s;
+      const n = { ...s, ...fn(s) };
+      return n.t === 'text' ? { ...n, ...textSize(n) } : n;
+    }));
   };
   const removeSel = () => {
     if (!selShapes.length) return;
@@ -1098,14 +1107,15 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
           left: view.x + b.x * k, top: view.y + b.y * k, width: b.w * k, height: b.h * k,
           fontSize: b.fs * k, textAlign: b.align, fontWeight: b.weight, color: b.color,
           fontFamily: b.mono ? 'var(--mono)' : undefined, whiteSpace: b.mono ? 'pre' : undefined,
-          paddingTop: (b.pad || 0) * k, paddingLeft: (b.padX || 0) * k, paddingRight: (b.padX || 0) * k,
+          paddingTop: (b.pad || 0) * k, paddingLeft: (b.padL ?? b.padX ?? 0) * k, paddingRight: (b.padX || 0) * k,
         }}
         onFocus={e => { const t = e.target; t.selectionStart = t.selectionEnd = t.value.length; }}
         onChange={e => setDraft(e.target.value)}
         onBlur={finishEdit}
         onKeyDown={e => {
           if (e.key === 'Escape' || (e.key === 'Enter' && (e.metaKey || e.ctrlKey))) { e.preventDefault(); e.target.blur(); }
-          else if (e.key === 'Enter' && !e.shiftKey && editS.t !== 'text' && editS.t !== 'code' && editS.t !== 'sticky' && editS.t !== 'comment') { e.preventDefault(); e.target.blur(); }
+          // Enter starts a new line; a frame's label is one line, so there Enter finishes.
+          else if (e.key === 'Enter' && editS.t === 'frame') { e.preventDefault(); e.target.blur(); }
           else if (e.key === 'Tab' && editS.t === 'code') {
             e.preventDefault();
             const t = e.target, s = t.selectionStart, v = t.value.slice(0, s) + '  ' + t.value.slice(t.selectionEnd);
@@ -1203,7 +1213,7 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
 
       {selShapes.length > 0 && !editing && (
         <SelBar shapes={selShapes} single={selS} act={{
-          patch: patchSel, edit: startEdit, comment: addComment, route: setRoute,
+          patch: patchSel, text: patchText, edit: startEdit, comment: addComment, route: setRoute,
           straighten: () => putShapes(baseShapes().map(x => (selSet.has(x.id) ? { ...x, pts: [x.pts[0], x.pts[x.pts.length - 1]] } : x))),
           order: reorder, step, figure: createFigure, duplicate: duplicateSel, remove: removeSel, group: groupSel, ungroup: ungroupSel,
           copyPng, copySvg, exportPng, copyStyles, pasteStyles,
