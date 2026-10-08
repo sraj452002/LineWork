@@ -2,7 +2,7 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useSta
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
-import { NodeProject, PythonProject, bootNode, interruptPython, isolated, onNode, onPython } from '../lib/runtime.js';
+import { NodeProject, PythonProject, bootNode, bridgeFilter, interruptPython, isolated, nodeEnv, onNode, onPython } from '../lib/runtime.js';
 
 /* The panel under the editor, as in VS Code: Output (what Run prints), Terminal (a Node.js shell
    with npm, npx, yarn and pnpm), Python (an interactive prompt with pip) and Preview (a web server
@@ -36,7 +36,7 @@ function useTerm(hostRef, opts) {
   return { ensure, refit, term: t };
 }
 
-const RunPanel = forwardRef(function RunPanel({ fileId, files, folders, theme, tab, setTab, onBack, onClose, onBusy }, ref) {
+const RunPanel = forwardRef(function RunPanel({ fileId, files, folders, theme, tab, setTab, onBack, onOpen, onClose, onBusy }, ref) {
   const outHost = useRef(null), shHost = useRef(null), pyHost = useRef(null), bodyRef = useRef(null);
   const out = useTerm(outHost, { readOnly: true }), sh = useTerm(shHost, {}), pyt = useTerm(pyHost, {});
   // The workspace as the runtimes see it: files plus folders (empty ones included).
@@ -49,7 +49,7 @@ const RunPanel = forwardRef(function RunPanel({ fileId, files, folders, theme, t
   const [busy, setBusyState] = useState(false);
   const setBusy = v => { setBusyState(v); onBusy?.(v); };
   const proc = useRef(null); // the running Node process, or 'python'
-  const pyTarget = useRef('repl'); // where Python output goes: the Output tab while a Run is going, else the prompt
+  const pyTarget = useRef('repl'); // where Python output goes: 'output' (Run), 'shell' (python in the Terminal) or 'repl'
   const nodeOn = useRef(false);
 
   /* ---- keep each runtime's copy of the files current ---- */
@@ -68,7 +68,7 @@ const RunPanel = forwardRef(function RunPanel({ fileId, files, folders, theme, t
     if (e.type === 'port-closed') setServer(s => (s && s.port === e.port ? null : s));
   }), [setTab]);
   useEffect(() => onPython(({ stream, text }) => {
-    const term = pyTarget.current === 'output' ? out.ensure() : pyt.ensure();
+    const term = pyTarget.current === 'output' ? out.ensure() : pyTarget.current === 'shell' ? sh.ensure() : pyt.ensure();
     if (!term) return;
     term.write(stream === 'err' ? '\x1b[31m' + crlf(text) + '\x1b[0m' : crlf(text));
   }), []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -119,26 +119,89 @@ const RunPanel = forwardRef(function RunPanel({ fileId, files, folders, theme, t
     if (p === 'python') interruptPython();
     else { p.kill(); out.term.current?.write('\r\n\x1b[2m[stopped]\x1b[0m\r\n'); proc.current = null; }
   }
-  useImperativeHandle(ref, () => ({ run, stop }));
-
   /* ---- Terminal: a Node.js shell ---- */
-  const shell = useRef(null), shInput = useRef(null);
-  const startShell = async () => {
-    const term = sh.ensure();
-    if (!term || shell.current) return;
+  const shell = useRef(null), shInput = useRef(null), shellReady = useRef(null), root = useRef('');
+  // A path in the runtime -> the same path in the workspace ('' for the project folder, null if outside it).
+  const toWorkspace = abs => {
+    const r = root.current;
+    if (!r) return null;
+    if (abs === r) return '';
+    return abs.startsWith(r + '/') ? abs.slice(r.length + 1) : null;
+  };
+  // Requests from commands in the Terminal (see lib/shell/lw.cjs).
+  const onBridge = async m => {
+    const term = sh.ensure(), reply = code => shInput.current?.write(`__lw_done ${m.id} ${code}\r`);
+    if (m.op === 'open') {
+      const p = toWorkspace(m.path);
+      if (p) onOpen?.(p); else term.write(`\r\n\x1b[33mOnly files in this project can open in the editor.\x1b[0m\r\n`);
+      return;
+    }
+    if (m.op === 'interrupt') { interruptPython(); return; }
+    if (m.op !== 'python' && m.op !== 'pip') return;
+    const cwd = toWorkspace(m.cwd);
+    if (cwd == null) { term.write('Python only runs inside this project\'s folder here.\r\n'); reply(1); return; }
+    if (!isolated()) { term.write(NOT_ISOLATED); reply(1); return; }
+    const a = m.args || [], ws = filesRef.current;
+    pyTarget.current = 'shell';
+    let code = 0;
+    try {
+      if (!py.current.started) { term.write('\x1b[2mStarting Python (the first time takes a few seconds)…\x1b[0m\r\n'); py.current.started = true; }
+      if (m.op === 'pip') {
+        if (!a.length) { term.write('usage: pip install <package> ...\r\n'); code = 1; }
+        else code = await py.current.pip(a, ws);
+      } else if (!a.length || a[0] === '-i') {
+        term.write('Opening the Python prompt (the Python tab).\r\n');
+        setTab('python');
+      } else if (a[0] === '-c') code = await py.current.exec(a[1] || '', ws, { argv: a.slice(2), cwd });
+      else if (a[0] === '-m') { term.write(`python -m ${a[1] || ''} isn't supported here; run a file instead.\r\n`); code = 1; }
+      else {
+        const file = [cwd, a[0]].filter(Boolean).join('/').split('/').reduce((acc, x) => (x === '..' ? acc.slice(0, -1) : x === '.' ? acc : [...acc, x]), []).join('/');
+        if (!ws.files.some(f => f.path === file)) { term.write(`python: can't open file '${a[0]}': No such file\r\n`); code = 2; }
+        else code = await py.current.run(file, ws, { argv: a.slice(1), cwd });
+      }
+      (await py.current.changes()).forEach(onBack);
+    } catch (e) {
+      term.write(`\x1b[31m${crlf(String(e.message || e))}\x1b[0m\r\n`);
+      code = 1;
+    } finally {
+      pyTarget.current = 'repl';
+    }
+    reply(code);
+  };
+  const startShell = () => {
+    // Always write to the current xterm (React may remount it in development).
+    const term = { write: d => sh.ensure()?.write(d), get cols() { return sh.ensure()?.cols || 80; }, get rows() { return sh.ensure()?.rows || 24; } };
+    if (!sh.ensure() || shell.current) return shellReady.current;
     shell.current = 'starting';
+    shellReady.current = (async () => {
     try {
       await startNode(term);
+      const { workdir } = await nodeEnv();
+      root.current = workdir + '/' + node.current.dir;
       const p = await node.current.spawn('jsh', [], { terminal: { cols: term.cols, rows: term.rows } });
       shell.current = p;
       shInput.current = p.input.getWriter();
-      p.output.pipeTo(new WritableStream({ write: d => term.write(d) })).catch(() => {});
+      const filter = bridgeFilter(m => onBridgeRef.current(m));
+      p.output.pipeTo(new WritableStream({ write: d => term.write(filter(d)) })).catch(() => {});
       p.exit.then(() => { shell.current = null; shInput.current = null; term.write('\r\n\x1b[2m[shell exited; press Enter to start a new one]\x1b[0m\r\n'); });
     } catch (e) {
       shell.current = null;
       if (e.message !== 'not isolated') term.write(`\x1b[31m${crlf(String(e.message || e))}\x1b[0m\r\n`);
     }
+    })();
+    return shellReady.current;
   };
+  const onBridgeRef = useRef(onBridge);
+  onBridgeRef.current = m => onBridge(m);
+  // Explorer → Terminal: go to a folder of the project in the shell.
+  const cdTo = async p => {
+    setTab('terminal');
+    await startShell();
+    if (!shInput.current || !root.current) return;
+    shInput.current.write(`cd '${(root.current + (p ? '/' + p : '')).replace(/'/g, "'\\''")}'\r`);
+    sh.term.current?.focus();
+  };
+  useImperativeHandle(ref, () => ({ run, stop, cdTo }));
   useEffect(() => {
     if (tab !== 'terminal') return;
     const term = sh.ensure();

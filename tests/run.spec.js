@@ -13,7 +13,7 @@ const FAKE_WEBCONTAINER = `
 const files = new Map(), dirs = new Set(), watchers = [], listeners = { 'server-ready': [], port: [] };
 // The test drives "shell" commands through this, and reads the file system.
 globalThis.__fakeWc = {
-  files, dirs,
+  files, dirs, done: [], cds: [], env: null,
   mkdir(p) { dirs.add(p); fire(p); },
   rmrf(p) { dirs.forEach(d => (d === p || d.startsWith(p + '/')) && dirs.delete(d)); files.forEach((_, f) => f.startsWith(p + '/') && files.delete(f)); fire(p); },
 };
@@ -27,10 +27,35 @@ const fs = {
   rm: async (p, o) => { files.delete(p); if (o && o.recursive) dirs.delete(p); },
   watch: (dir, opts, cb) => { const w = { dir, cb }; watchers.push(w); return { close() {} }; },
 };
+const WORKDIR = '/home/linework';
+// A pretend jsh: understands the commands the tests type, and sends the page the same requests
+// the real Linework commands (lib/shell/lw.cjs) do.
+function fakeShell(opts) {
+  let ctl, buf = '', cwd = WORKDIR + '/' + opts.cwd, n = 0;
+  const say = s => ctl.enqueue(s);
+  const bridge = m => say('\\x1b]7771;' + JSON.stringify(m) + '\\x07');
+  const line = l => {
+    const words = l.trim().match(/'[^']*'|"[^"]*"|\\S+/g) || [], unq = w => w.replace(/^['"]|['"]$/g, '');
+    const [cmd, ...args] = words.map(unq);
+    if (cmd === '__lw_done') { __fakeWc.done.push(args.join(' ')); say('$ '); return; }
+    say(l + '\\r\\n');
+    if (cmd === 'cd') { cwd = args[0].startsWith('/') ? args[0] : cwd + '/' + args[0]; __fakeWc.cds.push(cwd); say('$ '); }
+    else if (cmd === 'code') bridge({ op: 'open', path: cwd + '/' + args[0] }), say('$ ');
+    else if (cmd === 'python' || cmd === 'pip') bridge({ op: cmd, args: cmd === 'pip' ? args.slice(1) : args, id: 'r' + ++n, cwd });
+    else say(cmd + ': command not found\\r\\n$ ');
+  };
+  return {
+    output: new ReadableStream({ start(c) { ctl = c; say('[node] jsh in ' + opts.cwd + '\\r\\n$ '); } }),
+    input: new WritableStream({ write(d) { buf += d; let i; while ((i = buf.indexOf('\\r')) >= 0) { const l = buf.slice(0, i); buf = buf.slice(i + 1); line(l); } } }),
+    exit: new Promise(() => {}), kill() {}, resize() {},
+  };
+}
 export const WebContainer = { boot: async () => ({
-  fs,
+  fs, workdir: WORKDIR,
   on: (ev, cb) => { (listeners[ev] ||= []).push(cb); return () => {}; },
-  spawn: async (cmd, args, opts) => {
+  spawn: async (cmd, args, opts = {}) => {
+    if (cmd === 'jsh') { __fakeWc.env = opts.env; return fakeShell(opts); }
+    if (cmd === 'node' && args[0] === '-e') return { output: enc('/usr/local/bin:/bin'), exit: Promise.resolve(0), kill() {}, input: new WritableStream() };
     const line = [cmd, ...args].join(' ');
     let out = '[node] ' + line + ' in ' + opts.cwd + '\\r\\n';
     if (cmd === 'node') out += '[node] read ' + (files.get(opts.cwd + '/' + args[0]) || '').length + ' bytes\\r\\n';
@@ -155,4 +180,56 @@ test('Run Node.js files and npm scripts, with a preview and files coming back', 
   // The Terminal tab starts a shell.
   await page.getByRole('tab', { name: 'Terminal' }).click();
   await expect(page.locator('.rp-term[aria-label="Terminal"] .xterm-rows')).toContainText('[node] jsh');
+});
+
+test('the Terminal links to the editor and Python: python, pip, code, and Open in Terminal', async ({ page }) => {
+  test.setTimeout(90_000);
+  await sample(page, 'Python');
+  await page.getByRole('button', { name: 'More ways to run' }).click();
+  await page.getByRole('menuitem', { name: /Open a terminal/ }).click();
+  const term = page.locator('.rp-term[aria-label="Terminal"]');
+  await expect(term.locator('.xterm-rows')).toContainText('$');
+  // Linework's commands are installed and first on the shell's PATH.
+  const env = await page.evaluate(() => __fakeWc.env);
+  expect(env.PATH).toBe('/home/linework/.lw/bin:/usr/local/bin:/bin');
+  const tools = await page.evaluate(() => [...__fakeWc.files.keys()].filter(k => k.startsWith('.lw/')));
+  for (const t of ['.lw/lw.cjs', '.lw/bin/grep', '.lw/bin/git', '.lw/bin/python', '.lw/bin/curl', '.lw/bin/code']) expect(tools).toContain(t);
+
+  // python in the Terminal runs in Pyodide and prints there; the shell gets the exit code.
+  await term.click();
+  await page.keyboard.type('python main.py');
+  await page.keyboard.press('Enter');
+  await expect(term.locator('.xterm-rows')).toContainText("'median': 3.5", { timeout: 60_000 });
+  await expect.poll(() => page.evaluate(() => __fakeWc.done)).toEqual(['r1 0']);
+  await page.keyboard.type('python -c "print(6*7)"');
+  await page.keyboard.press('Enter');
+  await expect(term.locator('.xterm-rows')).toContainText('42');
+  await page.keyboard.type('python -c "import sys; sys.exit(3)"');
+  await page.keyboard.press('Enter');
+  await expect.poll(() => page.evaluate(() => __fakeWc.done)).toEqual(['r1 0', 'r2 0', 'r3 3']);
+
+  // code <file> opens it in the editor.
+  await page.keyboard.type('code stats.py');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.cw-tab.on')).toContainText('stats.py');
+
+  // Explorer → Terminal: a folder's "Open in Terminal" cds there.
+  await page.getByRole('button', { name: 'New folder' }).click();
+  await page.getByRole('textbox').last().fill('pkg');
+  await page.getByRole('button', { name: 'Create' }).click();
+  await page.getByRole('treeitem', { name: /^pkg/ }).getByRole('button', { name: 'Actions for pkg' }).click();
+  await page.getByRole('menuitem', { name: 'Open in Terminal' }).click();
+  await expect.poll(() => page.evaluate(() => __fakeWc.cds.at(-1))).toMatch(/^\/home\/linework\/lw-[\w-]+\/pkg$/);
+});
+
+test('messages from commands are hidden from the terminal, even split across chunks', async ({ page }) => {
+  const r = await page.evaluate(async () => {
+    const { bridgeFilter } = await import('/src/lib/runtime.js');
+    const got = [], f = bridgeFilter(m => got.push(m));
+    const msg = '\x1b]7771;{"op":"open","path":"/a/b.txt"}\x07';
+    const shown = ['before ', msg.slice(0, 3), msg.slice(3, 20), msg.slice(20) + ' after', ' \x1b[31mred\x1b[0m'].map(f).join('');
+    return { got, shown };
+  });
+  expect(r.got).toEqual([{ op: 'open', path: '/a/b.txt' }]);
+  expect(r.shown).toBe('before  after \x1b[31mred\x1b[0m');
 });

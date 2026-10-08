@@ -7,6 +7,8 @@
    files are copied in before anything runs and kept in step as they're edited; files a program or
    npm creates or changes come back into the workspace (except node_modules and other build output). */
 
+import LW_TOOLS from './shell/lw.cjs?raw';
+
 export const isolated = () => typeof crossOriginIsolated !== 'undefined' && crossOriginIsolated;
 export const PYODIDE_VERSION = '0.29.5';
 export const PYODIDE_URL = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
@@ -31,6 +33,52 @@ export function bootNode() {
     return wc;
   }).catch(e => { wcP = null; throw e; });
   return wcP;
+}
+
+/* The extra terminal commands (grep, find, git, curl, python, code…, see shell/lw.cjs): one script
+   plus a launcher per command in .lw/bin, put first on the PATH of everything Linework starts. */
+export const TOOL_NAMES = [...LW_TOOLS.matchAll(/^def\('([^']+)'/gm)].flatMap(m => m[1].split(' '));
+let envP = null;
+export function nodeEnv() {
+  if (!envP) envP = bootNode().then(async wc => {
+    await wc.fs.mkdir('.lw/bin', { recursive: true });
+    await wc.fs.writeFile('.lw/lw.cjs', LW_TOOLS);
+    await wc.fs.writeFile('.lw/bin/package.json', '{"type":"commonjs"}');
+    for (const n of TOOL_NAMES) await wc.fs.writeFile('.lw/bin/' + n, `#!/usr/bin/env node\nrequire('../lw.cjs')(${JSON.stringify(n)});\n`);
+    const bin = wc.workdir + '/.lw/bin';
+    // Mark the launchers executable and read the default PATH, in one go.
+    const p = await wc.spawn('node', ['-e', `const fs=require('fs');for(const n of fs.readdirSync(${JSON.stringify(bin)}))try{fs.chmodSync(${JSON.stringify(bin)}+'/'+n,0o755)}catch(e){}process.stdout.write(process.env.PATH||'')`]);
+    let base = '';
+    await p.output.pipeTo(new WritableStream({ write: d => { base += d; } })).catch(() => {});
+    await p.exit;
+    base = base.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').trim() || '/usr/local/bin:/usr/bin:/bin';
+    return { workdir: wc.workdir, env: { PATH: bin + ':' + base, LINEWORK: '1' } };
+  }).catch(e => { envP = null; throw e; });
+  return envP;
+}
+
+// Messages commands send the page (python, pip, code), hidden in the terminal output as
+// ESC ] 7771 ; <json> BEL. Returns a filter for output chunks: it strips them and calls onMsg.
+export function bridgeFilter(onMsg) {
+  let hold = '';
+  return chunk => {
+    let s = hold + chunk, shown = '';
+    hold = '';
+    for (;;) {
+      const i = s.indexOf('\x1b]7771;');
+      if (i < 0) {
+        // Keep a possible start of a message for the next chunk.
+        const tail = s.lastIndexOf('\x1b');
+        if (tail >= 0 && '\x1b]7771;'.startsWith(s.slice(tail))) { hold = s.slice(tail); s = s.slice(0, tail); }
+        return shown + s;
+      }
+      const j = s.indexOf('\x07', i);
+      if (j < 0) { hold = s.slice(i); return shown + s.slice(0, i); }
+      shown += s.slice(0, i);
+      try { onMsg(JSON.parse(s.slice(i + 7, j))); } catch (e) {} // after ESC ] 7771 ;
+      s = s.slice(j + 1);
+    }
+  };
 }
 
 // Every folder a workspace has: its explicit (maybe empty) folders and the parents of its files.
@@ -115,8 +163,8 @@ export class NodeProject {
   }
   async spawn(cmd, args, opts = {}) {
     await this.queue;
-    const wc = await bootNode();
-    return wc.spawn(cmd, args, { cwd: this.dir, ...opts });
+    const wc = await bootNode(), { env } = await nodeEnv();
+    return wc.spawn(cmd, args, { cwd: this.dir, ...opts, env: { ...env, ...(opts.env || {}) } });
   }
   close() { this.watcher?.close(); this.watcher = null; }
 }
@@ -146,7 +194,7 @@ function pyWorker() {
 function call(type, data) {
   const p = py;
   // Each command starts uninterrupted; Ctrl C any time after this stops it (even before it starts running).
-  if ((type === 'run' || type === 'line' || type === 'pip') && p.interrupt) Atomics.store(p.interrupt, 0, 0);
+  if ((type === 'run' || type === 'exec' || type === 'line' || type === 'pip') && p.interrupt) Atomics.store(p.interrupt, 0, 0);
   return new Promise((res, rej) => {
     const id = ++p.n;
     p.calls.set(id, { res, rej });
@@ -173,7 +221,9 @@ export class PythonProject {
     const list = await call('scan', { dir: this.dir });
     return list.filter(f => !SKIP.test(f.path) && this.sent.get(f.path) !== f.text).map(f => { this.sent.set(f.path, f.text); return f; });
   }
-  async run(path, ws) { await this.sync(ws); return call('run', { dir: this.dir, path }); }
+  // path and cwd are relative to the project; argv follows the script name.
+  async run(path, ws, { argv = [], cwd = '' } = {}) { await this.sync(ws); return call('run', { dir: this.dir, path, argv, cwd }); }
+  async exec(code, ws, { argv = [], cwd = '' } = {}) { await this.sync(ws); return call('exec', { dir: this.dir, code, argv, cwd }); }
   // One line typed at the Python prompt. Resolves to {more: true} while a block is still open.
   async line(src, ws) { await this.sync(ws); return call('line', { dir: this.dir, line: src }); }
   async pip(pkgs, ws) { await this.sync(ws); return call('pip', { dir: this.dir, pkgs }); }
