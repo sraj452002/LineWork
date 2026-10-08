@@ -1114,7 +1114,8 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
         onBlur={finishEdit}
         onKeyDown={e => {
           if (e.key === 'Escape' || (e.key === 'Enter' && (e.metaKey || e.ctrlKey))) { e.preventDefault(); e.target.blur(); }
-          else if (e.key === 'Enter' && !e.shiftKey && editS.t !== 'text' && editS.t !== 'code' && editS.t !== 'sticky' && editS.t !== 'comment') { e.preventDefault(); e.target.blur(); }
+          // Enter starts a new line; a frame's label is one line, so there Enter finishes.
+          else if (e.key === 'Enter' && editS.t === 'frame') { e.preventDefault(); e.target.blur(); }
           else if (e.key === 'Tab' && editS.t === 'code') {
             e.preventDefault();
             const t = e.target, s = t.selectionStart, v = t.value.slice(0, s) + '  ' + t.value.slice(t.selectionEnd);

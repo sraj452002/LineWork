@@ -157,8 +157,13 @@ test('text alignment and indent on a box', async ({ page }) => {
   await page.keyboard.press('r');
   await svg.click({ position: { x: 500, y: 300 } });
   await page.keyboard.press('Enter');
+  // Enter while typing starts a new line.
   await page.keyboard.type('Orders');
-  await svg.click({ position: { x: 1000, y: 700 } });
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('service');
+  await expect(page.getByRole('textbox', { name: 'Edit text' })).toHaveValue('Orders\nservice');
+  await page.keyboard.press('Escape');
+  await expect(shape.locator('text')).toHaveCount(2);
   await shape.click();
   const text = shape.locator('text').first(), box = shape.locator('path, rect').first();
   const bar = page.getByRole('toolbar', { name: 'Selected object' });
