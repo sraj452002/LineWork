@@ -575,6 +575,8 @@ kbd{font-family:var(--ui);font-size:12px;font-weight:500;color:var(--ink2);min-w
 .spop-cell.wide{width:58px;margin-left:auto}
 .spop-grid .spop-cell[aria-pressed="true"]{background:color-mix(in srgb,var(--hi) 55%,transparent);box-shadow:none}
 .spop-row{display:flex;gap:6px;align-items:center;margin-bottom:12px}
+.spop-row.last{margin-bottom:0}
+.spop-cell:disabled{opacity:.35;cursor:default;background:none}
 .spop-row.top{margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--line)}
 .spop-cell[class*="fill-"] i{display:block;width:20px;height:20px;border-radius:50%;border:1.6px solid var(--ink)}
 .fill-tint i{background:color-mix(in srgb,var(--sw) 35%,transparent)}
