@@ -3,6 +3,8 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
-  // src/lib/icondata.js (2,000+ icons) is a ~800 KB chunk loaded only when the icon picker opens.
-  build: { chunkSizeWarningLimit: 900 },
+  // Large chunks that only load when needed: src/lib/icondata.js (2,000+ icons) when the icon picker
+  // opens, and Monaco with its language workers (the TypeScript one is ~7 MB) when the Code view opens.
+  // The app's own entry chunk is about 400 KB.
+  build: { chunkSizeWarningLimit: 7500 },
 });
