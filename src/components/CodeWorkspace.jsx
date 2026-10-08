@@ -85,8 +85,9 @@ export default function CodeWorkspace({ file, update, visible }) {
   const [panelTab, setPanelTab] = useState('output');
   const [running, setRunning] = useState(false);
   const runRef = useRef(null);
-  const filesRef = useRef(files);
+  const filesRef = useRef(files), foldersRef = useRef(folders);
   filesRef.current = files;
+  foldersRef.current = folders;
   const hostRef = useRef(null), edRef = useRef(null), models = useRef(new Map()), views = useRef(new Map());
   const uploadRef = useRef(null);
 
@@ -296,7 +297,24 @@ export default function CodeWorkspace({ file, update, visible }) {
   };
   /* ---- running code ---- */
   // A file a program created, changed or deleted (in Node or Python) comes back into the workspace.
-  const onBack = useCallback(({ path, text }) => {
+  const onBack = useCallback(({ path, text, dir, gone }) => {
+    if (dir) {
+      // A folder made (mkdir) or removed (rm -r) in a terminal or by a program.
+      const inside = p => p === path || p.startsWith(path + '/');
+      if (gone) {
+        const ids = new Set(filesRef.current.filter(f => inside(f.path)).map(f => f.id));
+        ids.forEach(id => pending.current.delete(id));
+        mut(c => {
+          c.files = c.files.filter(f => !ids.has(f.id));
+          c.folders = c.folders.filter(d => !inside(d));
+          c.open = c.open.filter(id => !ids.has(id));
+          if (ids.has(c.active)) c.active = c.open[c.open.length - 1] || null;
+        });
+      } else if (!foldersRef.current.includes(path) && !filesRef.current.some(f => f.path.startsWith(path + '/'))) {
+        mut(c => { if (!c.folders.includes(path)) c.folders = [...c.folders, path]; });
+      }
+      return;
+    }
     const f = filesRef.current.find(x => x.path === path);
     if (text == null) {
       if (!f) return;
@@ -495,7 +513,7 @@ export default function CodeWorkspace({ file, update, visible }) {
           {panel.open && (
             <div className="cw-panel" style={{ height: panel.h }}>
               <div className="cw-grip" onPointerDown={dragPanel} role="separator" aria-orientation="horizontal" aria-label="Resize the panel" />
-              <RunPanel ref={runRef} fileId={file.id} files={files} theme={theme} tab={panelTab} setTab={setPanelTab}
+              <RunPanel ref={runRef} fileId={file.id} files={files} folders={folders} theme={theme} tab={panelTab} setTab={setPanelTab}
                 onBack={onBack} onBusy={setRunning} onClose={() => setPanel(p => ({ ...p, open: false }))} />
             </div>
           )}

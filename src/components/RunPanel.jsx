@@ -36,11 +36,12 @@ function useTerm(hostRef, opts) {
   return { ensure, refit, term: t };
 }
 
-const RunPanel = forwardRef(function RunPanel({ fileId, files, theme, tab, setTab, onBack, onClose, onBusy }, ref) {
+const RunPanel = forwardRef(function RunPanel({ fileId, files, folders, theme, tab, setTab, onBack, onClose, onBusy }, ref) {
   const outHost = useRef(null), shHost = useRef(null), pyHost = useRef(null), bodyRef = useRef(null);
   const out = useTerm(outHost, { readOnly: true }), sh = useTerm(shHost, {}), pyt = useTerm(pyHost, {});
-  const filesRef = useRef(files);
-  filesRef.current = files;
+  // The workspace as the runtimes see it: files plus folders (empty ones included).
+  const filesRef = useRef(null);
+  filesRef.current = { files, folders: folders || [] };
   const node = useRef(null), py = useRef(null);
   if (!node.current || node.current.fileId !== fileId) { node.current?.close(); node.current = Object.assign(new NodeProject(fileId), { fileId }); }
   if (!py.current || py.current.fileId !== fileId) py.current = Object.assign(new PythonProject(fileId), { fileId });
@@ -52,7 +53,7 @@ const RunPanel = forwardRef(function RunPanel({ fileId, files, theme, tab, setTa
   const nodeOn = useRef(false);
 
   /* ---- keep each runtime's copy of the files current ---- */
-  useEffect(() => { if (nodeOn.current) node.current.sync(files); }, [files]);
+  useEffect(() => { if (nodeOn.current) node.current.sync(filesRef.current); }, [files, folders]);
   const startNode = async term => {
     if (!isolated()) { term.write(NOT_ISOLATED); throw new Error('not isolated'); }
     if (!nodeOn.current) term.write('\x1b[2mStarting Node.js in your browser…\x1b[0m\r\n');

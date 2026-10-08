@@ -33,30 +33,47 @@ export function bootNode() {
   return wcP;
 }
 
+// Every folder a workspace has: its explicit (maybe empty) folders and the parents of its files.
+const allDirs = ({ files, folders = [] }) => {
+  const out = new Set(folders);
+  files.forEach(f => { const parts = f.path.split('/'); for (let i = 1; i < parts.length; i++) out.add(parts.slice(0, i).join('/')); });
+  return out;
+};
+
 // Copies of a workspace in a runtime: what was last written, so only changes go across.
+// A workspace is {files: [{path, text}], folders: [path]}.
 export class NodeProject {
-  constructor(fileId) { this.dir = dirFor(fileId); this.sent = new Map(); this.queue = Promise.resolve(); this.watcher = null; this.ready = null; }
-  // First sync: mount the whole workspace; later ones write and delete what changed.
-  sync(files) {
+  constructor(fileId) { this.dir = dirFor(fileId); this.sent = new Map(); this.dirs = new Set(); this.queue = Promise.resolve(); this.watcher = null; this.ready = null; }
+  // Create, write and delete what changed since the last sync, folders included (empty ones too).
+  sync(ws) {
     this.queue = this.queue.then(async () => {
       const wc = await bootNode();
       if (!this.ready) {
         await wc.fs.mkdir(this.dir, { recursive: true });
         this.ready = true;
       }
-      const now = new Map(files.map(f => [f.path, f.text || '']));
+      const now = new Map(ws.files.map(f => [f.path, f.text || ''])), dirs = allDirs(ws);
       for (const [p] of this.sent) if (!now.has(p)) { await wc.fs.rm(this.dir + '/' + p, { force: true }).catch(() => {}); this.sent.delete(p); }
+      // Folders removed in the explorer, deepest first (their files are gone by now).
+      for (const d of [...this.dirs].filter(d => !dirs.has(d)).sort((a, b) => b.length - a.length)) {
+        await wc.fs.rm(this.dir + '/' + d, { recursive: true, force: true }).catch(() => {});
+        this.dirs.delete(d);
+      }
+      for (const d of [...dirs].sort((a, b) => a.length - b.length)) {
+        if (this.dirs.has(d)) continue;
+        await wc.fs.mkdir(this.dir + '/' + d, { recursive: true });
+        this.dirs.add(d);
+      }
       for (const [p, t] of now) {
         if (this.sent.get(p) === t) continue;
-        const d = p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '';
-        if (d) await wc.fs.mkdir(this.dir + '/' + d, { recursive: true });
         await wc.fs.writeFile(this.dir + '/' + p, t);
         this.sent.set(p, t);
       }
     }).catch(e => { console.warn('Linework: syncing files to Node failed', e); });
     return this.queue;
   }
-  // Report files that programs create, change or delete: onBack({path, text | null}).
+  // Report what programs create, change or delete: onBack({path, text}) for a file (text null when
+  // it's gone) and onBack({path, dir: true, gone}) for a folder (mkdir, rm -r).
   async watch(onBack) {
     if (this.watcher) return;
     const wc = await bootNode();
@@ -69,9 +86,17 @@ export class NodeProject {
         let bytes = null;
         try { bytes = await wc.fs.readFile(full); }
         catch (e) {
-          // Gone (deleted or renamed), or a folder.
-          const isDir = await wc.fs.readdir(full).then(() => true, () => false);
-          if (!isDir && this.sent.has(p)) { this.sent.delete(p); onBack({ path: p, text: null }); }
+          if (await wc.fs.readdir(full).then(() => true, () => false)) {
+            if (!this.dirs.has(p)) { this.dirs.add(p); onBack({ path: p, dir: true, gone: false }); }
+            continue;
+          }
+          // Gone: deleted or renamed.
+          if (this.sent.has(p)) { this.sent.delete(p); onBack({ path: p, text: null }); }
+          else if (this.dirs.has(p)) {
+            [...this.dirs].forEach(d => { if (d === p || d.startsWith(p + '/')) this.dirs.delete(d); });
+            [...this.sent.keys()].forEach(f => { if (f.startsWith(p + '/')) this.sent.delete(f); });
+            onBack({ path: p, dir: true, gone: true });
+          }
           continue;
         }
         const s = asText(bytes);
@@ -81,7 +106,7 @@ export class NodeProject {
       }
     };
     this.watcher = wc.fs.watch(this.dir, { recursive: true }, (event, name) => {
-      const p = String(name || '').replace(/\\/g, '/').replace(/^\.?\//, '');
+      const p = String(name || '').replace(/\\/g, '/').replace(/^\.?\//, '').replace(/\/$/, '');
       if (!p || SKIP.test(p)) return;
       due.add(p);
       clearTimeout(t);
@@ -134,12 +159,12 @@ export function interruptPython() { if (py && py.interrupt) { Atomics.store(py.i
 
 export class PythonProject {
   constructor(fileId) { this.dir = '/home/pyodide/' + dirFor(fileId); this.sent = new Map(); }
-  async sync(files) {
+  async sync(ws) {
     pyWorker();
-    const now = new Map(files.map(f => [f.path, f.text || '']));
+    const now = new Map(ws.files.map(f => [f.path, f.text || '']));
     const write = [...now].filter(([p, t]) => this.sent.get(p) !== t).map(([path, text]) => ({ path, text }));
     const remove = [...this.sent.keys()].filter(p => !now.has(p));
-    await call('sync', { dir: this.dir, write, remove });
+    await call('sync', { dir: this.dir, write, remove, dirs: [...allDirs(ws)] });
     write.forEach(f => this.sent.set(f.path, f.text));
     remove.forEach(p => this.sent.delete(p));
   }
@@ -148,8 +173,8 @@ export class PythonProject {
     const list = await call('scan', { dir: this.dir });
     return list.filter(f => !SKIP.test(f.path) && this.sent.get(f.path) !== f.text).map(f => { this.sent.set(f.path, f.text); return f; });
   }
-  async run(path, files) { await this.sync(files); return call('run', { dir: this.dir, path }); }
+  async run(path, ws) { await this.sync(ws); return call('run', { dir: this.dir, path }); }
   // One line typed at the Python prompt. Resolves to {more: true} while a block is still open.
-  async line(src, files) { await this.sync(files); return call('line', { dir: this.dir, line: src }); }
-  async pip(pkgs, files) { await this.sync(files); return call('pip', { dir: this.dir, pkgs }); }
+  async line(src, ws) { await this.sync(ws); return call('line', { dir: this.dir, line: src }); }
+  async pip(pkgs, ws) { await this.sync(ws); return call('pip', { dir: this.dir, pkgs }); }
 }
