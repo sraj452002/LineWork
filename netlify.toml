@@ -2,6 +2,10 @@
   command = "npm run build"
   publish = "dist"
 
+# Bundling Monaco, the diagram engines and the code parsers needs more than Node's default ~2 GB heap.
+[build.environment]
+  NODE_OPTIONS = "--max-old-space-size=4096"
+
 [[redirects]]
   from = "/*"
   to = "/index.html"

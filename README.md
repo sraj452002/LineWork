@@ -42,6 +42,13 @@ The Code view's **Run** button, **Terminal** and **Python** prompt run code in t
 - `curl` and `wget` run in the browser, so they can only fetch sites that allow cross-origin requests.
 - Native binaries, system packages (`apt-get`) and other languages need a real machine, which this in-browser setup doesn't provide.
 
+## Visualizing code
+
+The Code view's **Visualize** pane draws Python, JavaScript and TypeScript with Linework's own diagram engines: a flowchart of a function, a class diagram (as a database-schema diagram), and an import graph (as an architecture diagram). Any of them can be added to the file as a canvas tab.
+
+- JavaScript and TypeScript are read with [`@babel/parser`](https://babeljs.io/docs/babel-parser); Python is read by Python's own `ast` module in the Pyodide worker. See `src/lib/codeviz.js`.
+- **Step through** records a run, like Python Tutor. Python uses `sys.settrace` in the worker. JavaScript is converted with [Sucrase](https://github.com/alangpierce/sucrase) (TypeScript and imports, keeping line numbers), instrumented with a call before each statement, and run in a separate web worker, so it can only `require` other files in the project. Recordings stop at 2,000 steps.
+
 ## Project layout
 
 ```
@@ -55,7 +62,8 @@ src/
     Canvas.jsx          pan, zoom, drag, code drawer, AI prompt
     CodeWorkspace.jsx   Code view: explorer, tabs, Monaco editor, quick open, Run
     RunPanel.jsx        Output, Terminal, Python prompt and Preview (xterm.js)
-    ui.jsx              menus, dialogs, toasts, theme
+    Visualizer.jsx      Visualize pane: code diagrams and step-through
+    ui.jsx              menus, dialogs, toasts, theme button
   lib/
     auth.js             hardcoded credentials
     engines.js          diagram parsers, layout and SVG rendering
@@ -63,6 +71,8 @@ src/
     ai.js               AI client and prompt language
     monaco.js           loads Monaco and its language workers
     runtime.js          running code: Node.js (WebContainers) and Python (Pyodide)
+    codeviz.js          reads code into flowcharts, class and import diagrams; records JS runs
+    theme.js            light, dark or system theme, remembered
     python.worker.js    Pyodide in a web worker
     shell/lw.cjs        the Terminal's extra commands (grep, git, curl, python, code…)
     storage.js          browser storage

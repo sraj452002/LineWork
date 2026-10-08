@@ -1,8 +1,11 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { downloads } from '../lib/ai.js';
 import { rid } from '../lib/utils.js';
 import { useUI } from './ui.jsx';
 import RunPanel from './RunPanel.jsx';
+import { dg } from '../lib/engines.js';
+
+const Visualizer = lazy(() => import('./Visualizer.jsx'));
 
 /* A small VS Code inside each Linework file: an explorer, tabs and the Monaco editor.
    Code lives on the file as  code: {files: [{id, path, text, lang?}], folders: [path], open: [id], active: id}
@@ -83,6 +86,10 @@ export default function CodeWorkspace({ file, update, visible }) {
   const [panel, setPanel] = useState(() => { try { return JSON.parse(localStorage.getItem(PANEL_KEY)) || { open: false, h: 240 }; } catch (e) { return { open: false, h: 240 }; } });
   useEffect(() => { try { localStorage.setItem(PANEL_KEY, JSON.stringify(panel)); } catch (e) {} }, [panel]);
   const [panelTab, setPanelTab] = useState('output');
+  // The Visualize pane on the right: diagrams of the code, and step-through runs.
+  const VIZ_KEY = 'linework:code-viz';
+  const [viz, setViz] = useState(() => { try { return localStorage.getItem(VIZ_KEY) === '1'; } catch (e) { return false; } });
+  useEffect(() => { try { localStorage.setItem(VIZ_KEY, viz ? '1' : ''); } catch (e) {} }, [viz]);
   const [running, setRunning] = useState(false);
   const runRef = useRef(null);
   const filesRef = useRef(files), foldersRef = useRef(folders);
@@ -207,6 +214,38 @@ export default function CodeWorkspace({ file, update, visible }) {
   }, [active, monaco, files, visible]);
 
   useEffect(() => () => flushRef.current(), []);
+
+  /* ---- Visualize: jump to a line, or highlight the line a recorded step is on ---- */
+  const deco = useRef(null);
+  const showLine = (path, line, mark) => {
+    const f = filesRef.current.find(x => x.path === path);
+    if (!f) return;
+    if (f.id !== active) openFile(f.id);
+    const go = (tries = 0) => {
+      const ed = edRef.current, m = models.current.get(f.id);
+      if (!ed || !m || ed.getModel() !== m.model) { if (tries < 20) requestAnimationFrame(() => go(tries + 1)); return; }
+      if (mark) {
+        if (!deco.current) deco.current = ed.createDecorationsCollection();
+        deco.current.set([{ range: new monaco.Range(line, 1, line, 1), options: { isWholeLine: true, className: 'cw-stepline', glyphMarginClassName: 'cw-stepglyph', overviewRuler: { color: '#f59e0b', position: 1 } } }]);
+        ed.revealLineInCenterIfOutsideViewport(line);
+      } else {
+        ed.revealLineInCenter(line);
+        ed.setPosition({ lineNumber: line, column: 1 });
+      }
+    };
+    go();
+  };
+  const onHighlight = (path, line) => {
+    if (!path) { deco.current?.clear(); return; }
+    showLine(path, line, true);
+  };
+  const onJump = (path, line) => showLine(path, line, false);
+  const onOpenCanvas = (type, name, src) => {
+    update(c => { c.diagrams.push({ ...dg(type, name, src), dir: type === 'flowchart' ? 'TB' : 'LR' }); c.active = c.diagrams.length - 1; c.view = 'canvas'; });
+    toast(`Added “${name}” as a canvas tab`);
+  };
+  useEffect(() => { if (!viz) deco.current?.clear(); }, [viz]);
+
   const runKey = useRef(() => {});
 
   /* ---- files and folders ---- */
@@ -499,6 +538,9 @@ export default function CodeWorkspace({ file, update, visible }) {
                 </button>
                 <button className="cw-runmore" aria-label="More ways to run" aria-haspopup="menu" onClick={e => runMenu(e.currentTarget)}>▾</button>
               </div>
+              <button className="cw-ib" aria-pressed={viz} title="Visualize: diagrams and step-through" aria-label="Visualize" onClick={() => setViz(v => !v)}>
+                <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="6" rx="1.5" /><rect x="14" y="15" width="7" height="6" rx="1.5" /><rect x="14" y="3" width="7" height="6" rx="1.5" /><path d="M6.5 9v4a2 2 0 0 0 2 2H14M10 6h4" /></svg>
+              </button>
               <button className="cw-ib" aria-pressed={panel.open} title="Toggle the panel  Ctrl `" aria-label="Toggle the panel" onClick={() => setPanel(p => ({ ...p, open: !p.open }))}>
                 <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 14h18M7 17h4" /></svg>
               </button>
@@ -535,6 +577,12 @@ export default function CodeWorkspace({ file, update, visible }) {
             </div>
           )}
         </section>
+        {viz && files.length > 0 && (
+          <Suspense fallback={<aside className="cw-viz"><p className="viz-empty">Loading…</p></aside>}>
+            <Visualizer fileId={file.id} files={files} folders={folders} activeFile={activeFile} cursorLine={pos.ln}
+              onHighlight={onHighlight} onJump={onJump} onOpenCanvas={onOpenCanvas} onClose={() => setViz(false)} />
+          </Suspense>
+        )}
       </div>
 
       <footer className="cw-status">

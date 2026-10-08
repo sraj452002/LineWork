@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { TEMPLATES, TYPES, dg, newFile, thumb } from '../lib/engines.js';
 import { LANG, NO_AI, copyFor, sampleP } from '../lib/ai.js';
 import { ago, rid } from '../lib/utils.js';
-import { Brand, useUI } from './ui.jsx';
+import { Brand, ThemeButton, useUI } from './ui.jsx';
 
 const IC = {
   grid: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',
@@ -241,6 +241,7 @@ Reply with ONLY a JSON object: {"title": "...", "doc": "...", "diagrams": [...]}
             <span className="avatar sm">{initial}</span>
             <span><b>{account ? who : 'No account'}</b><small>{account ? (saveState === 'Offline' ? 'Offline, will retry' : saveState === 'Syncing' ? 'Syncing…' : 'Saved to your account') : 'Saved in this browser only'}</small></span>
           </div>
+          <ThemeButton className="nav theme-nav" withLabel />
           <button className="nav" onClick={onSignOut}><Ico d={IC.logout} /><span>{account ? 'Sign out' : 'Sign in or create an account'}</span></button>
           <button ref={newRef} className="new-btn" aria-haspopup="menu" onClick={e => newMenu(e.currentTarget)}>
             New File <small>Alt N</small><Ico d={IC.caret} size={16} />
