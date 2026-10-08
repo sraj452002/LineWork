@@ -17,13 +17,13 @@ Linework runs with one of two backends, and works without either:
 
 - **On Netlify**: accounts are [Netlify Identity](https://docs.netlify.com/security/secure-access-to-sites/identity/) (email and password, or Google/GitHub if you turn them on). Files are saved with `netlify/functions/files.mts` in Netlify Blobs, and folders in the account's profile.
 - **On your own server** (`server/`, below): its own accounts and a SQLite database, plus **share links**, **version history** and a **daily AI allowance** per account.
-- **Without an account** (and in local development without the server): files stay in the browser.
+- **Without an account**: files stay in the browser. Only where accounts aren't available (local development without the server, the tests), or the site allows it: `ALLOW_LOCAL_MODE=true` on the server, `VITE_ALLOW_LOCAL_MODE=true` when building for Netlify. Otherwise **sign-in is required**; files someone made without an account are offered for import when they sign in.
 
 The app asks `GET /api/server` which one it's talking to.
 
 ## Deploy on Netlify
 
-Connect the repo in Netlify (or run `npx netlify-cli deploy --prod`). `netlify.toml` already sets the build command (`npm run build`, with a 4 GB Node heap), the publish directory (`dist`) and the headers. Turn on Identity in the Netlify project for accounts.
+Connect the repo in Netlify (or run `npx netlify-cli deploy --prod`). `netlify.toml` already sets the build command (`npm run build`, with a 4 GB Node heap), the publish directory (`dist`) and the headers. Turn on Identity in the Netlify project for accounts. Identity sends the confirmation and password-reset emails itself; Google and GitHub sign-in are turned on under Identity → External providers. (Netlify Identity has no two-step verification; the server below does.)
 
 ### Optional: AI generation
 
@@ -41,7 +41,11 @@ npm start            # http://localhost:8787
 
 It adds, on top of what the Netlify backend does:
 
-- **Accounts** with email and password (scrypt hashes; sessions are an HttpOnly cookie for 30 days). There's no email, so a forgotten password is reset by whoever runs the server: `npm run admin -- reset-password <email> <new password>`. `npm run admin -- users` lists accounts; `delete-user <email>` removes one with its files.
+- **Accounts** with email and password (scrypt hashes; sessions are an HttpOnly cookie for 30 days; 10 wrong passwords lock an email for 15 minutes).
+- **Email confirmation and password reset**, when the server can send email (`RESEND_API_KEY`, or `SMTP_URL` for any SMTP service, and `MAIL_FROM`). New accounts confirm their address with an emailed link before they can sign in; **Forgot password?** emails a one-hour reset link, and resetting signs out every other device. Without email, nothing needs confirming and passwords are reset by whoever runs the server (below).
+- **Continue with Google / GitHub** (`GOOGLE_CLIENT_ID`/`_SECRET`, `GITHUB_CLIENT_ID`/`_SECRET`). The authorization-code flow with PKCE and a state cookie. A provider's *verified* email signs in to the account with that email, or creates one; people can connect or disconnect Google and GitHub under **Account & security**. Register the redirect URI `<APP_URL>/api/auth/oauth/google/callback` (or `…/github/callback`), and set `APP_URL` to the site's public address.
+- **Two-step verification** (TOTP): **Account & security** shows a QR code for an authenticator app (Google Authenticator, 1Password, Authy…). After that, signing in (with a password or Google/GitHub) asks for the 6-digit code. Each code works once; ten **recovery codes** stand in for the phone, each once; five wrong codes end the attempt.
+- **Admin commands**, since it's your server: `npm run admin -- users` lists accounts; `reset-password <email> <new password>`, `verify-user <email>`, `disable-2fa <email>` (lost phone and codes) and `delete-user <email>` (with its files).
 - **Folders and the archive** saved to the account.
 - **Version history**: each stretch of editing (10 minutes) keeps a version, the last 100 per file. **Version history…** on a file's ⋯ menu restores one.
 - **Share links**: **Share…** makes a link that opens one file, read-only or editable, for anyone who has it (no account needed). Edits through an edit link are saved to the owner's account. Links can be turned off.
@@ -55,7 +59,12 @@ Settings are environment variables; `server/.env.example` lists them all. The ma
 | `DATABASE_PATH` | `data/linework.db` | Keep it on a persistent disk, and back it up. |
 | `ANTHROPIC_API_KEY` | | Turns AI on. `ANTHROPIC_MODEL` picks the model. |
 | `AI_DAILY_LIMIT` | `50` | `0` for no limit. |
-| `ALLOW_SIGNUP` | `true` | `false` stops new accounts. |
+| `ALLOW_SIGNUP` | `true` | `false` stops new accounts (Google/GitHub can still sign in to existing ones). |
+| `APP_URL` | | The site's public address, for email links and Google/GitHub. |
+| `RESEND_API_KEY` or `SMTP_URL`, `MAIL_FROM` | | Email: confirmation and reset links. |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | | Continue with Google. |
+| `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | | Continue with GitHub. |
+| `ALLOW_LOCAL_MODE` | `false` | `true` lets people use the app without an account. |
 | `TRUST_PROXY` | | `1` behind a host's proxy (Render, Railway, Fly.io), so cookies are marked Secure on HTTPS. |
 
 **Hosting.** Any Node host with a persistent disk works. Build command `npm install && npm run build`, start command `npm start`, a disk mounted where `DATABASE_PATH` points, and `TRUST_PROXY=1`. Or use the `Dockerfile`: `docker build -t linework . && docker run -p 8787:8787 -v linework-data:/data linework`. The server needs HTTPS in front of it for the Code view's runtimes and for secure cookies; hosts provide that.
@@ -119,7 +128,11 @@ server/
   index.js              starts the server from environment variables
   app.js                the API: accounts, files, versions, folders, share links, AI
   db.js                 SQLite schema and queries
+  accounts.js           sign-up, sign-in, email links, two-step verification, Google/GitHub
   auth.js               passwords, sessions, sign-in limits
+  mail.js               sending email (Resend or SMTP)
+  oauth.js              Google and GitHub sign-in (OAuth 2 with PKCE)
+  totp.js               authenticator-app codes (RFC 6238) and recovery codes
   admin.js              npm run admin: list users, reset passwords
 netlify/
   functions/files.mts   files API on Netlify (Blobs)

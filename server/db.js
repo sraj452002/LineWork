@@ -49,6 +49,22 @@ CREATE TABLE IF NOT EXISTS shares (
   FOREIGN KEY (user_id, file_id) REFERENCES files(user_id, id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS shares_file ON shares(user_id, file_id);
+CREATE TABLE IF NOT EXISTS tokens (
+  token TEXT PRIMARY KEY,               -- SHA-256 of what's in the email link or sent to the browser
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK (kind IN ('verify', 'reset', 'mfa')),
+  expires INTEGER NOT NULL,
+  tries INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS identities (
+  provider TEXT NOT NULL,               -- 'google' | 'github'
+  subject TEXT NOT NULL,                -- the provider's id for the person
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  email TEXT NOT NULL DEFAULT '',
+  created INTEGER NOT NULL,
+  PRIMARY KEY (provider, subject)
+);
+CREATE INDEX IF NOT EXISTS identities_user ON identities(user_id);
 CREATE TABLE IF NOT EXISTS ai_usage (
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   day TEXT NOT NULL,
@@ -57,17 +73,48 @@ CREATE TABLE IF NOT EXISTS ai_usage (
 );
 `;
 
+// Columns added after the first release; existing databases get them on start.
+const COLUMNS = {
+  users: {
+    verified: 'INTEGER NOT NULL DEFAULT 1',  // 0 until the email link is opened (when email is set up)
+    totp_secret: 'TEXT',                     // two-step verification, when on
+    totp_pending: 'TEXT',                    // a secret being set up, before its first code
+    totp_last: 'INTEGER NOT NULL DEFAULT 0', // the last time step used, so a code works once
+    recovery: "TEXT NOT NULL DEFAULT '[]'",  // hashes of unused recovery codes
+  },
+};
+
 export function openDb(path, { versionEvery = 10 * 60_000, keepVersions = 100 } = {}) {
   if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
   const db = new DatabaseSync(path);
   db.exec(SCHEMA);
+  for (const [table, cols] of Object.entries(COLUMNS)) {
+    const have = new Set(db.prepare(`PRAGMA table_info(${table})`).all().map(c => c.name));
+    for (const [col, type] of Object.entries(cols)) if (!have.has(col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`);
+  }
   const q = sql => db.prepare(sql);
   const tx = fn => (...a) => { db.exec('BEGIN IMMEDIATE'); try { const r = fn(...a); db.exec('COMMIT'); return r; } catch (e) { db.exec('ROLLBACK'); throw e; } };
 
   const s = {
     userByEmail: q('SELECT * FROM users WHERE email = ?'),
     userById: q('SELECT * FROM users WHERE id = ?'),
-    addUser: q('INSERT INTO users (id, email, name, pass, created) VALUES (?, ?, ?, ?, ?)'),
+    addUser: q('INSERT INTO users (id, email, name, pass, created, verified) VALUES (?, ?, ?, ?, ?, ?)'),
+    setVerified: q('UPDATE users SET verified = 1 WHERE id = ?'),
+    setPendingTotp: q('UPDATE users SET totp_pending = ? WHERE id = ?'),
+    enableTotp: q('UPDATE users SET totp_secret = totp_pending, totp_pending = NULL, totp_last = ?, recovery = ? WHERE id = ?'),
+    disableTotp: q("UPDATE users SET totp_secret = NULL, totp_pending = NULL, totp_last = 0, recovery = '[]' WHERE id = ?"),
+    useTotpStep: q('UPDATE users SET totp_last = ? WHERE id = ? AND totp_last < ?'),
+    setRecovery: q('UPDATE users SET recovery = ? WHERE id = ?'),
+    addToken: q('INSERT INTO tokens (token, user_id, kind, expires) VALUES (?, ?, ?, ?)'),
+    token: q('SELECT * FROM tokens WHERE token = ? AND kind = ? AND expires > ?'),
+    tryToken: q('UPDATE tokens SET tries = tries + 1 WHERE token = ?'),
+    dropToken: q('DELETE FROM tokens WHERE token = ?'),
+    dropTokens: q('DELETE FROM tokens WHERE user_id = ? AND kind = ?'),
+    oldTokens: q('DELETE FROM tokens WHERE expires <= ?'),
+    identity: q('SELECT * FROM identities WHERE provider = ? AND subject = ?'),
+    identities: q('SELECT provider, email, created FROM identities WHERE user_id = ? ORDER BY created'),
+    addIdentity: q('INSERT INTO identities (provider, subject, user_id, email, created) VALUES (?, ?, ?, ?, ?)'),
+    dropIdentity: q('DELETE FROM identities WHERE user_id = ? AND provider = ?'),
     setName: q('UPDATE users SET name = ? WHERE id = ?'),
     setPass: q('UPDATE users SET pass = ? WHERE id = ?'),
     addSession: q('INSERT INTO sessions (token, user_id, expires) VALUES (?, ?, ?)'),
@@ -91,7 +138,7 @@ export function openDb(path, { versionEvery = 10 * 60_000, keepVersions = 100 } 
     shares: q('SELECT token, mode, created FROM shares WHERE user_id = ? AND file_id = ? ORDER BY created'),
     share: q('SELECT s.*, u.name AS owner_name, u.email AS owner_email FROM shares s JOIN users u ON u.id = s.user_id WHERE s.token = ?'),
     dropShare: q('DELETE FROM shares WHERE token = ? AND user_id = ?'),
-    listUsers: q('SELECT u.email, u.name, u.created, (SELECT count(*) FROM files f WHERE f.user_id = u.id) AS files FROM users u ORDER BY u.created'),
+    listUsers: q('SELECT u.email, u.name, u.created, u.verified, u.totp_secret IS NOT NULL AS totp, (SELECT count(*) FROM files f WHERE f.user_id = u.id) AS files FROM users u ORDER BY u.created'),
     dropUser: q('DELETE FROM users WHERE id = ?'),
     usage: q('SELECT count FROM ai_usage WHERE user_id = ? AND day = ?'),
     bumpUsage: q('INSERT INTO ai_usage (user_id, day, count) VALUES (?, ?, 1) ON CONFLICT (user_id, day) DO UPDATE SET count = count + 1'),

@@ -2,7 +2,9 @@ import express from 'express';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
-import { COOKIE, DUMMY, SESSION_DAYS, checkPassword, hashPassword, limiter, newId, newToken, readCookie, sessionCookie, tokenHash } from './auth.js';
+import { COOKIE, newToken, readCookie, tokenHash } from './auth.js';
+import { accountRoutes } from './accounts.js';
+import { createMailer } from './mail.js';
 
 /* Linework's own backend: accounts, files with version history, folders, share links and the AI proxy
    with a daily allowance. It answers the same /api/files and /api/ai requests as the Netlify functions,
@@ -11,19 +13,19 @@ import { COOKIE, DUMMY, SESSION_DAYS, checkPassword, hashPassword, limiter, newI
 
 const MAX_FILE = 4_000_000;
 const ID = /^[\w-]{1,80}$/;
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function createApp(store, opts = {}) {
   const {
     allowSignup = true, aiKey = '', aiModel = 'claude-sonnet-5-5', aiBase = 'https://api.anthropic.com',
     aiDailyLimit = 50, publicDir = null, trustProxy = false,
+    mailer = createMailer(), oauth = {}, appUrl = '', allowLocal = false,
   } = opts;
+  // New accounts confirm their email when the server can send one (unless turned off).
+  const requireVerified = opts.requireVerified ?? mailer.configured;
   const { s } = store;
   const app = express();
   app.disable('x-powered-by');
   if (trustProxy) app.set('trust proxy', trustProxy);
-  // Failed sign-ins: 10 per email, and 50 per address (many people can share one, e.g. behind a proxy).
-  const byEmail = limiter({ max: 10 }), byIp = limiter({ max: 50 });
 
   // Cross-origin isolation for the Code view's runtimes (as in netlify.toml), on every response.
   app.use((req, res, next) => {
@@ -51,64 +53,14 @@ export function createApp(store, opts = {}) {
     next();
   });
   const signedIn = (req, res, next) => (req.user ? next() : res.status(401).json({ error: 'unauthorized' }));
-  const publicUser = u => ({ id: u.id, email: u.email, name: u.name, created: u.created });
+  const accounts = accountRoutes(api, { store, mailer, allowSignup, requireVerified, oauthConfig: oauth, appUrl, signedIn });
 
+  // What this server offers. allowLocal: whether the app may be used without an account.
   api.get('/server', (req, res) => res.json({
-    name: 'linework-server', signup: allowSignup,
-    features: ['versions', 'share', 'folders', 'ai-limits'],
+    name: 'linework-server', ...accounts.info(), allowLocal,
+    features: ['versions', 'share', 'folders', 'ai-limits', '2fa'],
     ai: { configured: Boolean(aiKey), dailyLimit: aiDailyLimit },
   }));
-
-  /* ---- accounts ---- */
-  const startSession = (req, res, user) => {
-    const t = newToken();
-    s.addSession.run(tokenHash(t), user.id, Date.now() + SESSION_DAYS * 86400_000);
-    res.set('Set-Cookie', sessionCookie(req, t, SESSION_DAYS * 86400));
-  };
-  const me = u => ({ user: { ...publicUser(u), folders: JSON.parse(s.folders.get(u.id)?.data || '[]') } });
-
-  api.post('/auth/signup', async (req, res) => {
-    if (!allowSignup) return res.status(403).json({ error: 'signup_disabled', message: 'New accounts are by invitation only.' });
-    const email = String(req.body?.email || '').trim().toLowerCase(), password = String(req.body?.password || ''), name = String(req.body?.name || '').trim().slice(0, 80);
-    if (!EMAIL.test(email) || email.length > 200) return res.status(400).json({ error: 'bad_email', message: 'Enter a valid email address.' });
-    if (password.length < 8 || password.length > 200) return res.status(400).json({ error: 'weak_password', message: 'Use a longer password (at least 8 characters).' });
-    if (s.userByEmail.get(email)) return res.status(409).json({ error: 'exists', message: 'There’s already an account with that email. Sign in instead.' });
-    const user = { id: newId(), email, name, pass: await hashPassword(password), created: Date.now() };
-    s.addUser.run(user.id, user.email, user.name, user.pass, user.created);
-    startSession(req, res, user);
-    res.status(201).json(me(user));
-  });
-
-  api.post('/auth/login', async (req, res) => {
-    const email = String(req.body?.email || '').trim().toLowerCase(), password = String(req.body?.password || '');
-    if (byEmail.blocked(email) || byIp.blocked(req.ip)) return res.status(429).json({ error: 'too_many', message: 'Too many tries. Wait a few minutes, then try again.' });
-    const user = s.userByEmail.get(email);
-    const ok = await checkPassword(password, user ? user.pass : DUMMY);
-    if (!user || !ok) { byEmail.fail(email); byIp.fail(req.ip); return res.status(400).json({ error: 'bad_login', message: 'That email and password don’t match.' }); }
-    byEmail.clear(email);
-    startSession(req, res, user);
-    res.json(me(user));
-  });
-
-  api.post('/auth/logout', (req, res) => {
-    if (req.token) s.dropSession.run(tokenHash(req.token));
-    res.set('Set-Cookie', sessionCookie(req, '', 0)).json({ ok: true });
-  });
-
-  api.get('/auth/me', signedIn, (req, res) => res.json(me(req.user)));
-
-  // Change the name, or the password (which needs the current one, and signs out other devices).
-  api.patch('/auth/me', signedIn, async (req, res) => {
-    const b = req.body || {};
-    if (typeof b.name === 'string') s.setName.run(b.name.trim().slice(0, 80), req.user.id);
-    if (typeof b.password === 'string') {
-      if (!(await checkPassword(String(b.current || ''), req.user.pass))) return res.status(400).json({ error: 'bad_password', message: 'Your current password isn’t right.' });
-      if (b.password.length < 8 || b.password.length > 200) return res.status(400).json({ error: 'weak_password', message: 'Use a longer password (at least 8 characters).' });
-      s.setPass.run(await hashPassword(b.password), req.user.id);
-      s.dropSessions.run(req.user.id, tokenHash(req.token));
-    }
-    res.json(me(s.userById.get(req.user.id)));
-  });
 
   /* ---- files (same contract as netlify/functions/files.mts) ---- */
   const parseFile = (raw, id) => {
@@ -248,8 +200,8 @@ export function createApp(store, opts = {}) {
     app.get(/.*/, (req, res) => res.sendFile(join(publicDir, 'index.html'), { headers: { 'Cache-Control': 'no-cache' } }));
   }
 
-  // Expired sessions, hourly.
-  const sweep = setInterval(() => s.oldSessions.run(Date.now()), 3600_000);
+  // Expired sessions and links, hourly.
+  const sweep = setInterval(() => { s.oldSessions.run(Date.now()); accounts.sweep(); }, 3600_000);
   sweep.unref();
   return app;
 }
