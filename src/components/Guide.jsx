@@ -245,11 +245,13 @@ function appGuide() {
       </ul>
     </> },
     { id: 'saving', title: 'Where your work is saved', body: <>
-      <p>Files are saved <b>in this browser only</b>, a moment after each change. That means:</p>
+      <p><b>Signed in</b>, files are saved to your account a moment after each change, so they follow you to any device. Your folders and archive go with them. A copy is kept in the browser too, so you can keep working offline; it uploads when you're back.</p>
+      <p><b>Without an account</b>, files are saved <b>in this browser only</b>: they don't appear on another computer, and clearing site data or using a private window loses them. Export important files as Markdown to keep a copy.</p>
+      <p>When Linework runs on its own server (ask whoever set it up), a file's <b>⋯</b> menu also has:</p>
       <ul>
-        <li>They don't appear on another computer or another browser.</li>
-        <li>Clearing site data, or using a private window, loses them.</li>
-        <li>Export important files as Markdown to keep a copy.</li>
+        <li><b>Share…</b> makes a link to the file. <b>Can view</b> links open it read-only; <b>Can edit</b> links let anyone with the link change it, and their changes are saved to your account. Turn a link off to stop it working.</li>
+        <li><b>Version history…</b> lists earlier versions (one for each stretch of editing, the last 100) and restores one. The version you replace stays in the list.</li>
+        <li>AI has a daily allowance per account; it resets at midnight UTC.</li>
       </ul>
       <p>You stay signed in for 30 days. <b>Sign out</b> is in the sidebar; it doesn't delete your files.</p>
     </> },

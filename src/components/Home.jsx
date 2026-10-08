@@ -47,7 +47,7 @@ const typing = e => {
   return t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName);
 };
 
-export default function Home({ files, folders, setFolders, account, saveState, onOpen, onCreate, onUpdate, onRename, onDuplicate, onDelete, onSignOut, onGuide }) {
+export default function Home({ files, folders, setFolders, account, saveState, onOpen, onCreate, onUpdate, onRename, onDuplicate, onDelete, onSignOut, onGuide, serverProps = () => ({}) }) {
   const { popup, ask, toast, theme } = useUI();
   const [q, setQ] = useState('');
   const [view, setView] = useState('all'); // 'all' | 'archive' | folder id
@@ -142,7 +142,7 @@ Reply with ONLY a JSON object: {"title": "...", "doc": "...", "diagrams": [...]}
     } },
   ]);
 
-  const fileMenu = (btn, f) => popup(btn, [
+  const fileMenu = (btn, f) => { const sp = serverProps(f); popup(btn, [
     { label: 'Open', act: () => onOpen(f.id) },
     { label: 'Rename', act: () => onRename(f) },
     { label: 'Duplicate', act: () => onDuplicate(f) },
@@ -161,9 +161,10 @@ Reply with ONLY a JSON object: {"title": "...", "doc": "...", "diagrams": [...]}
     f.archived
       ? { label: 'Restore from archive', act: () => onUpdate(f.id, c => { delete c.archived; }) }
       : { label: 'Archive', act: () => { onUpdate(f.id, c => { c.archived = true; }); toast('Moved to Archive'); } },
+    ...(sp.onShare ? ['-', { label: 'Share…', act: sp.onShare }, { label: 'Version history…', act: sp.onHistory }] : []),
     '-',
     { label: 'Delete', danger: true, act: () => onDelete(f) },
-  ]);
+  ]); };
 
   // Shortcuts: / search, Alt+N new file, A all files, E archive, G guide.
   useEffect(() => {

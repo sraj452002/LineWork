@@ -11,22 +11,33 @@ import { tidyImages } from './lib/images.js';
 import { refreshAI } from './lib/ai.js';
 import { clone, rid } from './lib/utils.js';
 import { dg } from './lib/engines.js';
+import { serverInfo, sharedToken } from './lib/backend.js';
+import { HistoryDialog, ShareDialog, SharedFile } from './components/ServerDialogs.jsx';
 
 export default function App() {
+  return <UIProvider>{sharedToken() ? <Shared /> : <Main />}</UIProvider>;
+}
+
+// A share link (/s/<token>) opens just that file, with or without an account.
+function Shared() {
+  const [guide, setGuide] = useState(null);
+  return (<>
+    {guide && <Guide which={guide} onWhich={setGuide} onClose={() => setGuide(null)} onTry={() => setGuide(null)} />}
+    <div hidden={!!guide} className="shared-wrap"><SharedFile onGuide={setGuide} /></div>
+  </>);
+}
+
+function Main() {
   // undefined while checking; null when nobody is signed in; else {mode: 'cloud' | 'local', user?, pending?}
   const [session, setSession] = useState(undefined);
   // AI availability depends on being signed in, so check again whenever someone signs in or out.
   const enter = s => { refreshAI(); setSession(s); };
   useEffect(() => { startSession().then(s => (s && s.mode ? enter(s) : setSession(s)), () => setSession(null)); }, []);
   const out = async () => { await signOut(session && session.mode); enter(null); };
-  return (
-    <UIProvider>
-      {session === undefined ? <div className="boot" aria-busy="true" />
-        : session && session.mode && !session.pending
-          ? <Workspace key={session.user ? session.user.id : 'local'} session={session} onSignOut={out} />
-          : <Login pending={session && session.pending} onSignedIn={enter} />}
-    </UIProvider>
-  );
+  return session === undefined ? <div className="boot" aria-busy="true" />
+    : session && session.mode && !session.pending
+      ? <Workspace key={session.user ? session.user.id : 'local'} session={session} onSignOut={out} />
+      : <Login pending={session && session.pending} onSignedIn={enter} />;
 }
 
 function Workspace({ session, onSignOut }) {
@@ -38,6 +49,10 @@ function Workspace({ session, onSignOut }) {
   const [openId, setOpenId] = useState(null);
   const [guide, setGuide] = useState(null); // null | 'app' | 'erd'
   const [saveState, setSaveState] = useState(cloud ? 'Syncing' : 'Saved');
+  // With the Linework server: share links and version history (for account files).
+  const [server, setServer] = useState(null);
+  useEffect(() => { if (cloud) serverInfo().then(setServer); }, [cloud]);
+  const [dialog, setDialog] = useState(null); // {type: 'share' | 'history', id}
   const filesRef = useRef(files);
   filesRef.current = files;
   const loaded = useRef(!cloud); // cloud: true once the account's files have arrived
@@ -187,6 +202,19 @@ function Workspace({ session, onSignOut }) {
   };
 
   const updateOpen = useCallback(fn => update(openId, fn), [openId, update]);
+  // Put an earlier version back. The current one stays in the history, so this can be undone the same way.
+  const restore = (id, old, saved) => {
+    setFiles(fs => fs.map(f => (f.id === id ? { ...old, id, updated: Date.now() } : f)));
+    toast(`Restored the version from ${new Date(saved).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}`);
+  };
+  const dlgFile = dialog && files.find(f => f.id === dialog.id);
+  const dialogs = dlgFile && (dialog.type === 'share'
+    ? <ShareDialog file={dlgFile} saving={saveState !== 'Saved'} onClose={() => setDialog(null)} />
+    : <HistoryDialog file={dlgFile} onRestore={(old, saved) => restore(dlgFile.id, old, saved)} onClose={() => setDialog(null)} />);
+  const serverProps = f => (server && cloud ? {
+    onShare: () => { setDialog({ type: 'share', id: f.id }); sync(); },
+    onHistory: () => { setDialog({ type: 'history', id: f.id }); sync(); },
+  } : {});
   const file = files.find(f => f.id === openId);
 
   if (guide) {
@@ -200,18 +228,20 @@ function Workspace({ session, onSignOut }) {
     );
   }
   if (file) {
-    return (
-      <Editor key={file.id} file={file} update={updateOpen} saveState={saveState}
+    return (<>
+      <Editor key={file.id} file={file} update={updateOpen} saveState={saveState} {...serverProps(file)}
         onBack={() => setOpenId(null)}
         onRename={() => rename(file)}
         onDuplicate={() => { const c = duplicate(file); setOpenId(c.id); }}
         onDelete={() => remove(file)}
         onGuide={setGuide} />
-    );
+      {dialogs}
+    </>);
   }
-  return (
+  return (<>
     <Home files={files} folders={folders} setFolders={setFolders} account={cloud ? session.user : null} saveState={saveState}
       onOpen={setOpenId} onCreate={create} onUpdate={update} onRename={rename}
-      onDuplicate={duplicate} onDelete={remove} onSignOut={onSignOut} onGuide={setGuide} />
-  );
+      onDuplicate={duplicate} onDelete={remove} onSignOut={onSignOut} onGuide={setGuide} serverProps={serverProps} />
+    {dialogs}
+  </>);
 }

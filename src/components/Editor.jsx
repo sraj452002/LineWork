@@ -15,7 +15,8 @@ const narrow = () => innerWidth <= 760;
 const AI_KEY = 'linework:ai-open';
 const aiPref = () => { try { const v = localStorage.getItem(AI_KEY); return v == null ? innerWidth > 1000 : v === '1'; } catch (e) { return false; } };
 
-export default function Editor({ file, update, saveState, onBack, onRename, onDuplicate, onDelete, onGuide }) {
+// onShare and onHistory appear with the Linework server (server/); a shared file has no onDelete.
+export default function Editor({ file, update, saveState, onBack, onRename, onDuplicate, onDelete, onGuide, onShare, onHistory, duplicateLabel = 'Duplicate file' }) {
   const { popup, ask, toast } = useUI();
   const history = useRef(new Map()).current;
   const [isNarrow, setNarrow] = useState(narrow);
@@ -139,11 +140,12 @@ export default function Editor({ file, update, saveState, onBack, onRename, onDu
         <ThemeButton />
         <button className="btn" aria-haspopup="menu" onClick={e => exportMenu(e.currentTarget)}>Export</button>
         <button className="btn" aria-haspopup="menu" aria-label="More actions" onClick={e => popup(e.currentTarget, [
-          { label: 'Rename file', act: onRename },
-          { label: 'Duplicate file', act: onDuplicate },
+          ...(onRename ? [{ label: 'Rename file', act: onRename }] : []),
+          { label: duplicateLabel, act: onDuplicate },
+          ...(onShare ? [{ label: 'Share…', note: 'A link to view or edit this file', act: onShare }] : []),
+          ...(onHistory ? [{ label: 'Version history…', note: 'See and restore earlier versions', act: onHistory }] : []),
           '-',
-          { label: 'Delete file', danger: true, act: onDelete },
-          '-',
+          ...(onDelete ? [{ label: 'Delete file', danger: true, act: onDelete }, '-'] : []),
           { label: 'How to use Linework', note: 'Guide to the whole app', act: () => onGuide('app') },
           { label: 'Database schema guide', note: 'Tables, columns, relationships', act: () => onGuide('erd') },
         ])}>⋯</button>

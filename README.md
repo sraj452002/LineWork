@@ -11,25 +11,61 @@ npm run dev
 
 Open the URL Vite prints (usually http://localhost:5173).
 
-## Sign in
+## Accounts and where files are saved
 
-The username and password are hardcoded in `src/lib/auth.js`. Change them there and rebuild.
-Sessions last 30 days in the browser; **Sign out** ends them.
+Linework runs with one of two backends, and works without either:
 
-This check runs in the browser, so anyone who opens the built JavaScript can read the credentials. It keeps out casual visitors, not a determined one.
+- **On Netlify**: accounts are [Netlify Identity](https://docs.netlify.com/security/secure-access-to-sites/identity/) (email and password, or Google/GitHub if you turn them on). Files are saved with `netlify/functions/files.mts` in Netlify Blobs, and folders in the account's profile.
+- **On your own server** (`server/`, below): its own accounts and a SQLite database, plus **share links**, **version history** and a **daily AI allowance** per account.
+- **Without an account** (and in local development without the server): files stay in the browser.
+
+The app asks `GET /api/server` which one it's talking to.
 
 ## Deploy on Netlify
 
-Connect the repo in Netlify (or run `npx netlify-cli deploy --prod`). `netlify.toml` already sets:
-
-- Build command: `npm run build`
-- Publish directory: `dist`
+Connect the repo in Netlify (or run `npx netlify-cli deploy --prod`). `netlify.toml` already sets the build command (`npm run build`, with a 4 GB Node heap), the publish directory (`dist`) and the headers. Turn on Identity in the Netlify project for accounts.
 
 ### Optional: AI generation
 
-Set `ANTHROPIC_API_KEY` in Netlify environment variables. The edge function in `netlify/edge-functions/ai.ts` keeps the key on the server. `ANTHROPIC_MODEL` overrides the model (default `claude-sonnet-5-5`).
+Set `ANTHROPIC_API_KEY` in Netlify environment variables. The edge function in `netlify/edge-functions/ai.ts` keeps the key on the server and only answers signed-in accounts. `ANTHROPIC_MODEL` overrides the model (default `claude-sonnet-5-5`).
 
-The AI endpoint isn't behind the sign-in, so anyone who finds the site URL could use it and spend your API credit. Leave the key unset if that's a concern.
+## Run your own server
+
+`server/` is a standalone Node.js backend (Express, and Node's built-in SQLite) that serves the app and its API, so Linework runs on any host that runs Node 22.13 or later, without Netlify.
+
+```bash
+npm install
+npm run build        # the app, into dist/
+npm start            # http://localhost:8787
+```
+
+It adds, on top of what the Netlify backend does:
+
+- **Accounts** with email and password (scrypt hashes; sessions are an HttpOnly cookie for 30 days). There's no email, so a forgotten password is reset by whoever runs the server: `npm run admin -- reset-password <email> <new password>`. `npm run admin -- users` lists accounts; `delete-user <email>` removes one with its files.
+- **Folders and the archive** saved to the account.
+- **Version history**: each stretch of editing (10 minutes) keeps a version, the last 100 per file. **Version history…** on a file's ⋯ menu restores one.
+- **Share links**: **Share…** makes a link that opens one file, read-only or editable, for anyone who has it (no account needed). Edits through an edit link are saved to the owner's account. Links can be turned off.
+- **AI with a daily allowance**: `AI_DAILY_LIMIT` requests per account per day (default 50, UTC days).
+
+Settings are environment variables; `server/.env.example` lists them all. The main ones:
+
+| Variable | Default | |
+|---|---|---|
+| `PORT` | `8787` | |
+| `DATABASE_PATH` | `data/linework.db` | Keep it on a persistent disk, and back it up. |
+| `ANTHROPIC_API_KEY` | | Turns AI on. `ANTHROPIC_MODEL` picks the model. |
+| `AI_DAILY_LIMIT` | `50` | `0` for no limit. |
+| `ALLOW_SIGNUP` | `true` | `false` stops new accounts. |
+| `TRUST_PROXY` | | `1` behind a host's proxy (Render, Railway, Fly.io), so cookies are marked Secure on HTTPS. |
+
+**Hosting.** Any Node host with a persistent disk works. Build command `npm install && npm run build`, start command `npm start`, a disk mounted where `DATABASE_PATH` points, and `TRUST_PROXY=1`. Or use the `Dockerfile`: `docker build -t linework . && docker run -p 8787:8787 -v linework-data:/data linework`. The server needs HTTPS in front of it for the Code view's runtimes and for secure cookies; hosts provide that.
+
+**Developing against it.** Run the server for the API only, and Vite with a proxy to it:
+
+```bash
+npm run server                                  # API on :8787, restarts on changes
+LINEWORK_API=http://localhost:8787 npm run dev  # the app, with /api sent to the server
+```
 
 ## Running code
 
@@ -62,10 +98,13 @@ src/
     Canvas.jsx          pan, zoom, drag, code drawer, AI prompt
     CodeWorkspace.jsx   Code view: explorer, tabs, Monaco editor, quick open, Run
     RunPanel.jsx        Output, Terminal, Python prompt and Preview (xterm.js)
+    ServerDialogs.jsx   Share links, version history and shared-file page (server/ only)
     Visualizer.jsx      Visualize pane: code diagrams and step-through
     ui.jsx              menus, dialogs, toasts, theme button
   lib/
-    auth.js             hardcoded credentials
+    auth.js             accounts: Netlify Identity, or the Linework server
+    backend.js          talking to the Linework server
+    cloud.js            keeping files in step with the account
     engines.js          diagram parsers, layout and SVG rendering
     markdown.js         markdown renderer for docs
     ai.js               AI client and prompt language
@@ -76,6 +115,15 @@ src/
     python.worker.js    Pyodide in a web worker
     shell/lw.cjs        the Terminal's extra commands (grep, git, curl, python, code…)
     storage.js          browser storage
+server/
+  index.js              starts the server from environment variables
+  app.js                the API: accounts, files, versions, folders, share links, AI
+  db.js                 SQLite schema and queries
+  auth.js               passwords, sessions, sign-in limits
+  admin.js              npm run admin: list users, reset passwords
+netlify/
+  functions/files.mts   files API on Netlify (Blobs)
+  edge-functions/ai.ts  AI proxy on Netlify
 ```
 
-Files are saved in the browser's local storage, so they stay on the device you use.
+Without an account, files are saved in the browser's local storage, so they stay on the device you use.

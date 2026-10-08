@@ -27,7 +27,8 @@ export default function Login({ onSignedIn, pending }) {
     else if (mode === 'up') run(async () => {
       if (password.length < 8) throw new Error('Use a longer password (at least 8 characters).');
       const user = await createAccount(email, password, name);
-      if (settings && settings.autoconfirm) onSignedIn({ mode: 'cloud', user: await signIn(email, password) });
+      if (settings && settings.server) onSignedIn({ mode: 'cloud', user }); // already signed in
+      else if (settings && settings.autoconfirm) onSignedIn({ mode: 'cloud', user: await signIn(email, password) });
       else { setMode('in'); setPw(''); setNote(`Check ${email.trim()} for a link to confirm your account, then sign in.`); }
     });
     else if (mode === 'reset') run(async () => { await sendPasswordReset(email); setNote(`If ${email.trim()} has an account, a reset link is on its way.`); });
@@ -78,8 +79,10 @@ export default function Login({ onSignedIn, pending }) {
             </div>
           )}
           <div className="login-links">
-            {mode === 'in' && <><button type="button" className="link" onClick={() => { setMode('up'); setError(''); }}>Create an account</button>
-              <button type="button" className="link" onClick={() => { setMode('reset'); setError(''); }}>Forgot password?</button></>}
+            {mode === 'in' && <>{settings.signup !== false && <button type="button" className="link" onClick={() => { setMode('up'); setError(''); }}>Create an account</button>}
+              {settings.server
+                ? <small className="login-hint">Forgot your password? Ask whoever runs this server to reset it.</small>
+                : <button type="button" className="link" onClick={() => { setMode('reset'); setError(''); }}>Forgot password?</button>}</>}
             {(mode === 'up' || mode === 'reset') && <button type="button" className="link" onClick={() => { setMode('in'); setError(''); }}>I already have an account</button>}
           </div>
         </>)}
