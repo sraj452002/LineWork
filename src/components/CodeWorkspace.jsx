@@ -374,14 +374,31 @@ export default function CodeWorkspace({ file, update, visible }) {
     addEventListener('pointermove', move); addEventListener('pointerup', up);
   };
 
+  // Terminal → editor: "code <file>" opens the file (it may only just have been created there).
+  const openPath = useCallback(p => {
+    let tries = 0;
+    const go = () => {
+      const f = filesRef.current.find(x => x.path === p);
+      if (f) { openFile(f.id); return; }
+      if (++tries < 8) { setTimeout(go, 250); return; }
+      addFiles([{ path: p, text: '' }]);
+    };
+    go();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Explorer → Terminal: cd to a folder.
+  const openInTerminal = dir => { openPanel('terminal'); requestAnimationFrame(() => requestAnimationFrame(() => runRef.current?.cdTo(dir))); };
+
   const nodeMenu = (anchor, node) => popup(anchor, node.type === 'dir' ? [
     { label: 'New file', act: () => newFile(node.path) },
     { label: 'New folder', act: () => newFolder(node.path) },
+    { label: 'Open in Terminal', act: () => openInTerminal(node.path) },
     '-',
     { label: 'Rename', act: () => rename(node) },
     { label: 'Delete', danger: true, act: () => remove(node) },
   ] : [
     { label: 'Open', act: () => openFile(node.id) },
+    ...(specFor(byId.get(node.id)) ? [{ label: specFor(byId.get(node.id)).label, act: () => { openFile(node.id); runSpec(specFor(byId.get(node.id))); } }] : []),
+    { label: 'Open folder in Terminal', act: () => openInTerminal(dirOf(node.path)) },
     { label: 'Download', act: () => download(byId.get(node.id)) },
     '-',
     { label: 'Rename', act: () => rename(node) },
@@ -514,7 +531,7 @@ export default function CodeWorkspace({ file, update, visible }) {
             <div className="cw-panel" style={{ height: panel.h }}>
               <div className="cw-grip" onPointerDown={dragPanel} role="separator" aria-orientation="horizontal" aria-label="Resize the panel" />
               <RunPanel ref={runRef} fileId={file.id} files={files} folders={folders} theme={theme} tab={panelTab} setTab={setPanelTab}
-                onBack={onBack} onBusy={setRunning} onClose={() => setPanel(p => ({ ...p, open: false }))} />
+                onBack={onBack} onOpen={openPath} onBusy={setRunning} onClose={() => setPanel(p => ({ ...p, open: false }))} />
             </div>
           )}
         </section>

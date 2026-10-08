@@ -68,10 +68,20 @@ _lw_g = {'__name__': '__main__', '__builtins__': __builtins__}
 def _lw_tb():
     et, ev, tb = sys.exc_info()
     traceback.print_exception(et, ev, tb.tb_next)
-def _lw_run(path):
-    sys.argv = [path]
+def _lw_run(path, argv=()):
+    sys.argv = [path, *argv]
     try:
         runpy.run_path(path, run_name='__main__')
+        return 0
+    except SystemExit as e:
+        return e.code if isinstance(e.code, int) else (0 if e.code is None else 1)
+    except BaseException:
+        _lw_tb()
+        return 1
+def _lw_exec(src, argv=()):
+    sys.argv = ['-c', *argv]
+    try:
+        exec(compile(src, '<string>', 'exec'), {'__name__': '__main__', '__builtins__': __builtins__})
         return 0
     except SystemExit as e:
         return e.code if isinstance(e.code, int) else (0 if e.code is None else 1)
@@ -100,10 +110,18 @@ const helper = name => {
   return helpers.get(name);
 };
 
-async function run(dir, path) {
-  cd(dir);
-  await loadImports(pyodide.FS.readFile(dir + '/' + path, { encoding: 'utf8' }));
-  return helper('_lw_run')(path);
+// path is relative to the project folder; the program runs in the project's subfolder cwd.
+async function run(dir, path, argv = [], cwd = '') {
+  cd(cwd ? dir + '/' + cwd : dir);
+  if (cwd) pyodide.runPython(`import sys\nif ${JSON.stringify(dir)} not in sys.path: sys.path.insert(1, ${JSON.stringify(dir)})`);
+  const full = dir + '/' + path;
+  await loadImports(pyodide.FS.readFile(full, { encoding: 'utf8' }));
+  return helper('_lw_run')(full, pyodide.toPy(argv));
+}
+async function exec(dir, code, argv = [], cwd = '') {
+  cd(cwd ? dir + '/' + cwd : dir);
+  await loadImports(code);
+  return helper('_lw_exec')(code, pyodide.toPy(argv));
 }
 
 // One line at the prompt; lines collect until they make a complete statement.
@@ -146,7 +164,8 @@ onmessage = async e => {
       await bootP;
       if (type === 'sync') sync(e.data.dir, e.data.write, e.data.remove, e.data.dirs);
       else if (type === 'scan') result = scan(e.data.dir);
-      else if (type === 'run') result = await run(e.data.dir, e.data.path);
+      else if (type === 'run') result = await run(e.data.dir, e.data.path, e.data.argv, e.data.cwd);
+      else if (type === 'exec') result = await exec(e.data.dir, e.data.code, e.data.argv, e.data.cwd);
       else if (type === 'line') result = await line(e.data.dir, e.data.line);
       else if (type === 'pip') result = await pip(e.data.dir, e.data.pkgs);
     }

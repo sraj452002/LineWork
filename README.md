@@ -38,6 +38,8 @@ The Code view's **Run** button, **Terminal** and **Python** prompt run code in t
 - **Node.js** runs in a [StackBlitz WebContainer](https://webcontainers.io): `node`, `npm`, `npx`, `yarn` and `pnpm` in a real shell, with npm packages installed from the npm registry, and a **Preview** of any web server the code starts. WebContainers is free for personal and open-source projects; [commercial production use needs a StackBlitz license](https://webcontainers.io/enterprise).
 - **Python** runs in [Pyodide](https://pyodide.org) (CPython in WebAssembly) in a web worker, loaded from the jsDelivr CDN. `pip install` works for pure-Python packages from PyPI and for packages Pyodide has built (NumPy, pandas and many more). `input()` isn't available.
 - Both need a cross-origin isolated page, so `netlify.toml` (and `vite.config.js` for development) send `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: credentialless`. That works in Chrome, Edge and Firefox on desktop; Safari and phones can edit code but not run it.
+- The Terminal adds everyday commands to the WebContainer shell, written in JavaScript (`src/lib/shell/lw.cjs`) and installed on its `PATH`: `grep`, `find`, `touch`, `head`, `tail`, `wc`, `sort`, `uniq`, `tree`, `diff`, `sed`, `which`, `env`, `date`, `du`, `curl`, `wget`, `git` ([isomorphic-git](https://isomorphic-git.org), installed on first use; push and pull go through its CORS proxy with `$GITHUB_TOKEN`), and `python`/`pip`, which run in the Python runtime and print in the Terminal. `code <file>` opens a file in the editor. `help` lists them all.
+- `curl` and `wget` run in the browser, so they can only fetch sites that allow cross-origin requests.
 - Native binaries, system packages (`apt-get`) and other languages need a real machine, which this in-browser setup doesn't provide.
 
 ## Project layout
@@ -62,6 +64,7 @@ src/
     monaco.js           loads Monaco and its language workers
     runtime.js          running code: Node.js (WebContainers) and Python (Pyodide)
     python.worker.js    Pyodide in a web worker
+    shell/lw.cjs        the Terminal's extra commands (grep, git, curl, python, code…)
     storage.js          browser storage
 ```
 
