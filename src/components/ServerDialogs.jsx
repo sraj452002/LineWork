@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { addShare, api, getVersion, listShares, listVersions, openShared, removeShare, saveShared, sharedToken } from '../lib/backend.js';
+import { addShare, api, asUser, getVersion, listShares, listVersions, openShared, removeShare, saveShared, serverInfo, sharedToken } from '../lib/backend.js';
 import { clone, rid } from '../lib/utils.js';
 import { useUI } from './ui.jsx';
 import Editor from './Editor.jsx';
 
-/* What the Linework server (server/) adds: share links, version history, and the page a share link opens. */
+/* What the Linework server (server/) adds: share links, version history, the page a share link opens,
+   and account settings (name, password, two-step verification, Google/GitHub). */
 
 function Modal({ title, onClose, children, wide }) {
   const ref = useRef(null);
@@ -166,5 +167,122 @@ export function SharedFile({ onGuide }) {
       <Editor key={file.id} file={file} update={update} saveState={saveState}
         onBack={() => { location.href = '/'; }} onDuplicate={copy} duplicateLabel="Make a copy for me" onGuide={onGuide} />
     </>
+  );
+}
+
+// Account & security: name, password, two-step verification, and Google/GitHub sign-in.
+export function AccountDialog({ onUser, onClose }) {
+  const { toast } = useUI();
+  const [me, setMe] = useState(null);
+  const [providers, setProviders] = useState({});
+  const [err, setErr] = useState('');
+  const [name, setName] = useState('');
+  const [pw, setPw] = useState({ current: '', next: '' });
+  const [setup, setSetup] = useState(null);   // {secret, qr} while turning two-step on
+  const [codes, setCodes] = useState(null);   // recovery codes, shown once
+  const [code, setCode] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const take = r => { setMe(r.user); onUser && onUser(asUser(r.user)); return r; };
+  useEffect(() => {
+    api('/auth/me').then(r => { setMe(r.user); setName(r.user.name || ''); }, e => setErr(e.message || 'Couldn’t load your account.'));
+    serverInfo().then(i => setProviders((i && i.providers) || {}));
+  }, []);
+  const run = async fn => { setBusy(true); setErr(''); try { await fn(); } catch (e) { setErr(e.message || 'That didn’t work.'); } finally { setBusy(false); } };
+
+  const saveName = () => run(async () => { take(await api('/auth/me', { method: 'PATCH', body: { name } })); toast('Name saved'); });
+  const savePw = () => run(async () => {
+    if (pw.next.length < 8) throw new Error('Use a longer password (at least 8 characters).');
+    take(await api('/auth/me', { method: 'PATCH', body: { password: pw.next, current: pw.current } }));
+    setPw({ current: '', next: '' });
+    toast('Password saved. Other devices are signed out.');
+  });
+  const startTotp = () => run(async () => { setSetup(await api('/auth/2fa/setup', { method: 'POST' })); setCode(''); });
+  const enableTotp = () => run(async () => { const r = take(await api('/auth/2fa/enable', { method: 'POST', body: { code } })); setSetup(null); setCode(''); setCodes(r.recovery); });
+  const disableTotp = () => run(async () => { take(await api('/auth/2fa/disable', { method: 'POST', body: { code } })); setCode(''); toast('Two-step verification is off'); });
+  const newCodes = () => run(async () => { const r = await api('/auth/2fa/recovery', { method: 'POST', body: { code } }); setCode(''); setCodes(r.recovery); });
+  const unlink = p => run(async () => { take(await api('/auth/unlink', { method: 'POST', body: { provider: p } })); toast(`Disconnected ${providers[p] || p}`); });
+  const saveCodes = () => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([`Linework recovery codes for ${me.email}\nEach works once, in place of a code from your app.\n\n${codes.join('\n')}\n`], { type: 'text/plain' }));
+    a.download = 'linework-recovery-codes.txt';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  const linked = me ? Object.fromEntries(me.identities.map(i => [i.provider, i])) : {};
+  return (
+    <Modal title="Account & security" onClose={onClose} wide>
+      {err && <p className="err" role="alert">{err}</p>}
+      {!me ? <p className="srv-empty">{err ? '' : 'Loading…'}</p> : (<div className="acct">
+        <section aria-labelledby="acct-profile">
+          <h4 id="acct-profile">Profile</h4>
+          <p className="acct-mail">{me.email}</p>
+          <div className="srv-row">
+            <input aria-label="Name" placeholder="Your name" value={name} onChange={e => setName(e.target.value)} />
+            <button className="btn" disabled={busy || name === (me.name || '')} onClick={saveName}>Save name</button>
+          </div>
+        </section>
+
+        <section aria-labelledby="acct-pw">
+          <h4 id="acct-pw">{me.hasPassword ? 'Password' : 'Set a password'}</h4>
+          {!me.hasPassword && <p>You sign in with {me.identities.map(i => providers[i.provider] || i.provider).join(' or ')}. A password lets you sign in with your email too.</p>}
+          <div className="srv-row">
+            {me.hasPassword && <input type="password" aria-label="Current password" placeholder="Current password" autoComplete="current-password" value={pw.current} onChange={e => setPw({ ...pw, current: e.target.value })} />}
+            <input type="password" aria-label="New password" placeholder="New password" autoComplete="new-password" value={pw.next} onChange={e => setPw({ ...pw, next: e.target.value })} />
+            <button className="btn" disabled={busy || !pw.next} onClick={savePw}>{me.hasPassword ? 'Change' : 'Set password'}</button>
+          </div>
+        </section>
+
+        <section aria-labelledby="acct-2fa">
+          <h4 id="acct-2fa">Two-step verification <span className={'srv-tag' + (me.totp ? ' edit' : '')}>{me.totp ? 'On' : 'Off'}</span></h4>
+          {codes ? (<>
+            <p>Your recovery codes. Keep them somewhere safe: each one signs you in once if you lose your phone. They won’t be shown again.</p>
+            <ol className="acct-codes" aria-label="Recovery codes">{codes.map(c => <li key={c}><code>{c}</code></li>)}</ol>
+            <div className="srv-row">
+              <button className="btn" onClick={() => navigator.clipboard?.writeText(codes.join('\n')).then(() => toast('Codes copied'))}>Copy</button>
+              <button className="btn" onClick={saveCodes}>Download</button>
+              <button className="btn dark" onClick={() => setCodes(null)}>I’ve saved them</button>
+            </div>
+          </>) : setup ? (<>
+            <p>Scan this with an authenticator app (Google Authenticator, 1Password, Authy…), then enter the 6-digit code it shows.</p>
+            <div className="acct-qr" role="img" aria-label="QR code for your authenticator app" dangerouslySetInnerHTML={{ __html: setup.qr }} />
+            <p className="acct-secret">Can’t scan it? Enter this key: <code>{setup.secret.replace(/(.{4})/g, '$1 ').trim()}</code></p>
+            <div className="srv-row">
+              <input aria-label="Code from the app" placeholder="123456" inputMode="numeric" autoComplete="one-time-code" value={code} onChange={e => setCode(e.target.value)} />
+              <button className="btn dark" disabled={busy || !code} onClick={enableTotp}>Turn on</button>
+              <button className="btn" onClick={() => setSetup(null)}>Cancel</button>
+            </div>
+          </>) : me.totp ? (<>
+            <p>Signing in asks for a code from your authenticator app. To turn it off or get new recovery codes, enter a current code (or a recovery code).</p>
+            <div className="srv-row">
+              <input aria-label="Code from the app" placeholder="Code" inputMode="numeric" autoComplete="one-time-code" value={code} onChange={e => setCode(e.target.value)} />
+              <button className="btn" disabled={busy || !code} onClick={newCodes}>New recovery codes</button>
+              <button className="btn" disabled={busy || !code} onClick={disableTotp}>Turn off</button>
+            </div>
+          </>) : (<>
+            <p>After your password (or Google/GitHub), also ask for a code from an app on your phone, so a stolen password isn’t enough.</p>
+            <div className="srv-row"><button className="btn dark" disabled={busy} onClick={startTotp}>Set up</button></div>
+          </>)}
+        </section>
+
+        {Object.keys(providers).length > 0 && (
+          <section aria-labelledby="acct-sso">
+            <h4 id="acct-sso">Sign in with</h4>
+            <ul className="srv-list">
+              {Object.entries(providers).map(([k, n]) => (
+                <li key={k}>
+                  <span className="srv-when"><b>{n}</b><small>{linked[k] ? `Connected${linked[k].email ? ' · ' + linked[k].email : ''}` : 'Not connected'}</small></span>
+                  {linked[k]
+                    ? <button className="btn" disabled={busy} onClick={() => unlink(k)}>Disconnect</button>
+                    : <a className="btn" href={`/api/auth/oauth/${k}?link=1`}>Connect</a>}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+      </div>)}
+      <div className="mact"><button className="btn" onClick={onClose}>Close</button></div>
+    </Modal>
   );
 }

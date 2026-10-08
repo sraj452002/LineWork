@@ -2,6 +2,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openDb } from './db.js';
 import { createApp } from './app.js';
+import { createMailer } from './mail.js';
 
 // Start the Linework server. Settings come from environment variables (see server/.env.example).
 const root = resolve(fileURLToPath(import.meta.url), '../..');
@@ -17,6 +18,14 @@ const app = createApp(store, {
   aiDailyLimit: num(env.AI_DAILY_LIMIT, 50),
   publicDir: env.PUBLIC_DIR === '' ? null : resolve(root, env.PUBLIC_DIR || 'dist'),
   trustProxy: env.TRUST_PROXY ? (/^\d+$/.test(env.TRUST_PROXY) ? Number(env.TRUST_PROXY) : env.TRUST_PROXY) : false,
+  appUrl: env.APP_URL || '',
+  allowLocal: env.ALLOW_LOCAL_MODE === 'true',
+  mailer: createMailer({ resendKey: env.RESEND_API_KEY, smtpUrl: env.SMTP_URL, from: env.MAIL_FROM }),
+  requireVerified: env.REQUIRE_EMAIL_VERIFICATION === undefined || env.REQUIRE_EMAIL_VERIFICATION === '' ? undefined : env.REQUIRE_EMAIL_VERIFICATION !== 'false',
+  oauth: {
+    google: { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET },
+    github: { clientId: env.GITHUB_CLIENT_ID, clientSecret: env.GITHUB_CLIENT_SECRET },
+  },
 });
 
 const port = num(env.PORT, 8787), host = env.HOST || '0.0.0.0';

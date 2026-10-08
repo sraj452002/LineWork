@@ -17,6 +17,7 @@ const IC = {
   book: 'M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2zM4 21V5M8 7h7',
   table: 'M4 5h16v14H4zM4 10h16M10 10v9',
   logout: 'M15 4h4v16h-4M10 8l-4 4 4 4M6 12h11',
+  shield: 'M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6zM9 12l2 2 4-4',
   caret: 'M7 10l5 5 5-5',
   sort: 'M8 5v14M5 16l3 3 3-3M14 7h6M14 12h4M14 17h2',
 };
@@ -47,7 +48,7 @@ const typing = e => {
   return t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName);
 };
 
-export default function Home({ files, folders, setFolders, account, saveState, onOpen, onCreate, onUpdate, onRename, onDuplicate, onDelete, onSignOut, onGuide, serverProps = () => ({}) }) {
+export default function Home({ files, folders, setFolders, account, saveState, onOpen, onCreate, onUpdate, onRename, onDuplicate, onDelete, onSignOut, onGuide, serverProps = () => ({}), onAccount }) {
   const { popup, ask, toast, theme } = useUI();
   const [q, setQ] = useState('');
   const [view, setView] = useState('all'); // 'all' | 'archive' | folder id
@@ -242,6 +243,7 @@ Reply with ONLY a JSON object: {"title": "...", "doc": "...", "diagrams": [...]}
             <span className="avatar sm">{initial}</span>
             <span><b>{account ? who : 'No account'}</b><small>{account ? (saveState === 'Offline' ? 'Offline, will retry' : saveState === 'Syncing' ? 'Syncing…' : 'Saved to your account') : 'Saved in this browser only'}</small></span>
           </div>
+          {onAccount && <button className="nav" onClick={onAccount}><Ico d={IC.shield} /><span>Account &amp; security</span></button>}
           <ThemeButton className="nav theme-nav" withLabel />
           <button className="nav" onClick={onSignOut}><Ico d={IC.logout} /><span>{account ? 'Sign out' : 'Sign in or create an account'}</span></button>
           <button ref={newRef} className="new-btn" aria-haspopup="menu" onClick={e => newMenu(e.currentTarget)}>

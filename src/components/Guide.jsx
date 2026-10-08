@@ -254,6 +254,7 @@ function appGuide() {
         <li>AI has a daily allowance per account; it resets at midnight UTC.</li>
       </ul>
       <p>You stay signed in for 30 days. <b>Sign out</b> is in the sidebar; it doesn't delete your files.</p>
+      <p>On a Linework server, <b>Account &amp; security</b> in the sidebar changes your name and password, connects Google or GitHub, and turns on <b>two-step verification</b>: scan the QR code with an authenticator app, enter its code, and save the ten recovery codes it gives you. After that, signing in also asks for the code from your app (or one recovery code, if you've lost your phone).</p>
     </> },
   ];
 }

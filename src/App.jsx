@@ -12,7 +12,7 @@ import { refreshAI } from './lib/ai.js';
 import { clone, rid } from './lib/utils.js';
 import { dg } from './lib/engines.js';
 import { serverInfo, sharedToken } from './lib/backend.js';
-import { HistoryDialog, ShareDialog, SharedFile } from './components/ServerDialogs.jsx';
+import { AccountDialog, HistoryDialog, ShareDialog, SharedFile } from './components/ServerDialogs.jsx';
 
 export default function App() {
   return <UIProvider>{sharedToken() ? <Shared /> : <Main />}</UIProvider>;
@@ -32,16 +32,25 @@ function Main() {
   const [session, setSession] = useState(undefined);
   // AI availability depends on being signed in, so check again whenever someone signs in or out.
   const enter = s => { refreshAI(); setSession(s); };
-  useEffect(() => { startSession().then(s => (s && s.mode ? enter(s) : setSession(s)), () => setSession(null)); }, []);
+  useEffect(() => {
+    const check = () => startSession().then(s => (s && s.mode ? enter(s) : setSession(s)), () => setSession(null));
+    check();
+    // An emailed link opened in a tab that already shows the app only changes the #fragment.
+    const link = () => { if (/[#&](verify|reset|mfa|auth_error|account)=/.test(location.hash)) { setSession(undefined); check(); } };
+    addEventListener('hashchange', link);
+    return () => removeEventListener('hashchange', link);
+  }, []);
   const out = async () => { await signOut(session && session.mode); enter(null); };
   return session === undefined ? <div className="boot" aria-busy="true" />
     : session && session.mode && !session.pending
-      ? <Workspace key={session.user ? session.user.id : 'local'} session={session} onSignOut={out} />
-      : <Login pending={session && session.pending} onSignedIn={enter} />;
+      ? <Workspace key={session.user ? session.user.id : 'local'} session={session} onSignOut={out}
+          onUser={user => setSession(s => ({ ...s, user }))} />
+      : <Login pending={session && session.pending} notice={session && session.notice} onSignedIn={enter} />;
 }
 
-function Workspace({ session, onSignOut }) {
+function Workspace({ session, onSignOut, onUser }) {
   const { toast, ask } = useUI();
+  useEffect(() => { if (session.notice) toast(session.notice); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const cloud = session.mode === 'cloud', uid = cloud ? session.user.id : null;
   const cache = useRef(cloud ? loadCache(uid) : null);
   const [files, setFiles] = useState(() => (cloud ? cache.current.files : loadFiles()));
@@ -52,7 +61,7 @@ function Workspace({ session, onSignOut }) {
   // With the Linework server: share links and version history (for account files).
   const [server, setServer] = useState(null);
   useEffect(() => { if (cloud) serverInfo().then(setServer); }, [cloud]);
-  const [dialog, setDialog] = useState(null); // {type: 'share' | 'history', id}
+  const [dialog, setDialog] = useState(null); // {type: 'share' | 'history' | 'account', id?}
   const filesRef = useRef(files);
   filesRef.current = files;
   const loaded = useRef(!cloud); // cloud: true once the account's files have arrived
@@ -208,7 +217,9 @@ function Workspace({ session, onSignOut }) {
     toast(`Restored the version from ${new Date(saved).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}`);
   };
   const dlgFile = dialog && files.find(f => f.id === dialog.id);
-  const dialogs = dlgFile && (dialog.type === 'share'
+  const dialogs = dialog && dialog.type === 'account'
+    ? <AccountDialog onUser={onUser} onClose={() => setDialog(null)} />
+    : dlgFile && (dialog.type === 'share'
     ? <ShareDialog file={dlgFile} saving={saveState !== 'Saved'} onClose={() => setDialog(null)} />
     : <HistoryDialog file={dlgFile} onRestore={(old, saved) => restore(dlgFile.id, old, saved)} onClose={() => setDialog(null)} />);
   const serverProps = f => (server && cloud ? {
@@ -241,7 +252,8 @@ function Workspace({ session, onSignOut }) {
   return (<>
     <Home files={files} folders={folders} setFolders={setFolders} account={cloud ? session.user : null} saveState={saveState}
       onOpen={setOpenId} onCreate={create} onUpdate={update} onRename={rename}
-      onDuplicate={duplicate} onDelete={remove} onSignOut={onSignOut} onGuide={setGuide} serverProps={serverProps} />
+      onDuplicate={duplicate} onDelete={remove} onSignOut={onSignOut} onGuide={setGuide} serverProps={serverProps}
+      onAccount={server && cloud ? () => setDialog({ type: 'account' }) : null} />
     {dialogs}
   </>);
 }
