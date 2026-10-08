@@ -193,42 +193,6 @@ test('text alignment and indent on a box', async ({ page }) => {
   await expect(box).toBeVisible();
 });
 
-test('copy objects in one file and paste them into another', async ({ page, context }) => {
-  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
-  const svg = page.locator('#svg'), shapes = page.locator('g[data-shape]');
-  await page.getByRole('button', { name: 'Create a Blank File' }).click();
-  await page.keyboard.press('r');
-  await svg.click({ position: { x: 400, y: 300 } });
-  await page.keyboard.press('Enter');
-  await page.keyboard.type('Billing');
-  await page.keyboard.press('Escape');
-  await page.keyboard.press('a');
-  await svg.click({ position: { x: 600, y: 500 } });
-  await page.keyboard.press('Control+a');
-  await page.keyboard.press('Control+c');
-
-  // A second file: Ctrl V brings both objects across, selected.
-  await page.getByRole('button', { name: 'Back to files' }).click();
-  await page.getByRole('button', { name: 'Create a Blank File' }).click();
-  await expect(shapes).toHaveCount(0);
-  await page.keyboard.press('Control+v');
-  await expect(shapes).toHaveCount(2);
-  await expect(page.getByRole('toolbar', { name: '2 objects selected' })).toBeVisible();
-  await expect(shapes.locator('text', { hasText: 'Billing' })).toHaveCount(1);
-
-  // Paste is also in the Insert menu, and pasting again adds another copy.
-  await page.keyboard.press('Escape');
-  await page.keyboard.press('/');
-  await page.getByRole('button', { name: /^Paste/ }).click();
-  await expect(shapes).toHaveCount(4);
-
-  // Cut removes the selection; paste puts it back.
-  await page.keyboard.press('Control+x');
-  await expect(shapes).toHaveCount(2);
-  await page.keyboard.press('Control+v');
-  await expect(shapes).toHaveCount(4);
-});
-
 test('icon picker loads the big icon set', async ({ page }) => {
   await page.getByRole('button', { name: 'Create a Blank File' }).click();
   await page.keyboard.press('/');

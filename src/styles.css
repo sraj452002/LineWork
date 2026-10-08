@@ -682,12 +682,6 @@ kbd{font-family:var(--ui);font-size:12px;font-weight:500;color:var(--ink2);min-w
 /* sign-in and account */
 .boot{height:100%;background:var(--paper)}
 .login .ok{color:var(--ink);background:color-mix(in srgb,var(--hi) 22%,transparent);border-radius:8px;padding:8px 10px;margin:0 0 14px}
-.login-google{display:flex;flex-direction:column;align-items:stretch;gap:6px;margin:0 0 18px}
-.login-google .btn.google{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:10px;font-size:15px;font-weight:600}
-.login-google .btn.google svg{width:18px;height:18px;flex:none}
-.login-google small{color:var(--ink2);font-size:12px;text-align:center}
-.login-or{display:flex;align-items:center;gap:10px;margin-top:10px;color:var(--ink2);font-size:12.5px}
-.login-or::before,.login-or::after{content:"";flex:1;border-top:1px solid var(--line)}
 .login-alt{display:flex;flex-direction:column;gap:8px;margin-top:16px}
 .login-alt span{text-align:center;color:var(--ink2);font-size:12.5px}
 .login-alt .btn{width:100%;padding:10px;font-size:14px}

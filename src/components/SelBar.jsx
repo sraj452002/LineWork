@@ -113,8 +113,6 @@ export default function SelBar({ shapes, single, act }) {
       { label: 'Bring to front', kbd: ']', act: () => act.order(true) },
     ] },
     '-',
-    { label: 'Copy', kbd: 'Ctrl C', act: act.copy },
-    { label: 'Cut', kbd: 'Ctrl X', act: act.cut },
     { label: 'Duplicate', kbd: 'Ctrl D', act: act.duplicate },
     { label: 'Delete', kbd: 'Del', danger: true, act: act.remove },
   ]);

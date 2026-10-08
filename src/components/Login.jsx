@@ -1,30 +1,21 @@
 import { useEffect, useState } from 'react';
 import { accountSettings, authMessage, createAccount, finishInvite, sendPasswordReset, setPassword, signIn, signInWith, chooseLocal } from '../lib/auth.js';
-import { googleEnabled, signInWithGoogle } from '../lib/gdrive.js';
 import { Brand } from './ui.jsx';
 
 const PROVIDERS = [['google', 'Google'], ['github', 'GitHub'], ['gitlab', 'GitLab'], ['bitbucket', 'Bitbucket']];
 
-const GOOGLE_NOTICE = {
-  cancelled: 'Google sign-in was cancelled.',
-  failed: 'Google sign-in didn’t finish. Try again.',
-  not_configured: 'Google sign-in isn’t set up on this site yet.',
-};
-
 // pending: {type: 'recovery' | 'invite', token} when arriving from a password-reset or invite link.
-// notice: why a Google sign-in just came back without signing in.
-export default function Login({ onSignedIn, pending, notice }) {
+export default function Login({ onSignedIn, pending }) {
   const [settings, setSettings] = useState(undefined); // undefined: checking; null: accounts unavailable
-  const [google, setGoogle] = useState(false); // Google sign-in (files in Google Drive) is set up
   const [mode, setMode] = useState(pending ? 'password' : 'in'); // in | up | reset | password
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [password, setPw] = useState('');
-  const [error, setError] = useState(GOOGLE_NOTICE[notice] || '');
+  const [error, setError] = useState('');
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => { accountSettings().then(setSettings); googleEnabled().then(setGoogle); }, []);
+  useEffect(() => { accountSettings().then(setSettings); }, []);
 
   const run = async fn => {
     setBusy(true); setError(''); setNote('');
@@ -48,7 +39,7 @@ export default function Login({ onSignedIn, pending, notice }) {
   };
   const local = () => { chooseLocal(); onSignedIn({ mode: 'local' }); };
 
-  const providers = settings ? PROVIDERS.filter(([k]) => settings.providers && settings.providers[k] && !(google && k === 'google')) : [];
+  const providers = settings ? PROVIDERS.filter(([k]) => settings.providers && settings.providers[k]) : [];
   const title = { in: 'Sign in', up: 'Create your account', reset: 'Reset your password', password: pending && pending.type === 'invite' ? 'Choose a password' : 'Set a new password' }[mode];
 
   return (
@@ -57,24 +48,13 @@ export default function Login({ onSignedIn, pending, notice }) {
         <Brand />
         <h1>{title}</h1>
         {settings === null ? (
-          <p>{google ? 'Sign in with Google to keep your files in Google Drive, or keep them in this browser.' : 'Accounts aren’t available here yet, so files are saved in this browser only.'}</p>
+          <p>Accounts aren’t available here yet, so files are saved in this browser only.</p>
         ) : mode === 'in' ? <p>Your files are saved to your account and follow you to any device.</p>
           : mode === 'up' ? <p>Free. Your files are saved to your account.</p>
           : mode === 'reset' ? <p>We’ll email you a link to choose a new password.</p>
           : <p>Use at least 8 characters.</p>}
         {error && <p className="err" role="alert">{error}</p>}
         {note && <p className="ok" role="status">{note}</p>}
-
-        {google && mode !== 'password' && (
-          <div className="login-google">
-            <button type="button" className="btn google" onClick={() => { setBusy(true); signInWithGoogle(); }} disabled={busy}>
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5a5.6 5.6 0 0 1-2.4 3.6v3h3.9c2.3-2.1 3.5-5.2 3.5-8.8z"/><path fill="#34A853" d="M12 24c3.2 0 6-1.1 8-2.9l-3.9-3c-1.1.7-2.5 1.2-4.1 1.2-3.1 0-5.8-2.1-6.7-5H1.3v3.1A12 12 0 0 0 12 24z"/><path fill="#FBBC05" d="M5.3 14.3a7.2 7.2 0 0 1 0-4.6V6.6H1.3a12 12 0 0 0 0 10.8z"/><path fill="#EA4335" d="M12 4.8c1.8 0 3.3.6 4.6 1.8l3.4-3.4A12 12 0 0 0 1.3 6.6l4 3.1c.9-2.9 3.6-4.9 6.7-4.9z"/></svg>
-              Continue with Google
-            </button>
-            <small>Your files are saved to a Linework folder in your Google Drive.</small>
-            {settings && <span className="login-or">or use email</span>}
-          </div>
-        )}
 
         {settings && (<>
           {mode === 'up' && (<>
@@ -106,8 +86,8 @@ export default function Login({ onSignedIn, pending, notice }) {
 
         {settings !== undefined && mode !== 'password' && (
           <div className="login-local">
-            <button type="button" className={settings || google ? 'link' : 'btn dark wide'} onClick={local}>Continue without an account</button>
-            {(settings || google) && <small>Files stay in this browser only, and AI is off.</small>}
+            <button type="button" className={settings ? 'link' : 'btn dark wide'} onClick={local}>Continue without an account</button>
+            {settings && <small>Files stay in this browser only, and AI is off.</small>}
           </div>
         )}
       </form>

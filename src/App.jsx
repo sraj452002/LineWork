@@ -7,14 +7,13 @@ import { UIProvider, useUI } from './components/ui.jsx';
 import { saveProfile, signOut, startSession } from './lib/auth.js';
 import { loadFiles, loadFolders, saveFiles, saveFolders } from './lib/storage.js';
 import { listFiles, loadCache, merge, putFile, removeFile, saveCache } from './lib/cloud.js';
-import { listDriveFiles, loadDriveFolders, putDriveFile, removeDriveFile, saveDriveFolders } from './lib/gdrive.js';
 import { tidyImages } from './lib/images.js';
 import { refreshAI } from './lib/ai.js';
 import { clone, rid } from './lib/utils.js';
 import { dg } from './lib/engines.js';
 
 export default function App() {
-  // undefined while checking; null when nobody is signed in; else {mode: 'cloud' | 'drive' | 'local' | null, user?, pending?, notice?}
+  // undefined while checking; null when nobody is signed in; else {mode: 'cloud' | 'local', user?, pending?}
   const [session, setSession] = useState(undefined);
   // AI availability depends on being signed in, so check again whenever someone signs in or out.
   const enter = s => { refreshAI(); setSession(s); };
@@ -25,23 +24,17 @@ export default function App() {
       {session === undefined ? <div className="boot" aria-busy="true" />
         : session && session.mode && !session.pending
           ? <Workspace key={session.user ? session.user.id : 'local'} session={session} onSignOut={out} />
-          : <Login pending={session && session.pending} notice={session && session.notice} onSignedIn={enter} />}
+          : <Login pending={session && session.pending} onSignedIn={enter} />}
     </UIProvider>
   );
 }
 
 function Workspace({ session, onSignOut }) {
   const { toast, ask } = useUI();
-  // cloud: files live online, either on the Linework account ('cloud') or in Google Drive ('drive').
-  const drive = session.mode === 'drive', cloud = session.mode === 'cloud' || drive;
-  const uid = cloud ? (drive ? 'g:' : '') + session.user.id : null, where = drive ? 'Google Drive' : 'your account';
-  const store = drive
-    ? { list: listDriveFiles, put: putDriveFile, remove: removeDriveFile }
-    : { list: listFiles, put: putFile, remove: removeFile };
+  const cloud = session.mode === 'cloud', uid = cloud ? session.user.id : null;
   const cache = useRef(cloud ? loadCache(uid) : null);
   const [files, setFiles] = useState(() => (cloud ? cache.current.files : loadFiles()));
-  const [folders, setFolders] = useState(() => (drive ? cache.current.folders || [] : cloud ? session.user.userMetadata?.folders || [] : loadFolders()));
-  const foldersReady = useRef(!drive); // Drive: don't save folders until they've been read from it
+  const [folders, setFolders] = useState(() => (cloud ? session.user.userMetadata?.folders || [] : loadFolders()));
   const [openId, setOpenId] = useState(null);
   const [guide, setGuide] = useState(null); // null | 'app' | 'erd'
   const [saveState, setSaveState] = useState(cloud ? 'Syncing' : 'Saved');
@@ -70,15 +63,15 @@ function Workspace({ session, onSignOut }) {
     let failed = false;
     if (puts.length || dels.length) setSaveState('Saving');
     for (const f of puts) {
-      try { await store.put(f); c.synced = { ...c.synced, [f.id]: f.updated }; }
+      try { await putFile(f); c.synced = { ...c.synced, [f.id]: f.updated }; }
       catch (e) {
         failed = true;
-        if (e.code === 'signed_out') { toast(`You’ve been signed out. Sign in again to keep saving to ${where}.`); break; }
-        if (e.code === 'too_large') toast(drive ? 'Your Google Drive is full. Free up space to keep saving.' : `“${f.title}” is too large to save to your account. Remove some images from it.`);
+        if (e.code === 'signed_out') { toast('You’ve been signed out. Sign in again to keep saving to your account.'); break; }
+        if (e.code === 'too_large') toast(`“${f.title}” is too large to save to your account. Remove some images from it.`);
       }
     }
     for (const id of dels) {
-      try { await store.remove(id); const { [id]: _, ...rest } = c.synced; c.synced = rest; c.deleted = (c.deleted || []).filter(x => x !== id); }
+      try { await removeFile(id); const { [id]: _, ...rest } = c.synced; c.synced = rest; c.deleted = (c.deleted || []).filter(x => x !== id); }
       catch (e) { failed = true; c.deleted = [...new Set([...(c.deleted || []), id])]; }
     }
     cache.current = { ...c, files: filesRef.current };
@@ -87,7 +80,7 @@ function Workspace({ session, onSignOut }) {
     syncing.current = false;
     if (again.current) { again.current = false; sync(); }
     else if (failed) retry.current = setTimeout(sync, 15000);
-  }, [cloud, uid, toast]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [cloud, uid, toast]);
 
   const first = useRef(true);
   useEffect(() => {
@@ -115,8 +108,7 @@ function Workspace({ session, onSignOut }) {
   useEffect(() => {
     if (!cloud) return;
     let live = true;
-    if (drive) loadDriveFolders().then(fs => { if (!live) return; foldersReady.current = true; setFolders(fs); }, () => {});
-    store.list().then(async remote => {
+    listFiles().then(async remote => {
       if (!live) return;
       const c = cache.current;
       c.synced = Object.fromEntries(remote.map(f => [f.id, f.updated]));
@@ -127,7 +119,7 @@ function Workspace({ session, onSignOut }) {
         .filter(f => !next.some(x => x.id === f.id));
       setFiles(next);
       if (old.length) {
-        const ok = await ask({ title: `Add ${old.length} file${old.length === 1 ? '' : 's'} from this browser?`, text: `They were made without an account. Add them to ${where} so they’re saved online and on your other devices.`, input: false, ok: drive ? 'Add to Google Drive' : 'Add to my account' });
+        const ok = await ask({ title: `Add ${old.length} file${old.length === 1 ? '' : 's'} from this browser?`, text: 'They were made without an account. Add them to your account so they’re saved online and on your other devices.', input: false, ok: 'Add to my account' });
         try { localStorage.setItem(key, '1'); } catch (e) {}
         if (ok && live) setFiles(fs => [...fs, ...old.filter(f => !fs.some(x => x.id === f.id))]);
       }
@@ -142,16 +134,14 @@ function Workspace({ session, onSignOut }) {
     return () => { live = false; clearTimeout(retry.current); };
   }, [cloud, uid]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Folders live on the account, in Google Drive (with a copy in this browser), or in this browser.
+  // Folders live on the account (cloud) or in this browser (local).
   const firstF = useRef(true);
   useEffect(() => {
     if (firstF.current) { firstF.current = false; return; }
     if (!cloud) { saveFolders(folders); return; }
-    if (drive) { cache.current = { ...cache.current, folders }; saveCache(uid, cache.current); }
-    if (!foldersReady.current) return;
-    const t = setTimeout(() => { (drive ? saveDriveFolders(folders) : saveProfile({ folders })).catch(() => {}); }, 800);
+    const t = setTimeout(() => { saveProfile({ folders }).catch(() => {}); }, 800);
     return () => clearTimeout(t);
-  }, [folders, cloud, drive, uid]);
+  }, [folders, cloud]);
 
   // Move images saved inline by older versions into IndexedDB, and clear out unused ones.
   useEffect(() => {
@@ -220,7 +210,7 @@ function Workspace({ session, onSignOut }) {
     );
   }
   return (
-    <Home files={files} folders={folders} setFolders={setFolders} account={cloud ? { ...session.user, where } : null} saveState={saveState}
+    <Home files={files} folders={folders} setFolders={setFolders} account={cloud ? session.user : null} saveState={saveState}
       onOpen={setOpenId} onCreate={create} onUpdate={update} onRename={rename}
       onDuplicate={duplicate} onDelete={remove} onSignOut={onSignOut} onGuide={setGuide} />
   );
