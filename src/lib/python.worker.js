@@ -26,9 +26,10 @@ function cd(dir) {
 // Fetch packages a piece of code imports (numpy, pandas…) before running it.
 const loadImports = code => pyodide.loadPackagesFromImports(code, QUIET).catch(() => {});
 
-function sync(dir, write, remove) {
+function sync(dir, write, remove, dirs = []) {
   const FS = pyodide.FS;
   FS.mkdirTree(dir);
+  for (const d of dirs) FS.mkdirTree(dir + '/' + d);
   for (const p of remove) { try { FS.unlink(dir + '/' + p); } catch (e) {} }
   for (const f of write) {
     const full = dir + '/' + f.path;
@@ -143,7 +144,7 @@ onmessage = async e => {
     else {
       if (!bootP) throw new Error('Python isn’t started');
       await bootP;
-      if (type === 'sync') sync(e.data.dir, e.data.write, e.data.remove);
+      if (type === 'sync') sync(e.data.dir, e.data.write, e.data.remove, e.data.dirs);
       else if (type === 'scan') result = scan(e.data.dir);
       else if (type === 'run') result = await run(e.data.dir, e.data.path);
       else if (type === 'line') result = await line(e.data.dir, e.data.line);

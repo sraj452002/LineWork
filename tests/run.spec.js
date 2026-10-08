@@ -10,15 +10,21 @@ import { join } from 'node:path';
 
 const PYODIDE_DIR = join(process.cwd(), 'node_modules/pyodide');
 const FAKE_WEBCONTAINER = `
-const files = new Map(), watchers = [], listeners = { 'server-ready': [], port: [] };
+const files = new Map(), dirs = new Set(), watchers = [], listeners = { 'server-ready': [], port: [] };
+// The test drives "shell" commands through this, and reads the file system.
+globalThis.__fakeWc = {
+  files, dirs,
+  mkdir(p) { dirs.add(p); fire(p); },
+  rmrf(p) { dirs.forEach(d => (d === p || d.startsWith(p + '/')) && dirs.delete(d)); files.forEach((_, f) => f.startsWith(p + '/') && files.delete(f)); fire(p); },
+};
 const enc = s => new ReadableStream({ start(c) { c.enqueue(s); c.close(); } });
 const fire = (path) => watchers.forEach(w => path.startsWith(w.dir + '/') && w.cb('change', path.slice(w.dir.length + 1)));
 const fs = {
-  mkdir: async () => {},
+  mkdir: async p => { dirs.add(p); },
   writeFile: async (p, t) => { files.set(p, t); },
   readFile: async (p, enc) => { if (!files.has(p)) throw new Error('ENOENT'); const t = files.get(p); return enc ? t : new TextEncoder().encode(t); },
-  readdir: async () => { throw new Error('ENOTDIR'); },
-  rm: async p => { files.delete(p); },
+  readdir: async p => { if (!dirs.has(p)) throw new Error('ENOTDIR'); return []; },
+  rm: async (p, o) => { files.delete(p); if (o && o.recursive) dirs.delete(p); },
   watch: (dir, opts, cb) => { const w = { dir, cb }; watchers.push(w); return { close() {} }; },
 };
 export const WebContainer = { boot: async () => ({
@@ -131,6 +137,20 @@ test('Run Node.js files and npm scripts, with a preview and files coming back', 
   await page.getByRole('menuitem', { name: /npm run start/ }).click();
   await expect(page.getByRole('tab', { name: 'Preview' })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('textbox', { name: 'Preview address' })).toHaveValue(/\?preview\/$/);
+
+  // Folders from the explorer, even empty ones, exist for the shell; mkdir and rm -r in the shell
+  // show up in the explorer.
+  await page.getByRole('button', { name: 'New folder' }).click();
+  await page.getByRole('textbox').last().fill('Test');
+  await page.getByRole('button', { name: 'Create' }).click();
+  const tree = page.getByRole('tree', { name: 'Files' });
+  await expect(tree.getByRole('treeitem', { name: /^Test/ })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => [...__fakeWc.dirs].some(d => /^lw-[\w-]+\/Test$/.test(d)))).toBe(true);
+  const root = await page.evaluate(() => [...__fakeWc.dirs].find(d => /^lw-[\w-]+$/.test(d)));
+  await page.evaluate(r => __fakeWc.mkdir(r + '/made-in-shell'), root);
+  await expect(tree.getByRole('treeitem', { name: /made-in-shell/ })).toBeVisible();
+  await page.evaluate(r => __fakeWc.rmrf(r + '/Test'), root);
+  await expect(tree.getByRole('treeitem', { name: /^Test/ })).toHaveCount(0);
 
   // The Terminal tab starts a shell.
   await page.getByRole('tab', { name: 'Terminal' }).click();
