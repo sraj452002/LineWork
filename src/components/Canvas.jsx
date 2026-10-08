@@ -94,13 +94,26 @@ pay > done` },
 
 // Styles copied with Ctrl Alt C, kept across diagrams until the page reloads.
 let styleClip = null;
+// Copied objects travel as text on the system clipboard (so they paste into any file, tab or window
+// of Linework), with a copy kept in this browser for the menu's Paste.
+const CLIP = 'linework-shapes:', CLIP_KEY = 'linework:clipboard';
+let pasteRun = 0; // pastes since the last copy, so repeated pastes don't stack exactly
+const readClip = text => {
+  if (typeof text !== 'string' || !text.startsWith(CLIP)) return null;
+  try {
+    const o = JSON.parse(text.slice(CLIP.length));
+    const shapes = Array.isArray(o.shapes) ? o.shapes.filter(s => s && typeof s.id === 'string' && typeof s.t === 'string') : [];
+    return shapes.length ? { from: o.from, shapes } : null;
+  } catch (e) { return null; }
+};
+const savedClip = () => { try { return readClip(localStorage.getItem(CLIP_KEY)); } catch (e) { return null; } };
 const kindOf = s => (isLink(s) ? 'link' : isBox(s) ? 'box' : s.t);
 const STYLE_KEYS = { link: ['c', 'sw', 'dash', 'route', 'h0', 'anim'], box: ['c', 'sc', 'sw', 'dash', 'fm', 'fx'], text: ['c', 'bold'] };
 
 const SHORTCUTS = [
   ['Tools', [['V', 'Select'], ['H', 'Hand'], ['R', 'Rectangle'], ['O', 'Ellipse'], ['A', 'Arrow'], ['L', 'Line'], ['D', 'Draw'], ['T', 'Text'], ['I', 'Icon'], ['F', 'Frame'], ['C', 'Comment']]],
   ['Canvas', [['/', 'Insert menu'], ['Ctrl J', 'Ask AI'], ['Space + drag', 'Pan'], ['+  −', 'Zoom in / out'], ['Shift 1', 'Zoom to fit'], ['Shift 0', 'Zoom to 100%'], ['Ctrl Z', 'Undo'], ['Ctrl Y', 'Redo']]],
-  ['Selection', [['Shift + drag', 'Select an area'], ['Shift + click', 'Add or remove'], ['Ctrl A', 'Select all'], ['Ctrl D', 'Duplicate'], ['Ctrl G', 'Group'], ['Ctrl Shift G', 'Ungroup'], ['Delete', 'Delete'], ['Enter', 'Edit text'], ['Arrow keys', 'Nudge (Shift: 10px)'], ['Esc', 'Deselect / cancel']]],
+  ['Selection', [['Shift + drag', 'Select an area'], ['Shift + click', 'Add or remove'], ['Ctrl A', 'Select all'], ['Ctrl C  X  V', 'Copy, cut, paste (works across files)'], ['Ctrl D', 'Duplicate'], ['Ctrl G', 'Group'], ['Ctrl Shift G', 'Ungroup'], ['Delete', 'Delete'], ['Enter', 'Edit text'], ['Arrow keys', 'Nudge (Shift: 10px)'], ['Esc', 'Deselect / cancel']]],
   ['Arrange and copy', [['[  ]', 'Send to back / bring to front'], ['Ctrl [  ]', 'Send backward / bring forward'], ['Shift F', 'Wrap in a figure'], ['Shift Alt C', 'Copy as PNG'], ['Ctrl Alt C', 'Copy styles'], ['Ctrl Alt V', 'Paste styles']]],
   ['Table columns', [['Click a row', 'Select a column'], ['↑  ↓', 'Previous / next column'], ['Alt ↑  ↓', 'Move the column'], ['Enter', 'Rename the column'], ['Delete', 'Delete the column'], ['Esc', 'Back to the whole table']]],
 ];
@@ -491,6 +504,50 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
     else { for (let i = 1; i < a.length; i++) if (on(a[i]) && !on(a[i - 1])) [a[i - 1], a[i]] = [a[i], a[i - 1]]; }
     putShapes(a);
   };
+  /* ---- copy and paste ---- */
+  // The selected objects as clipboard text, also kept in this browser.
+  const copyText = () => {
+    const src = baseShapes().filter(s => selSet.has(s.id)).map(s => ('o0' in s || 'o1' in s ? (({ o0, o1, ...rest }) => rest)(s) : s));
+    if (!src.length) return null;
+    const text = CLIP + JSON.stringify({ from: d.id, shapes: src });
+    try { localStorage.setItem(CLIP_KEY, text); } catch (e) { /* too big for storage: the system clipboard still has it */ }
+    pasteRun = 0;
+    return text;
+  };
+  const copyMenu = async cut => {
+    const text = copyText();
+    if (!text) return;
+    try { await navigator.clipboard.writeText(text); } catch (e) { /* the browser copy is enough for Paste here */ }
+    if (cut) removeSel(); else toast('Copied');
+  };
+  // Add copied objects with new ids. In the diagram they came from they land just offset from the
+  // originals; elsewhere they're centred in view. Arrows stay attached only to what came with them,
+  // or to a diagram node of the same name here.
+  const pasteClip = clip => {
+    if (!clip) return false;
+    const map = new Map(clip.shapes.map(s => [s.id, rid('s')])), gmap = new Map();
+    clip.shapes.forEach(s => { if (s.gid && !gmap.has(s.gid)) gmap.set(s.gid, rid('g')); });
+    const b = shapeBounds(clip.shapes), c = center();
+    pasteRun++;
+    const off = clip.from === d.id ? [24 * pasteRun, 24 * pasteRun]
+      : b ? [Math.round(c.x - b.x - b.w / 2) + 24 * (pasteRun - 1), Math.round(c.y - b.y - b.h / 2) + 24 * (pasteRun - 1)] : [0, 0];
+    const copies = clip.shapes.map(s => {
+      const n = { ...moved(s, off[0], off[1]), id: map.get(s.id) };
+      if (n.gid) n.gid = gmap.get(n.gid);
+      ['a0', 'a1'].forEach(k => {
+        const a = n[k];
+        if (!a) return;
+        if (a.s && map.has(a.s)) n[k] = { s: map.get(a.s) };
+        else if (!(a.n && ids.has(a.n))) delete n[k];
+      });
+      return n;
+    });
+    putShapes([...baseShapes(), ...copies]);
+    setTool('select');
+    setSelection(copies.map(s => s.id));
+    return true;
+  };
+
   // Group the selected shapes (any groups among them merge into the new one), keeping them
   // together in the stack where the topmost of them was.
   const groupSel = () => {
@@ -913,8 +970,19 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
     };
     const up = e => { if (e.key === ' ') { spaceRef.current = false; setSpace(false); } };
     const lost = () => { spaceRef.current = false; setSpace(false); };
+    // Text selected on the page (say, in the doc preview) copies as usual; otherwise selected objects do.
+    const pageText = () => String(getSelection?.() || '').length > 0;
+    const copy = e => {
+      if ((e.target.closest && e.target.closest('textarea,input')) || pageText() || editing) return;
+      const text = copyText();
+      if (!text) return;
+      e.preventDefault();
+      e.clipboardData.setData('text/plain', text);
+      if (e.type === 'cut') removeSel();
+    };
     const paste = e => {
       if (e.target.closest && e.target.closest('textarea,input')) return;
+      if (pasteClip(readClip(e.clipboardData?.getData('text/plain')))) { e.preventDefault(); return; }
       const f = [...(e.clipboardData?.files || [])].find(x => /^image\//.test(x.type));
       if (f) { e.preventDefault(); addImageFile(f); }
     };
@@ -922,9 +990,12 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
     document.addEventListener('keyup', up);
     window.addEventListener('blur', lost);
     document.addEventListener('paste', paste);
+    document.addEventListener('copy', copy);
+    document.addEventListener('cut', copy);
     return () => {
       document.removeEventListener('keydown', key); document.removeEventListener('keyup', up);
       window.removeEventListener('blur', lost); document.removeEventListener('paste', paste);
+      document.removeEventListener('copy', copy); document.removeEventListener('cut', copy);
     };
   });
 
@@ -1046,7 +1117,9 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
     key: 'ic-' + it.key, glyph: it.body, vb: it.vb, filled: it.fill, color: it.fill ? brandColor(it.hex) || undefined : undefined,
     label: it.label, words: it.words, act: () => place('icon', { v: it.key }),
   });
+  const clip = panel != null ? savedClip() : null;
   const tree = [
+    ...(clip ? [{ key: 'paste', icon: 'copy', label: 'Paste', note: `${clip.shapes.length} object${clip.shapes.length === 1 ? '' : 's'} you copied (Ctrl V)`, act: () => pasteClip(savedClip()) }] : []),
     { key: 'ai', icon: 'ai', label: 'AI chat', note: 'Ask AI to draw or change this diagram', act: focusAI },
     { key: 'code', icon: 'diagram', label: 'Diagram as Code', note: 'Create diagrams using code', children: [
       ...CODE_KINDS.map(c => ({
@@ -1216,6 +1289,7 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
           patch: patchSel, text: patchText, edit: startEdit, comment: addComment, route: setRoute,
           straighten: () => putShapes(baseShapes().map(x => (selSet.has(x.id) ? { ...x, pts: [x.pts[0], x.pts[x.pts.length - 1]] } : x))),
           order: reorder, step, figure: createFigure, duplicate: duplicateSel, remove: removeSel, group: groupSel, ungroup: ungroupSel,
+          copy: () => copyMenu(false), cut: () => copyMenu(true),
           copyPng, copySvg, exportPng, copyStyles, pasteStyles,
           convert: selShapes.some(x => drawn.includes(x)) ? { hasCode: !!d.code.trim(), type: d.type, run: (t, newTab) => convertDrawing(t, selShapes, newTab) } : null,
         }} />

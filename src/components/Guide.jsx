@@ -184,6 +184,7 @@ function appGuide() {
       <ul className="gkeys">
         <li><K>Space + drag</K> Pan</li><li><K>+</K> <K>−</K> Zoom</li><li><K>Shift 1</K> Fit</li><li><K>Shift 0</K> 100%</li>
         <li><K>Ctrl Z</K> Undo</li><li><K>Ctrl Y</K> Redo</li><li><K>Ctrl A</K> Select all</li><li><K>Ctrl D</K> Duplicate</li>
+        <li><K>Ctrl C</K> Copy</li><li><K>Ctrl X</K> Cut</li><li><K>Ctrl V</K> Paste, also into another file</li>
         <li><K>Ctrl G</K> Group</li><li><K>Ctrl Shift G</K> Ungroup</li>
       </ul>
       <p>Press <K>?</K> on the canvas any time for the full shortcut list.</p>
