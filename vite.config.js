@@ -10,6 +10,8 @@ export default defineConfig({
   // The app's own entry chunk is about 400 KB.
   build: { chunkSizeWarningLimit: 7500 },
   // Same cross-origin isolation headers as netlify.toml, so running code works in development too.
-  server: { headers: ISOLATION },
+  // With LINEWORK_API set (e.g. http://localhost:8787, from `npm run server`), /api goes to the Linework
+  // server. The Host header is kept, so the server sees requests as coming from this page.
+  server: { headers: ISOLATION, proxy: process.env.LINEWORK_API ? { '/api': { target: process.env.LINEWORK_API, changeOrigin: false } } : undefined },
   preview: { headers: ISOLATION },
 });

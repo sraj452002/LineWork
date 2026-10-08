@@ -6,7 +6,7 @@ function createSample(){
     try{ res = await fetch('/api/ai', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({prompt, tier:opts.modelTier || 'default', ...(opts.images && opts.images.length ? {images:opts.images} : {})}), signal:opts.signal}); }
     catch(e){ throw {code: e && e.name === 'AbortError' ? 'cancelled' : 'unavailable'}; }
         if(res.status === 401) throw {code:'signed_out'};
-    if(res.status === 429) throw {code:'rate_limited'};
+    if(res.status === 429){ const j = await res.json().catch(() => null); throw {code: j && j.error === 'daily_limit' ? 'daily_limit' : 'rate_limited'}; }
     if(res.status === 413) throw {code:'prompt_too_large'};
     if(res.status === 400 && opts.images) throw {code:'image_unsupported'};
     if(!res.ok) throw {code:'unavailable'};
@@ -39,7 +39,9 @@ function createSample(){
     try{ return JSON.parse(a >= 0 ? t.slice(a, b+1) : t); }catch(_){ throw {code:'empty'}; }
   };
   return fetch('/api/ai/status', {cache:'no-store'}).then(r => r.ok ? r.json() : null).then(j => {
-    NO_AI = j && j.reason === 'signed_out' ? AI_SIGNED_OUT : AI_NO_KEY;
+    NO_AI = j && j.reason === 'signed_out' ? AI_SIGNED_OUT
+      : j && j.reason === 'daily_limit' ? `You’ve used today’s ${j.limit} AI requests. They reset at midnight UTC. Everything else still works.`
+      : j && j.limit !== undefined ? AI_NO_KEY_SERVER : AI_NO_KEY;
     return j && j.enabled ? sample : null;
   }).catch(() => null);
 }
@@ -113,6 +115,7 @@ export function copyFor(code){
   return ({
     not_granted:'AI is off for this view. You can still edit everything by hand.',
     rate_limited:'Too many requests right now. Wait a moment, then try again.',
+    daily_limit:'You’ve used today’s AI requests. They reset at midnight UTC. Everything else still works.',
     prompt_too_large:'That input is too long. Paste a smaller excerpt.',
     cancelled:'Stopped.',
     signed_out:'Your session ended. Sign in again to use AI.',
@@ -122,5 +125,6 @@ export function copyFor(code){
 }
 
 const AI_NO_KEY = 'AI is off. Add ANTHROPIC_API_KEY in Netlify to turn it on. Everything else works.';
+const AI_NO_KEY_SERVER = 'AI is off. Set ANTHROPIC_API_KEY on the Linework server to turn it on. Everything else works.';
 const AI_SIGNED_OUT = 'AI needs an account. Sign out, then sign in or create an account to use it. Everything else works.';
 export let NO_AI = AI_NO_KEY;

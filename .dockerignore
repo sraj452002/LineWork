@@ -1,6 +1,7 @@
 node_modules
 dist
-.netlify
+data
 test-results
 playwright-report
-data/
+.netlify
+.git
