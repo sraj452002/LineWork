@@ -188,7 +188,7 @@ function appGuide() {
       </ul>
       <p>Press <K>?</K> on the canvas any time for the full shortcut list.</p>
     </> },
-    { id: 'code', title: 'Code editor', body: <>
+    { id: 'code-editor', title: 'Code editor', body: <>
       <ul>
         <li><b>Code</b> in the top bar (next to Doc, Both and Canvas) opens an editor like VS Code for code, configs and queries that go with the design. It's the same editor VS Code uses.</li>
         <li>The <b>Explorer</b> on the left holds files and folders: create them with its buttons, or open files from your computer. Right-click, or use <b>⋯</b>, to rename, delete or download. Use slashes in a name to make folders, like <code>src/app.ts</code>.</li>
