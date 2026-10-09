@@ -1,3 +1,6 @@
+# The Linework frontend on Netlify. In Netlify, set Base directory to `frontend`, and the environment
+# variable BACKEND_URL to the Linework API's address (e.g. https://linework-api.onrender.com): the build
+# turns it into a rule in dist/_redirects that proxies /api/* there (see vite.config.js).
 [build]
   command = "npm run build"
   publish = "dist"
@@ -6,6 +9,7 @@
 [build.environment]
   NODE_OPTIONS = "--max-old-space-size=4096"
 
+# Every page is the app (rules in dist/_redirects, like /api/*, come first).
 [[redirects]]
   from = "/*"
   to = "/index.html"
@@ -18,8 +22,3 @@
   [headers.values]
     Cross-Origin-Opener-Policy = "same-origin"
     Cross-Origin-Embedder-Policy = "credentialless"
-
-# The database drivers ship as they are rather than bundled (they load optional parts at run time).
-[functions]
-  node_bundler = "esbuild"
-  external_node_modules = ["pg", "mysql2", "mssql", "tedious", "mongodb"]

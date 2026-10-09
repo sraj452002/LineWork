@@ -1,0 +1,25 @@
+{
+  "name": "linework-backend",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "The Linework API: accounts, files with version history, share links, AI and live databases.",
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env index.js",
+    "dev": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env --watch index.js",
+    "admin": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env admin.js",
+    "drive-auth": "node --env-file-if-exists=.env drive-auth.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "mongodb": "^6.21.0",
+    "mssql": "^11.0.2",
+    "mysql2": "^3.24.5",
+    "nodemailer": "^7.0.6",
+    "pg": "^8.23.1",
+    "qrcode": "^1.5.4"
+  },
+  "engines": {
+    "node": ">=22.13"
+  }
+}

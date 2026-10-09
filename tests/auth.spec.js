@@ -4,10 +4,10 @@ import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { openStore } from '../server/store.js';
-import { memoryBackend } from '../server/drive.js';
-import { createApp } from '../server/app.js';
-import { codeAt, stepAt } from '../server/totp.js';
+import { openStore } from '../backend/store.js';
+import { memoryBackend } from '../backend/drive.js';
+import { createApp } from '../backend/app.js';
+import { codeAt, stepAt } from '../backend/totp.js';
 
 // Signing in to the Linework server: confirming email, resetting a password, two-step verification,
 // Google and GitHub. Email goes to an in-memory outbox, and a stand-in plays Google and GitHub.
@@ -64,7 +64,7 @@ test.beforeAll(async () => {
   base = `http://localhost:${srv.address().port}`;
 });
 test.afterAll(async () => {
-  if (vite) try { process.kill(-vite.pid); } catch (e) {}
+  if (vite) try { process.kill(-vite.pid); } catch (e) { vite.kill(); } // its process group; Windows has none
   srv?.close(); idp?.close(); store?.close();
   rmSync(dir, { recursive: true, force: true });
 });
@@ -219,7 +219,7 @@ test('Google sign-in on an account with two-step verification still asks for the
 test('the app: sign-in required, confirm email, two-step verification, Google', async ({ browser }) => {
   test.setTimeout(120_000);
   const port = 5195;
-  vite = spawn('npx', ['vite', '--port', String(port), '--strictPort'], { env: { ...process.env, LINEWORK_API: base }, stdio: 'ignore', detached: true });
+  vite = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--port', String(port), '--strictPort'], { cwd: 'frontend', env: { ...process.env, LINEWORK_API: base }, stdio: 'ignore', detached: true });
   const appUrl = `http://localhost:${port}`;
   for (let i = 0; i < 60; i++) { try { if ((await fetch(appUrl)).ok) break; } catch (e) {} await new Promise(r => setTimeout(r, 500)); }
   const errors = [];

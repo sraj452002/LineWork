@@ -1,11 +1,22 @@
-/* The Linework server (server/), when the app is served by it instead of Netlify.
-   GET /api/server answers only there; on Netlify (and with no backend at all) the app uses Netlify
-   Identity and functions, or this browser. */
+/* The Linework API (../../backend), reached at /api on this site: Netlify proxies it to the backend's
+   host, and Vite does in development. GET /api/server answers when it's there; without it (the
+   frontend on its own) the app works without accounts, in this browser. */
 
+// A sleeping backend (a free host spins down when idle) takes up to a minute to wake, and the proxy in
+// front of it gives up sooner (Netlify: 26 s) with a 502/503/504: ask again until it answers.
+const WAKE_STATUS = [502, 503, 504], WAKE_FOR = 120_000;
+const askServer = async () => {
+  const until = Date.now() + WAKE_FOR;
+  for (;;) {
+    const r = await fetch('/api/server', { cache: 'no-store' });
+    if (!WAKE_STATUS.includes(r.status) || Date.now() > until) return r;
+    await new Promise(res => setTimeout(res, 3000));
+  }
+};
 let info;
 export function serverInfo() {
   if (info === undefined) {
-    info = fetch('/api/server', { cache: 'no-store' })
+    info = askServer()
       .then(r => (r.ok && (r.headers.get('content-type') || '').includes('json') ? r.json() : null))
       .then(j => (j && j.name === 'linework-server' ? j : null))
       .catch(() => null);
@@ -29,7 +40,7 @@ export async function api(path, { method = 'GET', body } = {}) {
   return j;
 }
 
-// The server's user, shaped like a Netlify Identity user so the rest of the app needn't care.
+// The server's user, in the shape the rest of the app uses.
 export const asUser = u => ({ id: u.id, email: u.email, name: u.name, userMetadata: { full_name: u.name, folders: u.folders || [] } });
 
 /* Version history */

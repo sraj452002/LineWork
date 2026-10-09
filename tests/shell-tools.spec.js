@@ -10,11 +10,11 @@ import { join } from 'node:path';
 // One scratch project, used in order (the git test changes files the others read).
 test.describe.configure({ mode: 'serial' });
 let root, proj, PATH;
-const names = [...readFileSync('src/lib/shell/lw.cjs', 'utf8').matchAll(/^def\('([^']+)'/gm)].flatMap(m => m[1].split(' '));
+const names = [...readFileSync('frontend/src/lib/shell/lw.cjs', 'utf8').matchAll(/^def\('([^']+)'/gm)].flatMap(m => m[1].split(' '));
 test.beforeAll(() => {
   root = mkdtempSync(join(tmpdir(), 'lw-shell-'));
   mkdirSync(join(root, '.lw/bin'), { recursive: true });
-  copyFileSync('src/lib/shell/lw.cjs', join(root, '.lw/lw.cjs'));
+  copyFileSync('frontend/src/lib/shell/lw.cjs', join(root, '.lw/lw.cjs'));
   writeFileSync(join(root, '.lw/bin/package.json'), '{"type":"commonjs"}');
   for (const n of names) { const f = join(root, '.lw/bin', n); writeFileSync(f, `#!/usr/bin/env node\nrequire('../lw.cjs')(${JSON.stringify(n)});\n`); chmodSync(f, 0o755); }
   PATH = join(root, '.lw/bin') + ':' + process.env.PATH;

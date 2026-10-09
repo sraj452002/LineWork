@@ -1,7 +1,7 @@
 /* Running code from the Code view, entirely in the browser.
    - Node.js (with npm, npx, yarn and pnpm, and a shell) runs in a StackBlitz WebContainer.
    - Python (with pip for pure-Python and Pyodide-built packages) runs in Pyodide, in a worker.
-   Both need a cross-origin isolated page (COOP/COEP headers, set in netlify.toml and vite.config.js).
+   Both need a cross-origin isolated page (COOP/COEP headers, set in ../../netlify.toml and ../../vite.config.js).
 
    Each Linework file gets its own folder in each runtime, so projects don't mix. The workspace's
    files are copied in before anything runs and kept in step as they're edited; files a program or

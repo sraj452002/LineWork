@@ -1,16 +1,14 @@
 import express from 'express';
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { COOKIE, newToken, readCookie, tokenHash } from './auth.js';
 import { accountRoutes } from './accounts.js';
 import { createMailer } from './mail.js';
 import { DbError, handle as dbHandle } from './dbconnect.js';
 
-/* Linework's own backend: accounts, files with version history, folders, share links and the AI proxy
-   with a daily allowance. It answers the same /api/files and /api/ai requests as the Netlify functions,
-   so the app works with either; GET /api/server tells the app which one it's talking to.
-   With `publicDir` (the Vite build), it also serves the app itself. */
+/* The Linework API: accounts, files with version history, folders, share links, live databases and the
+   AI proxy with a daily allowance, all under /api. The frontend (../frontend) is hosted on its own and
+   reaches this through a proxy on its own site (Netlify's /api/* rewrite, or Vite's in development),
+   so the session cookie stays first-party. GET /api/server tells the app it's talking to this API. */
 
 const MAX_FILE = 4_000_000;
 const ID = /^[\w-]{1,80}$/;
@@ -18,7 +16,7 @@ const ID = /^[\w-]{1,80}$/;
 export function createApp(store, opts = {}) {
   const {
     allowSignup = true, aiKey = '', aiModel = 'claude-sonnet-5-5', aiBase = 'https://api.anthropic.com',
-    aiDailyLimit = 50, publicDir = null, trustProxy = false,
+    aiDailyLimit = 50, trustProxy = false,
     mailer = createMailer(), oauth = {}, appUrl = '', allowLocal = false, dbAllowPrivate = false, dbTimeout = 30_000,
   } = opts;
   // New accounts confirm their email when the server can send one (unless turned off).
@@ -28,21 +26,20 @@ export function createApp(store, opts = {}) {
   app.disable('x-powered-by');
   if (trustProxy) app.set('trust proxy', trustProxy);
 
-  // Cross-origin isolation for the Code view's runtimes (as in netlify.toml), on every response.
-  app.use((req, res, next) => {
-    res.set({ 'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Embedder-Policy': 'credentialless', 'X-Content-Type-Options': 'nosniff' });
-    next();
-  });
+  app.use((req, res, next) => { res.set('X-Content-Type-Options', 'nosniff'); next(); });
 
   const api = express.Router();
   api.use((req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
-  // Changes must come from this site: a same-origin page, sending JSON. Cross-site forms can do neither.
+  // Changes must come from the app's own site, sending JSON. Cross-site forms can do neither.
+  // Through the frontend's proxy a request arrives addressed to this host, from a page at APP_URL.
+  const hostOf = u => { try { return new URL(u).host; } catch (e) { return '?'; } };
+  const appHost = appUrl ? hostOf(appUrl) : null;
   api.use((req, res, next) => {
     if (req.method === 'GET' || req.method === 'HEAD') return next();
     const origin = req.headers.origin;
     // Hosts only: behind a proxy that ends HTTPS, the server itself sees plain http.
-    let host = null; try { host = origin && new URL(origin).host; } catch (e) { host = '?'; }
-    if (origin && host !== req.headers.host) return res.status(403).json({ error: 'forbidden' });
+    const host = origin ? hostOf(origin) : null;
+    if (origin && host !== req.headers.host && host !== appHost) return res.status(403).json({ error: 'forbidden' });
     if (req.method !== 'DELETE' && !req.is('application/json')) return res.status(415).json({ error: 'json_only' });
     next();
   });
@@ -77,7 +74,7 @@ export function createApp(store, opts = {}) {
     ai: { configured: Boolean(aiKey), dailyLimit: aiDailyLimit },
   }));
 
-  /* ---- files (same contract as netlify/functions/files.mts) ---- */
+  /* ---- files ---- */
   const parseFile = (raw, id) => {
     const text = typeof raw === 'string' ? raw : JSON.stringify(raw);
     if (text.length > MAX_FILE) return { status: 413, error: 'too_large' };
@@ -125,7 +122,8 @@ export function createApp(store, opts = {}) {
   });
 
   /* ---- share links ---- */
-  const shareUrl = (req, t) => `${req.protocol}://${req.headers.host}/s/${t}`;
+  // On the app's site (APP_URL), where /s/<token> opens the file; this API's own host serves no pages.
+  const shareUrl = (req, t) => `${(appUrl || `${req.protocol}://${req.headers.host}`).replace(/\/$/, '')}/s/${t}`;
   api.get('/files/:id/shares', signedIn, idOk, (req, res) => {
     res.json({ shares: s.shares.all(req.user.id, req.params.id).map(x => ({ token: x.token, mode: x.mode, created: x.created, url: shareUrl(req, x.token) })) });
   });
@@ -157,7 +155,7 @@ export function createApp(store, opts = {}) {
     res.json({ ok: true });
   });
 
-  /* ---- AI (same contract as netlify/edge-functions/ai.ts), with a daily allowance per account ---- */
+  /* ---- AI, with a daily allowance per account ---- */
   api.get('/ai/status', (req, res) => {
     const used = req.user ? store.aiUsed(req.user.id) : 0;
     const reason = !aiKey ? 'no_key' : !req.user ? 'signed_out' : aiDailyLimit > 0 && used >= aiDailyLimit ? 'daily_limit' : null;
@@ -214,12 +212,9 @@ export function createApp(store, opts = {}) {
     res.status(500).json({ error: 'server_error' });
   });
   app.use('/api', api);
-
-  // The app itself, with every other path (like /s/<token>) going to index.html.
-  if (publicDir && existsSync(join(publicDir, 'index.html'))) {
-    app.use(express.static(publicDir, { index: false, setHeaders: (res, p) => { if (/[\\/]assets[\\/]/.test(p)) res.set('Cache-Control', 'public, max-age=31536000, immutable'); } }));
-    app.get(/.*/, (req, res) => res.sendFile(join(publicDir, 'index.html'), { headers: { 'Cache-Control': 'no-cache' } }));
-  }
+  // Only the API is here; the app itself is hosted separately (APP_URL).
+  app.get('/', (req, res) => res.json({ name: 'linework-api', app: appUrl || null }));
+  app.use((req, res) => res.status(404).json({ error: 'not_found' }));
 
   // Expired sessions and links, hourly.
   const sweep = setInterval(() => { s.oldSessions.run(Date.now()); accounts.sweep(); }, 3600_000);

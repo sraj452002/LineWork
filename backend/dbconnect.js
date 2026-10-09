@@ -2,7 +2,7 @@ import { lookup, resolveSrv } from 'node:dns/promises';
 import { isIP } from 'node:net';
 
 /* Live database connections for the Database view: PostgreSQL, MySQL / MariaDB, SQL Server and MongoDB.
-   Shared by the Linework server (POST /api/db) and the Netlify function (netlify/functions/db.mts).
+   Answers POST /api/db (see app.js).
 
    Every request carries its connection and opens it, does one thing and closes it, so nothing is kept
    between requests and the database's password is never stored on the server.

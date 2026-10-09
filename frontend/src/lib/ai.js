@@ -1,4 +1,4 @@
-// AI calls go to /api/ai (a Netlify edge function that holds the API key).
+// AI calls go to /api/ai on the Linework API (../../backend), which holds the API key.
 function createSample(){
   const sample = async (input, opts = {}) => {
     const prompt = typeof input === 'string' ? input : input.map(t => t.content).join('\n\n');
@@ -124,7 +124,7 @@ export function copyFor(code){
   })[code] || 'That didn\u2019t work. Try rephrasing your request.';
 }
 
-const AI_NO_KEY = 'AI is off. Add ANTHROPIC_API_KEY in Netlify to turn it on. Everything else works.';
+const AI_NO_KEY = 'AI is off. Sign in to use it, or set ANTHROPIC_API_KEY on the Linework API to turn it on. Everything else works.';
 const AI_NO_KEY_SERVER = 'AI is off. Set ANTHROPIC_API_KEY on the Linework server to turn it on. Everything else works.';
 const AI_SIGNED_OUT = 'AI needs an account. Sign out, then sign in or create an account to use it. Everything else works.';
 export let NO_AI = AI_NO_KEY;

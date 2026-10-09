@@ -5,7 +5,7 @@ import { join } from 'node:path';
 // The theme switch, and Code → Visualize: diagrams of the code, and stepping through a recorded run.
 // Python is real (Pyodide's files come from the pyodide npm package instead of the CDN).
 
-const PYODIDE_DIR = join(process.cwd(), 'node_modules/pyodide');
+const PYODIDE_DIR = join(process.cwd(), 'frontend/node_modules/pyodide');
 
 test.beforeEach(async ({ page }) => {
   const errors = [];

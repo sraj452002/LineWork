@@ -1,7 +1,7 @@
 /* The Database view's side of live connections.
    - Saved connections live in this browser (localStorage). Passwords are kept only when "Remember password" is
      ticked; otherwise only for this visit. They are never put in files, which can be shared.
-   - PostgreSQL, MySQL, SQL Server and MongoDB go through the server (POST /api/db, see server/dbconnect.js).
+   - PostgreSQL, MySQL, SQL Server and MongoDB go through the server (POST /api/db, see backend/dbconnect.js).
    - SQLite files open right here in the browser (sql.js), and can be downloaded again after changes.
    - schemaToErd turns a live schema into database-schema diagram code for the canvas. */
 
@@ -59,7 +59,7 @@ export async function dbRequest(conn, op, extra = {}) {
   let body = null;
   try { body = await r.json(); } catch (e) {}
   if (r.status === 401) throw new Error('Sign in to connect to databases. Connections go through your Linework account.');
-  if (r.status === 404 || (!body && r.status >= 400)) throw new Error('This copy of Linework has no database connector. It needs the Linework server or Netlify functions (see the README).');
+  if (r.status === 404 || (!body && r.status >= 400)) throw new Error('This copy of Linework has no database connector. It needs the Linework API (backend/, see the README).');
   if (!r.ok) throw new Error((body && body.message) || 'The database request failed.');
   return body;
 }

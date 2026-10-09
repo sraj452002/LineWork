@@ -11,9 +11,9 @@ import { hashPassword } from './auth.js';
 //   npm run admin -- verify-user <email>       (confirm an address by hand)
 //   npm run admin -- disable-2fa <email>       (someone lost their phone and recovery codes)
 // Stop the server first: it keeps the accounts in memory and would write over these changes.
-const root = resolve(fileURLToPath(import.meta.url), '../..');
+const root = resolve(fileURLToPath(import.meta.url), '..');
 const backend = backendFromEnv(process.env, root);
-if (!backend) { console.error('No storage set up: see server/.env.example.'); process.exit(1); }
+if (!backend) { console.error('No storage set up: see .env.example.'); process.exit(1); }
 const { s, close } = await openStore(backend);
 const [cmd, email, pw] = process.argv.slice(2);
 const user = email && s.userByEmail.get(email.trim().toLowerCase());

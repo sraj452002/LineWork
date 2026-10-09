@@ -4,7 +4,7 @@ import { clone, rid } from '../lib/utils.js';
 import { useUI } from './ui.jsx';
 import Editor from './Editor.jsx';
 
-/* What the Linework server (server/) adds: share links, version history, the page a share link opens,
+/* What the Linework API (backend/) adds: share links, version history, the page a share link opens,
    and account settings (name, password, two-step verification, Google/GitHub). */
 
 function Modal({ title, onClose, children, wide }) {

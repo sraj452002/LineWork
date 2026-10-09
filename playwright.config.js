@@ -15,6 +15,7 @@ export default defineConfig({
   },
   webServer: {
     command: 'npx vite --port 5199 --strictPort',
+    cwd: 'frontend',
     url: 'http://localhost:5199',
     reuseExistingServer: true,
     timeout: 60_000,

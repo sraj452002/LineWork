@@ -4,11 +4,11 @@ import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { openStore } from '../server/store.js';
-import { memoryBackend } from '../server/drive.js';
-import { createApp } from '../server/app.js';
+import { openStore } from '../backend/store.js';
+import { memoryBackend } from '../backend/drive.js';
+import { createApp } from '../backend/app.js';
 
-// The Linework server (server/): its API directly, then the app running against it through Vite's proxy.
+// The Linework API (backend/): directly, then the app running against it through Vite's proxy.
 // AI requests go to a stand-in for Anthropic's API.
 
 test.describe.configure({ mode: 'serial' });
@@ -27,7 +27,7 @@ test.beforeAll(async () => {
   base = `http://localhost:${srv.address().port}`;
 });
 test.afterAll(async () => {
-  if (vite) try { process.kill(-vite.pid); } catch (e) {} // npx and the vite it started
+  if (vite) try { process.kill(-vite.pid); } catch (e) { vite.kill(); } // its process group; Windows has none
   srv?.close(); fakeAi?.close(); store?.close();
   rmSync(dir, { recursive: true, force: true });
 });
@@ -166,7 +166,7 @@ test('the app against the server: account, folders, share link and version histo
   test.setTimeout(120_000);
   // The app from Vite's development server, with /api sent to this test's server.
   const port = 5196;
-  vite = spawn('npx', ['vite', '--port', String(port), '--strictPort'], { env: { ...process.env, LINEWORK_API: base }, stdio: 'ignore', detached: true });
+  vite = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--port', String(port), '--strictPort'], { cwd: 'frontend', env: { ...process.env, LINEWORK_API: base }, stdio: 'ignore', detached: true });
   appUrl = `http://localhost:${port}`;
   for (let i = 0; i < 60; i++) { try { if ((await fetch(appUrl)).ok) break; } catch (e) {} await new Promise(r => setTimeout(r, 500)); }
 

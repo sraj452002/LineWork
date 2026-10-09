@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import { accountSettings, authMessage, chooseLocal, createAccount, finishInvite, resendConfirmation, sendPasswordReset, setPassword, signIn, signInWith, verifyCode } from '../lib/auth.js';
+import { accountSettings, authMessage, chooseLocal, createAccount, resendConfirmation, sendPasswordReset, setPassword, signIn, signInWith, verifyCode } from '../lib/auth.js';
 import { Brand } from './ui.jsx';
 
 const PROVIDERS = [['google', 'Google'], ['github', 'GitHub'], ['gitlab', 'GitLab'], ['bitbucket', 'Bitbucket']];
 
-// pending: {type: 'recovery' | 'invite' | 'mfa', token} when arriving from a password-reset or invite
-// link, or from Google/GitHub on an account with two-step verification. notice: a message to show.
+// pending: {type: 'recovery' | 'mfa', token} when arriving from a password-reset link,
+// or from Google/GitHub on an account with two-step verification. notice: a message to show.
 export default function Login({ onSignedIn, pending, notice }) {
   const [settings, setSettings] = useState(undefined); // undefined: checking; null: accounts unavailable
   const [mode, setMode] = useState(!pending ? 'in' : pending.type === 'mfa' ? 'mfa' : 'password'); // in | up | reset | password | mfa
@@ -37,8 +37,7 @@ export default function Login({ onSignedIn, pending, notice }) {
     else if (mode === 'up') run(async () => {
       if (password.length < 8) throw new Error('Use a longer password (at least 8 characters).');
       const r = await createAccount(email, password, name);
-      if (settings && settings.server && !r.pending) done(r); // signed in already
-      else if (settings && settings.autoconfirm && !settings.server) done(await signIn(email, password));
+      if (!r.pending) done(r); // signed in already
       else { setMode('in'); setPw(''); setNote(`Check ${email.trim()} for a link to confirm your account. It signs you in.`); }
     });
     else if (mode === 'reset') run(async () => { await sendPasswordReset(email); setNote(`If ${email.trim()} has an account, a reset link is on its way.`); });
@@ -48,16 +47,16 @@ export default function Login({ onSignedIn, pending, notice }) {
     });
     else run(async () => {
       if (password.length < 8) throw new Error('Use a longer password (at least 8 characters).');
-      done(pending && pending.type === 'invite' ? await finishInvite(pending.token, password) : await setPassword(password, pending && pending.token));
+      done(await setPassword(password, pending && pending.token));
     });
   };
   const local = () => { chooseLocal(); onSignedIn({ mode: 'local' }); };
   const resend = () => run(async () => { await resendConfirmation(email); setNote(`A new link is on its way to ${email.trim()}.`); });
 
   const providers = settings ? PROVIDERS.filter(([k]) => settings.providers && settings.providers[k]) : [];
-  const canReset = settings && (!settings.server || settings.mail);
+  const canReset = settings && settings.mail;
   const showLocal = settings !== undefined && mode !== 'password' && mode !== 'mfa' && (settings === null || settings.allowLocal);
-  const title = { in: 'Sign in', up: 'Create your account', reset: 'Reset your password', mfa: 'Two-step verification', password: pending && pending.type === 'invite' ? 'Choose a password' : 'Set a new password' }[mode];
+  const title = { in: 'Sign in', up: 'Create your account', reset: 'Reset your password', mfa: 'Two-step verification', password: 'Set a new password' }[mode];
 
   return (
     <main className="login">

@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
-import { display, evaluate, fromCSV, shiftFormula, toCSV } from '../src/lib/sheet.js';
+import { display, evaluate, fromCSV, shiftFormula, toCSV } from '../frontend/src/lib/sheet.js';
 
 // Spreadsheets: the formula engine, the Sheet view, and sheets shown on the canvas.
 

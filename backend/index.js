@@ -5,15 +5,15 @@ import { backendFromEnv } from './drive.js';
 import { createApp } from './app.js';
 import { createMailer } from './mail.js';
 
-// Start the Linework server. Settings come from environment variables (see server/.env.example).
-const root = resolve(fileURLToPath(import.meta.url), '../..');
+// Start the Linework API. Settings come from environment variables (see .env.example).
+const root = resolve(fileURLToPath(import.meta.url), '..');
 const env = process.env;
 const num = (v, d) => (v === undefined || v === '' ? d : Number(v));
 
 // Data goes to Google Drive (see drive.js); DATA_DIR keeps it in a local folder instead, for development.
 const backend = backendFromEnv(env, root);
 if (!backend) {
-  console.error('No storage set up. Set GOOGLE_DRIVE_REFRESH_TOKEN (run `npm run drive-auth`) or GOOGLE_SERVICE_ACCOUNT_KEY for Google Drive, or DATA_DIR for a local folder. See server/.env.example.');
+  console.error('No storage set up. Set GOOGLE_DRIVE_REFRESH_TOKEN (run `npm run drive-auth`) or GOOGLE_SERVICE_ACCOUNT_KEY for Google Drive, or DATA_DIR for a local folder. See .env.example.');
   process.exit(1);
 }
 const store = await openStore(backend);
@@ -24,8 +24,6 @@ const app = createApp(store, {
   aiModel: env.ANTHROPIC_MODEL || 'claude-sonnet-5-5',
   aiBase: env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com',
   aiDailyLimit: num(env.AI_DAILY_LIMIT, 50),
-  // --api-only (npm run server): just /api, for Vite to proxy to during development.
-  publicDir: env.PUBLIC_DIR === '' || process.argv.includes('--api-only') ? null : resolve(root, env.PUBLIC_DIR || 'dist'),
   trustProxy: env.TRUST_PROXY ? (/^\d+$/.test(env.TRUST_PROXY) ? Number(env.TRUST_PROXY) : env.TRUST_PROXY) : false,
   appUrl: env.APP_URL || '',
   allowLocal: env.ALLOW_LOCAL_MODE === 'true',
@@ -42,7 +40,7 @@ const app = createApp(store, {
 const port = num(env.PORT, 8787), host = env.HOST || '0.0.0.0';
 const server = app.listen(port, host, err => {
   if (err) { console.error(err.code === 'EADDRINUSE' ? `Port ${port} is already in use: stop whatever is on it, or set PORT.` : err.message); process.exit(1); }
-  console.log(`Linework server on http://${host === '0.0.0.0' ? 'localhost' : host}:${port}`);
+  console.log(`Linework API on http://${host === '0.0.0.0' ? 'localhost' : host}:${port}`);
 });
 // Finish writing to storage before exiting.
 const stop = () => server.close(() => store.close().then(() => process.exit(0), e => { console.error('Last write to storage failed:', e.message); process.exit(1); }));

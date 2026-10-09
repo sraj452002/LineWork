@@ -8,7 +8,7 @@ import { join } from 'node:path';
 // coming back). That stand-in replaces Vite's development bundle, so these Node checks run against
 // the development server only.
 
-const PYODIDE_DIR = join(process.cwd(), 'node_modules/pyodide');
+const PYODIDE_DIR = join(process.cwd(), 'frontend/node_modules/pyodide');
 const FAKE_WEBCONTAINER = `
 const files = new Map(), dirs = new Set(), watchers = [], listeners = { 'server-ready': [], port: [] };
 // The test drives "shell" commands through this, and reads the file system.

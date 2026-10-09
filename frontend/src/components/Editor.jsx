@@ -18,7 +18,7 @@ const narrow = () => innerWidth <= 760;
 const AI_KEY = 'linework:ai-open';
 const aiPref = () => { try { const v = localStorage.getItem(AI_KEY); return v == null ? innerWidth > 1000 : v === '1'; } catch (e) { return false; } };
 
-// onShare and onHistory appear with the Linework server (server/); a shared file has no onDelete.
+// onShare and onHistory appear with the Linework API (backend/); a shared file has no onDelete.
 // The views a file can be shown in (the View menu at the top). `wide` ones need a wide screen.
 const VIEW_GROUPS = ['Draw', 'Write', 'Data', 'Build'];
 const VIEWS = [

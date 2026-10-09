@@ -1,0 +1,33 @@
+# The Linework API (backend/) on Render, as a Blueprint: Render → New → Blueprint → this repo.
+# The frontend (frontend/) is on Netlify, with BACKEND_URL set to this service's address.
+services:
+  - type: web
+    name: linework-api
+    runtime: node
+    rootDir: backend
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /api/server
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      # Netlify's proxy, then Render's load balancer (see backend/.env.example).
+      - key: TRUST_PROXY
+        value: "2"
+      # The frontend's address on Netlify, e.g. https://linework.netlify.app
+      - key: APP_URL
+        sync: false
+      # Where the data is kept: Google Drive (see backend/.env.example; `npm run drive-auth` gets the token).
+      - key: GOOGLE_DRIVE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_DRIVE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_DRIVE_REFRESH_TOKEN
+        sync: false
+      - key: GOOGLE_DRIVE_FOLDER_ID
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ALLOW_SIGNUP
+        value: "true"

@@ -3,12 +3,13 @@ import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createRequire } from 'node:module';
 import initSqlJs from 'sql.js';
-import { handle, isPrivateIp, mongoCommand, parseConn } from '../server/dbconnect.js';
-import { schemaToErd, shortType } from '../src/lib/dbclient.js';
-import { openStore } from '../server/store.js';
-import { memoryBackend } from '../server/drive.js';
-import { createApp } from '../server/app.js';
+import { handle, isPrivateIp, mongoCommand, parseConn } from '../backend/dbconnect.js';
+import { schemaToErd, shortType } from '../frontend/src/lib/dbclient.js';
+import { openStore } from '../backend/store.js';
+import { memoryBackend } from '../backend/drive.js';
+import { createApp } from '../backend/app.js';
 
 // Live databases (the Database view): the connector's parsing and safety checks, the server's /api/db, a SQLite
 // file opened in the browser, and real PostgreSQL / MySQL / SQL Server databases when these are set:
@@ -45,7 +46,7 @@ test('connection strings, private addresses and MongoDB commands', async () => {
   await expect(handle({ op: 'drop', conn: { type: 'postgres', host: 'db.example.com' } })).rejects.toMatchObject({ code: 'bad_op' });
   await expect(handle({ op: 'delete', conn: { type: 'postgres', host: 'db.example.com', readOnly: true } })).rejects.toMatchObject({ code: 'read_only' });
 
-  const { EJSON } = (await import('mongodb')).BSON;
+  const { EJSON } = createRequire(import.meta.resolve('../backend/package.json'))('mongodb').BSON; // the backend's own copy
   const cmd = t => EJSON.serialize(mongoCommand(t, EJSON));
   expect(cmd("db.users.find({age: {$gt: 30}, name: 'Ada'}).limit(5)")).toEqual({ find: 'users', filter: { age: { $gt: 30 }, name: 'Ada' }, limit: 5 });
   expect(cmd('db.orders.aggregate([{$group: {_id: "$status", n: {$sum: 1}}}])')).toEqual({ aggregate: 'orders', pipeline: [{ $group: { _id: '$status', n: { $sum: 1 } } }], cursor: {} });
@@ -215,7 +216,7 @@ test('live PostgreSQL in the app, through the Linework server', async ({ browser
   const store = await openStore(memoryBackend());
   const srv = createApp(store, { dbAllowPrivate: true, requireVerified: false }).listen(0);
   const port = 5194;
-  const vite = spawn('npx', ['vite', '--port', String(port), '--strictPort'], { env: { ...process.env, LINEWORK_API: `http://localhost:${srv.address().port}` }, stdio: 'ignore', detached: true });
+  const vite = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--port', String(port), '--strictPort'], { cwd: 'frontend', env: { ...process.env, LINEWORK_API: `http://localhost:${srv.address().port}` }, stdio: 'ignore', detached: true });
   try {
     for (let i = 0; i < 60; i++) { try { if ((await fetch(`http://localhost:${port}`)).ok) break; } catch (e) {} await new Promise(r => setTimeout(r, 500)); }
     const page = await (await browser.newContext({ baseURL: `http://localhost:${port}` })).newPage();
@@ -244,7 +245,7 @@ test('live PostgreSQL in the app, through the Linework server', async ({ browser
     // The password isn't stored, so after a reload it's asked for again.
     expect(await page.evaluate(() => localStorage.getItem('linework:db-connections'))).not.toContain(new URL(LIVE.postgres).password || '\u0000');
   } finally {
-    try { process.kill(-vite.pid); } catch (e) {}
+    try { process.kill(-vite.pid); } catch (e) { vite.kill(); }
     srv.close(); store.close();
     rmSync(dir, { recursive: true, force: true });
   }

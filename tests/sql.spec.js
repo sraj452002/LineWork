@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { readSql, sqlToErd, erdToSql } from '../src/lib/sql.js';
+import { readSql, sqlToErd, erdToSql } from '../frontend/src/lib/sql.js';
 
 // SQL files → database schema diagrams: the reader, and opening .sql files from Tools and the canvas.
 
