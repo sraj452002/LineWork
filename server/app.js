@@ -5,6 +5,7 @@ import { Readable } from 'node:stream';
 import { COOKIE, newToken, readCookie, tokenHash } from './auth.js';
 import { accountRoutes } from './accounts.js';
 import { createMailer } from './mail.js';
+import { DbError, handle as dbHandle } from './dbconnect.js';
 
 /* Linework's own backend: accounts, files with version history, folders, share links and the AI proxy
    with a daily allowance. It answers the same /api/files and /api/ai requests as the Netlify functions,
@@ -18,7 +19,7 @@ export function createApp(store, opts = {}) {
   const {
     allowSignup = true, aiKey = '', aiModel = 'claude-sonnet-5-5', aiBase = 'https://api.anthropic.com',
     aiDailyLimit = 50, publicDir = null, trustProxy = false,
-    mailer = createMailer(), oauth = {}, appUrl = '', allowLocal = false,
+    mailer = createMailer(), oauth = {}, appUrl = '', allowLocal = false, dbAllowPrivate = false, dbTimeout = 30_000,
   } = opts;
   // New accounts confirm their email when the server can send one (unless turned off).
   const requireVerified = opts.requireVerified ?? mailer.configured;
@@ -58,7 +59,7 @@ export function createApp(store, opts = {}) {
   // What this server offers. allowLocal: whether the app may be used without an account.
   api.get('/server', (req, res) => res.json({
     name: 'linework-server', ...accounts.info(), allowLocal,
-    features: ['versions', 'share', 'folders', 'ai-limits', '2fa'],
+    features: ['versions', 'share', 'folders', 'ai-limits', '2fa', 'db'],
     ai: { configured: Boolean(aiKey), dailyLimit: aiDailyLimit },
   }));
 
@@ -148,6 +149,12 @@ export function createApp(store, opts = {}) {
     const reason = !aiKey ? 'no_key' : !req.user ? 'signed_out' : aiDailyLimit > 0 && used >= aiDailyLimit ? 'daily_limit' : null;
     res.json({ enabled: !reason, reason, limit: aiDailyLimit, used });
   });
+  /* ---- live databases (the Database view): see dbconnect.js ---- */
+  api.post('/db', signedIn, async (req, res) => {
+    try { res.json(await dbHandle(req.body || {}, { allowPrivate: dbAllowPrivate, timeout: dbTimeout })); }
+    catch (e) { res.status(e instanceof DbError ? e.status : 500).json({ error: e.code || 'db_error', message: e instanceof DbError ? e.message : 'The database request failed.' }); }
+  });
+
   api.post('/ai', signedIn, async (req, res) => {
     if (!aiKey) return res.status(503).json({ error: 'not_configured' });
     const b = req.body || {};

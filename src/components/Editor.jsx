@@ -12,6 +12,7 @@ import { ThemeButton, useUI } from './ui.jsx';
 // The code editor (Monaco) is large, so it loads the first time the Code view opens.
 const CodeWorkspace = lazy(() => import('./CodeWorkspace.jsx'));
 const SheetView = lazy(() => import('./SheetView.jsx'));
+const DatabaseView = lazy(() => import('./DatabaseView.jsx'));
 
 const narrow = () => innerWidth <= 760;
 const AI_KEY = 'linework:ai-open';
@@ -25,6 +26,7 @@ const VIEWS = [
   { k: 'doc', group: 'Write', label: 'Doc', note: 'The design doc', icon: '<path d="M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6"/>' },
   { k: 'both', group: 'Write', label: 'Doc + Canvas', note: 'The doc beside the diagrams', wide: true, icon: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16M6 9h3M6 12h3M15 9h3v6h-3z"/>' },
   { k: 'sheet', group: 'Data', label: 'Sheet', note: 'Spreadsheets with formulas and charts, like Excel', icon: '<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17M3.5 14.5h17M9 4.5v15"/>' },
+  { k: 'db', group: 'Data', label: 'Database', note: 'Connect to a live database: its schema and data', icon: '<ellipse cx="12" cy="5.5" rx="7.5" ry="2.5"/><path d="M4.5 5.5v13c0 1.4 3.4 2.5 7.5 2.5s7.5-1.1 7.5-2.5v-13M4.5 12c0 1.4 3.4 2.5 7.5 2.5s7.5-1.1 7.5-2.5"/>' },
   { k: 'code', group: 'Build', label: 'Code', note: 'Editor, terminal, Python and the code visualizer', icon: '<path d="m8 7-5 5 5 5M16 7l5 5-5 5M14 4l-4 16"/>' },
 ];
 
@@ -51,6 +53,14 @@ export default function Editor({ file, update, saveState, onBack, onRename, onDu
   setSheets(file.sheets);
   const [placeSheet, setPlaceSheet] = useState(null);
   const openSheet = id => update(c => { if (id) c.activeSheet = id; c.view = 'sheet'; });
+  // A live database's schema drawn on the canvas: its diagram tab is reused (and its code replaced) on later draws.
+  const drawLiveSchema = (code, name, live) => update(c => {
+    const i = c.diagrams.findIndex(x => x.live && x.live.conn === live.conn);
+    if (i >= 0) { c.diagrams[i] = { ...c.diagrams[i], type: 'erd', code, live }; c.active = i; }
+    else if (c.diagrams.length === 1 && !c.diagrams[0].code.trim() && !(c.diagrams[0].shapes || []).length) { c.diagrams[0] = { ...c.diagrams[0], type: 'erd', name: name.slice(0, 40), code, live, manual: {} }; c.active = 0; }
+    else { c.diagrams.push(Object.assign(dg('erd', name.slice(0, 40), code), { live })); c.active = c.diagrams.length - 1; }
+    c.view = 'canvas';
+  });
   const sheetToCanvas = id => { setPlaceSheet(id); update(c => { c.view = 'canvas'; }); };
 
   const setView = v => update(c => { c.view = v; });
@@ -201,6 +211,13 @@ export default function Editor({ file, update, saveState, onBack, onRename, onDu
           <div className="sheetpane">
             <Suspense fallback={<div className="cw-loading">Loading…</div>}>
               <SheetView file={file} update={update} visible onAddToCanvas={sheetToCanvas} />
+            </Suspense>
+          </div>
+        )}
+        {view === 'db' && (
+          <div className="dbpane">
+            <Suspense fallback={<div className="cw-loading">Loading…</div>}>
+              <DatabaseView file={file} update={update} visible onDiagram={drawLiveSchema} />
             </Suspense>
           </div>
         )}

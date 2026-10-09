@@ -91,6 +91,15 @@ The Code view's **Run** button, **Terminal** and **Python** prompt run code in t
 
 **Tools** in the home page's sidebar lists every tool, grouped (Diagrams, Docs & data, Code), and each one starts a new file open in that tool: the Code view can open straight into the Terminal, the Python prompt or the Visualize pane. See `src/components/Tools.jsx`.
 
+## Live databases
+
+The **Database** view connects to PostgreSQL, MySQL / MariaDB, SQL Server and MongoDB, and opens SQLite files in the browser (sql.js). It shows the live schema (and draws it on the canvas, refreshable), browses and edits rows by primary key, and runs queries, with an optional read-only mode per connection.
+
+- `server/dbconnect.js` does the work for both backends: `POST /api/db` on the Linework server and `netlify/functions/db.mts` on Netlify. Each request opens the connection, does one thing and closes it; passwords are never stored on the server.
+- Only signed-in accounts can use it. Hosts are resolved first, and private, loopback, link-local and metadata addresses are refused unless `DB_ALLOW_PRIVATE=1`, so the server can't be used to reach its own network. Queries time out (30 s on the server, 9 s on Netlify) and results are capped at 1,000 rows.
+- Connections are saved in the browser (`src/lib/dbclient.js`), never in files; passwords only when "Remember the password" is ticked.
+- Tests: `tests/db.spec.js`. Set `LINEWORK_TEST_PG`, `LINEWORK_TEST_MYSQL` and/or `LINEWORK_TEST_MSSQL` to connection strings for scratch databases to run the live tests too.
+
 ## Database schemas from SQL
 
 A `.sql` file becomes a database schema diagram without AI: drop it on the canvas, or use **Insert → Database schema from SQL**, **Tools → Open a .sql file**, or a schema's **⋯ → Import SQL**. `src/lib/sql.js` reads schema files, migrations and dumps from PostgreSQL (`pg_dump`), MySQL (`mysqldump`), SQLite and SQL Server: tables, column types, primary keys (including ones added by `ALTER TABLE`), unique columns and foreign keys, and follows `ALTER TABLE` column changes in order. It also writes a diagram back out as PostgreSQL or MySQL.
@@ -123,6 +132,7 @@ src/
     ServerDialogs.jsx   Share links, version history and shared-file page (server/ only)
     Visualizer.jsx      Visualize pane: code diagrams and step-through
     SheetView.jsx       Sheet view: an Excel-like workbook (ribbon, grid, charts)
+    DatabaseView.jsx    Database view: live connections, schema, data and queries
     ui.jsx              menus, dialogs, toasts, theme button
   lib/
     auth.js             accounts: Netlify Identity, or the Linework server
@@ -136,6 +146,7 @@ src/
     codeviz.js          reads code into flowcharts, class and import diagrams; records JS runs
     sheet.js            spreadsheet formulas, formats, dates, CSV
     xlsx.js             .xlsx open and save (ExcelJS)
+    dbclient.js         live database connections, SQLite in the browser, schema → diagram
     charts.js           charts from cells, as SVG
     theme.js            light, dark or system theme, remembered
     python.worker.js    Pyodide in a web worker
@@ -145,6 +156,7 @@ server/
   index.js              starts the server from environment variables
   app.js                the API: accounts, files, versions, folders, share links, AI
   db.js                 SQLite schema and queries
+  dbconnect.js          live database connections (PostgreSQL, MySQL, SQL Server, MongoDB)
   accounts.js           sign-up, sign-in, email links, two-step verification, Google/GitHub
   auth.js               passwords, sessions, sign-in limits
   mail.js               sending email (Resend or SMTP)
@@ -153,6 +165,7 @@ server/
   admin.js              npm run admin: list users, reset passwords
 netlify/
   functions/files.mts   files API on Netlify (Blobs)
+  functions/db.mts      live database connections on Netlify
   edge-functions/ai.ts  AI proxy on Netlify
 ```
 

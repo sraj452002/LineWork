@@ -24,6 +24,7 @@ const ICON = {
   py: 'M12 3c-4 0-4 1.8-4 3v2h4v1H6c-2 0-3 1.5-3 4s1 4 3 4h2v-2.5c0-1.4 1.1-2.5 2.5-2.5h4c1.4 0 2.5-1.1 2.5-2.5V6c0-1.6-1.6-3-5-3zM10 5.5h.01M12 21c4 0 4-1.8 4-3v-2h-4v-1h6c2 0 3-1.5 3-4M14 18.5h.01',
   viz: 'M3 4h7v6H3zM14 14h7v6h-7zM6.5 10v4a2 2 0 0 0 2 2H14M14 4h7v6h-7zM10 7h4',
   node: 'M12 3l8 4.5v9L12 21l-8-4.5v-9zM9 10v4l3 2 3-2',
+  live: 'M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zM4 6v6c0 1.7 3.6 3 8 3M20 6v4M4 12v6c0 1.7 3.6 3 8 3M17 14l-3 4h4l-3 4',
 };
 
 export default function Tools({ q = '', onCreate, onGenerate, busy }) {
@@ -93,7 +94,8 @@ export default function Tools({ q = '', onCreate, onGenerate, busy }) {
       { k: 'board', view: 'Canvas', name: 'Whiteboard', note: 'Draw freely: shapes, arrows, sticky notes', act: () => onCreate(blank('Whiteboard', { diagrams: [dg('architecture', 'Whiteboard', '')] })) },
       { k: 'ai', view: 'Canvas', name: busy ? 'Generating… click to stop' : 'AI diagram', note: 'Describe a system; AI writes the doc and draws it', act: onGenerate },
     ] },
-    { id: 'database', name: 'Databases', k: 'erd', note: 'Design tables, columns and the relationships between them, or draw the ones in SQL you already have.', list: [
+    { id: 'database', name: 'Databases', k: 'erd', note: 'Connect to a live database, design tables and the relationships between them, or draw the ones in SQL you already have.', list: [
+      { k: 'live', view: 'Database', name: 'Connect to a database', note: 'Live schema and data: PostgreSQL, MySQL, SQL Server, MongoDB, SQLite', act: () => onCreate(blank('Database', { view: 'db' })) },
       { k: 'erd', view: 'Canvas', name: 'Database schema', note: 'Start from an example schema', act: () => onCreate(newFile(T('erd'))) },
       { k: 'sql', view: 'Canvas', name: 'Open a .sql file', note: 'Draw the tables in a schema file, migration or dump', act: () => sqlRef.current?.click() },
       { k: 'sql', view: 'Canvas', name: 'Schema from SQL', note: 'Paste CREATE TABLE statements', act: importSQL },

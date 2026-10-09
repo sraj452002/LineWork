@@ -300,6 +300,18 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
     if (v && v.trim()) importSqlText(v);
   };
   const openSqlFile = () => sqlFileRef.current?.click();
+  // A schema drawn from a live database (the Database view) can be read again from it.
+  const refreshLive = async () => {
+    const { dbRequest, hasSecret, loadConnections, schemaToErd } = await import('../lib/dbclient.js');
+    const c = loadConnections().find(x => x.id === d.live.conn);
+    if (!c) { toast('That connection isn’t saved in this browser. Add it in the Database view.'); return; }
+    if (!hasSecret(c)) { toast('Open the Database view and enter the password first.'); return; }
+    try {
+      const { tables } = await dbRequest(c, 'schema');
+      setCode(schemaToErd(tables, { schemas: d.live.schemas }));
+      toast(`Updated from ${c.name || 'the database'}: ${tables.length} tables`);
+    } catch (e) { toast(e.message); }
+  };
   const sqlMenu = [
     ...DIALECTS.map(([k, n]) => ({ label: `Download SQL (${n})`, icon: IC.download, act: () => exportSql(k) })),
     ...DIALECTS.map(([k, n]) => ({ label: `Copy SQL (${n})`, icon: IC.copy, act: () => exportSql(k, true) })),
@@ -1249,7 +1261,8 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
           onNotation={v => setCode(setNotation(dRef.current.code, v))} onDir={toggleDir} onMono={toggleStyle}
           onCode={() => setDrawer(true)} onAI={focusAI}
           more={d.type === 'erd'
-            ? [{ label: 'Export as SQL', icon: IC.download, items: sqlMenu }, { label: 'Import SQL…', icon: IC.upload, items: [
+            ? [...(d.live ? [{ label: 'Refresh from the database', note: 'Read the live schema again', icon: IC.dErd, act: refreshLive }] : []),
+              { label: 'Export as SQL', icon: IC.download, items: sqlMenu }, { label: 'Import SQL…', icon: IC.upload, items: [
                 { label: 'Open a .sql file…', act: openSqlFile }, { label: 'Paste SQL…', act: importSql }] }]
             : [{ label: 'Generate ER diagram from this', note: 'AI designs the tables behind it', icon: IC.dErd, act: diagramToErd },
               { label: 'Database schema from a .sql file…', note: 'Opens in a new tab', icon: IC.upload, act: openSqlFile }]} />
