@@ -132,7 +132,7 @@ function appGuide() {
       <ul className="gkeys">
         <li><K>/</K> Search</li><li><K>Alt N</K> New file</li><li><K>A</K> All Files</li><li><K>E</K> Archive</li>
       </ul>
-      <p><b>Tools</b> in the sidebar (or <K>T</K>) lists every tool in one place: each diagram type, a whiteboard, AI diagrams, design docs, spreadsheets, opening an Excel or CSV file, opening a .sql file as a database diagram, a schema from pasted SQL, the code editor, the Terminal, Python, a Node.js server and the code visualizer. Pick one and it starts a new file, open in that tool. The search box finds a tool by name.</p>
+      <p><b>Tools</b> in the sidebar (or <K>T</K>) lists every tool in one place, grouped by what you're making (<b>Diagrams</b>, <b>Databases</b>, <b>Docs &amp; spreadsheets</b>, <b>Code</b>; the chips at the top show one group), and each card says which view it opens in: each diagram type, a whiteboard, AI diagrams, design docs, spreadsheets, opening an Excel or CSV file, opening a .sql file as a database diagram, a schema from pasted SQL, the code editor, the Terminal, Python, a Node.js server and the code visualizer. Pick one and it starts a new file, open in that tool. The search box finds a tool by name.</p>
     </> },
     { id: 'editor', title: 'The editor', body: <>
       <p>Opening a file shows the editor. Along the top:</p>
@@ -140,7 +140,7 @@ function appGuide() {
         <li><b>Files</b> takes you back home.</li>
         <li>The <b>file name</b> is editable in place.</li>
         <li><b>Saved / Saving</b> shows that changes are stored. There's no save button.</li>
-        <li><b>Doc · Both · Canvas</b> chooses what you see. On a phone it's one or the other.</li>
+        <li>The <b>View</b> menu at the top (it shows the view you're in, like <b>Canvas</b>) switches between <b>Canvas</b> (diagrams), <b>Doc</b>, <b>Doc + Canvas</b> side by side, <b>Sheet</b> (spreadsheets) and <b>Code</b>. On a phone there's no side-by-side view.</li>
         <li><b>Export</b> and <b>⋯</b> (rename, duplicate, delete, this guide).</li>
       </ul>
       <h4>Diagram tabs</h4>
@@ -192,7 +192,7 @@ function appGuide() {
     </> },
     { id: 'code-editor', title: 'Code editor', body: <>
       <ul>
-        <li><b>Code</b> in the top bar (next to Doc, Both and Canvas) opens an editor like VS Code for code, configs and queries that go with the design. It's the same editor VS Code uses.</li>
+        <li><b>Code</b>, in the <b>View</b> menu at the top, opens an editor like VS Code for code, configs and queries that go with the design. It's the same editor VS Code uses.</li>
         <li>The <b>Explorer</b> on the left holds files and folders: create them with its buttons, or open files from your computer. Right-click, or use <b>⋯</b>, to rename, delete or download. Use slashes in a name to make folders, like <code>src/app.ts</code>.</li>
         <li>Files open in tabs. You get syntax highlighting for 80+ languages, IntelliSense and error checking for JavaScript, TypeScript, JSON, CSS and HTML, find and replace (<K>Ctrl F</K> <K>Ctrl H</K>), multiple cursors (<K>Alt</K> + click) and the command palette (<K>F1</K>).</li>
         <li><K>Ctrl P</K> goes to a file by name and <K>Ctrl B</K> shows or hides the Explorer. Changes save on their own as you type. Click the language in the status bar to change it.</li>

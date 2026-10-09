@@ -90,7 +90,8 @@ test.beforeEach(async ({ page }) => {
   });
   await page.goto('/');
   await page.getByRole('button', { name: 'Create a Blank File' }).click();
-  await page.getByRole('group', { name: 'View' }).getByRole('button', { name: 'Code' }).click();
+  await page.getByRole('button', { name: /^View:/ }).click();
+  await page.getByRole('menuitemradio', { name: /^Code/ }).click();
 });
 test.afterEach(async () => {
   expect(test.info().errors_, 'page errors').toEqual([]);

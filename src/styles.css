@@ -1175,7 +1175,21 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 /* ---- Home → Tools ---- */
 .topbar .tabs[hidden]{display:flex;visibility:hidden}
 .tools{display:flex;flex-direction:column;gap:6px}
-.tools section{margin-bottom:12px}
+.tools-cats{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.tcat{display:inline-flex;align-items:center;gap:7px;padding:6px 12px 6px 9px;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:var(--ink);font:inherit;font-size:13px;font-weight:550;cursor:pointer}
+.tcat svg{width:16px;height:16px;color:var(--tc,var(--ink2))}
+.tcat small{font-size:11.5px;color:var(--ink2);font-weight:500;background:var(--panel);border-radius:999px;padding:0 7px;line-height:18px}
+.tcat:hover{border-color:var(--ink2)}
+.tcat[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--paper)}
+.tcat[aria-pressed="true"] svg{color:inherit}
+.tcat[aria-pressed="true"] small{background:color-mix(in srgb,var(--paper) 20%,transparent);color:inherit}
+.tools-sec{margin-bottom:18px;padding:16px;border:1px solid var(--line);border-radius:18px;background:color-mix(in srgb,var(--tc,#4f6bed) 4%,var(--panel))}
+.tools-sec > header{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.tools-sec > header h2{margin:0;font-size:16px;font-weight:700}
+.tools-sec > header p{margin:2px 0 0;font-size:13px;color:var(--ink2);line-height:1.4}
+.tool-card{position:relative}
+.tool-view{position:absolute;top:8px;right:10px;font-style:normal;font-size:10.5px;font-weight:600;letter-spacing:.03em;color:var(--ink2);background:var(--panel);border-radius:999px;padding:1px 8px}
+.tool-card span{padding-right:44px}
 .tools-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
 .tool-card{display:flex;align-items:center;gap:14px;text-align:left;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:var(--surface);color:var(--ink);font:inherit;cursor:pointer;transition:border-color .15s,box-shadow .15s,transform .15s}
 .tool-card:hover{border-color:color-mix(in srgb,var(--ink) 25%,var(--line));box-shadow:0 6px 20px rgba(0,0,0,.07);transform:translateY(-1px)}
@@ -1189,7 +1203,16 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .t-board .tool-ico,.t-ai .tool-ico{--tc:#8b5cf6}
 .t-doc .tool-ico{--tc:#16a34a}
 .t-sheet .tool-ico,.t-csv .tool-ico{--tc:#15803d}
+.t-arch,.t-flow,.t-seq,.t-board,.t-ai{--tc:#0e9f8a}.t-erd,.t-sql{--tc:#c2410c}.t-doc,.t-sheet,.t-csv{--tc:#15803d}.t-code,.t-term,.t-py,.t-node,.t-viz{--tc:#2563eb}
 .t-code .tool-ico,.t-node .tool-ico{--tc:#2563eb}
 .t-term .tool-ico{--tc:#475569}
 .t-py .tool-ico{--tc:#ca8a04}
 .t-viz .tool-ico{--tc:#db2777}
+
+/* ---- the View menu in the editor's top bar ---- */
+.viewpick{display:inline-flex;align-items:center;gap:7px;min-width:132px;padding:6px 9px 6px 11px}
+.viewpick svg{width:17px;height:17px;flex:none;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.viewpick span{flex:1;text-align:left;font-weight:600}
+.viewpick .caret{width:15px;height:15px;opacity:.6}
+.menu .mhead{padding:8px 10px 3px;font-size:11px;font-weight:650;letter-spacing:.05em;text-transform:uppercase;color:var(--ink2)}
+.menu .mhead:first-child{padding-top:4px}

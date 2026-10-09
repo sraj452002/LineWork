@@ -75,7 +75,8 @@ run()
 
 const codeView = async (page, files) => {
   await page.getByRole('button', { name: 'Create a Blank File' }).click();
-  await page.getByRole('group', { name: 'View' }).getByRole('button', { name: 'Code' }).click();
+  await page.getByRole('button', { name: /^View:/ }).click();
+  await page.getByRole('menuitemradio', { name: /^Code/ }).click();
   await page.locator('.cw input[type=file]').setInputFiles(files.map(([name, text]) => ({ name, mimeType: 'text/plain', buffer: Buffer.from(text) })));
   await expect(page.locator('.cw-tab.on')).toContainText(files[files.length - 1][0], { timeout: 20000 });
   await page.getByRole('button', { name: 'Visualize' }).click();
@@ -142,7 +143,7 @@ test('Visualize JavaScript: flowchart, classes, imports, open on canvas, and ste
   await viz.getByRole('tab', { name: 'Structure' }).click();
   await viz.getByRole('button', { name: 'Classes' }).click();
   await viz.getByRole('button', { name: 'Open on canvas' }).click();
-  await expect(page.getByRole('group', { name: 'View' }).getByRole('button', { name: 'Canvas' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: 'View: Canvas' })).toBeVisible();
   await expect(page.getByText('Classes', { exact: true }).first()).toBeVisible();
 });
 

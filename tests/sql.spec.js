@@ -129,7 +129,7 @@ test.describe('in the app', () => {
     const chooser = page.waitForEvent('filechooser');
     await page.locator('.tool-card').filter({ hasText: 'Open a .sql file' }).click();
     await (await chooser).setFiles(sqlFile('shop.sql', MYSQL_DUMP));
-    await expect(page.getByRole('group', { name: 'View' }).getByRole('button', { name: 'Canvas' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByRole('button', { name: 'View: Canvas' })).toBeVisible();
     const svg = page.locator('.canvaspane svg').first();
     await expect(svg).toContainText('customers');
     await expect(svg).toContainText('varchar(64)');
@@ -139,7 +139,8 @@ test.describe('in the app', () => {
 
   test('on the canvas: Insert → Database schema from SQL, and dropping a .sql file', async ({ page }) => {
     await page.getByRole('button', { name: 'Create a Blank File' }).click();
-    await page.getByRole('group', { name: 'View' }).getByRole('button', { name: 'Canvas' }).click();
+    await page.getByRole('button', { name: /^View:/ }).click();
+  await page.getByRole('menuitemradio', { name: /^Canvas/ }).click();
     await page.getByRole('button', { name: 'Insert (/)' }).click();
     const ins = page.getByRole('dialog', { name: 'Insert' });
     await ins.getByRole('button', { name: /Database schema from SQL/ }).click();

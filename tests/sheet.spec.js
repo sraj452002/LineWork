@@ -36,7 +36,8 @@ test.describe('in the app', () => {
     });
     await page.goto('/');
     await page.getByRole('button', { name: 'Create a Blank File' }).click();
-    await page.getByRole('group', { name: 'View' }).getByRole('button', { name: 'Sheet' }).click();
+    await page.getByRole('button', { name: /^View:/ }).click();
+  await page.getByRole('menuitemradio', { name: /^Sheet/ }).click();
   });
   test.afterEach(async () => { expect(test.info().errors_, 'page errors').toEqual([]); });
 
@@ -291,18 +292,19 @@ test.describe('in the app', () => {
     await page.getByRole('button', { name: 'Start from an example' }).click();
     await ribbonTab(page, 'File').click();
     await page.getByRole('button', { name: 'Show on canvas' }).click();
-    await expect(page.getByRole('group', { name: 'View' }).getByRole('button', { name: 'Canvas' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByRole('button', { name: 'View: Canvas' })).toBeVisible();
     const block = page.locator('.canvaspane g[data-shape]').filter({ hasText: 'Budget' });
     await expect(block).toContainText('Monitoring');
     await expect(block).toContainText('959');
 
     // Double-click opens it; a change shows on the canvas.
     await block.dblclick();
-    await expect(page.getByRole('group', { name: 'View' }).getByRole('button', { name: 'Sheet' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByRole('button', { name: 'View: Sheet' })).toBeVisible();
     await cell(page, 'C5').click();
     await page.keyboard.type('51');
     await page.keyboard.press('Enter');
-    await page.getByRole('group', { name: 'View' }).getByRole('button', { name: 'Canvas' }).click();
+    await page.getByRole('button', { name: /^View:/ }).click();
+  await page.getByRole('menuitemradio', { name: /^Canvas/ }).click();
     await expect(block).toContainText('961');
 
     // The canvas's Insert panel adds a new, empty sheet too.
