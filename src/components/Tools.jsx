@@ -44,10 +44,19 @@ export default function Tools({ q = '', onCreate, onGenerate, busy }) {
 
   const importCSV = async f => {
     if (!f) return;
-    const text = await f.text().catch(() => null);
     csvRef.current.value = '';
-    if (text == null) { toast('That file couldn’t be read.'); return; }
     const name = f.name.replace(/\.\w+$/, '').slice(0, 40) || 'Imported';
+    if (/\.(xlsx|xlsm)$/i.test(f.name)) {
+      try {
+        const { readXlsx } = await import('../lib/xlsx.js');
+        const sheets = await readXlsx(await f.arrayBuffer());
+        if (!sheets.length) { toast('That workbook has no sheets.'); return; }
+        onCreate(blank(name, { view: 'sheet', sheets, activeSheet: sheets[0].id }));
+      } catch (e) { toast('That file couldn’t be opened. Is it an Excel (.xlsx) file?'); }
+      return;
+    }
+    const text = await f.text().catch(() => null);
+    if (text == null) { toast('That file couldn’t be read.'); return; }
     onCreate(sheetFile(name, Object.assign(newSheet(name), fromCSV(text))));
   };
   const importSQL = async () => {
@@ -71,7 +80,7 @@ export default function Tools({ q = '', onCreate, onGenerate, busy }) {
       { k: 'doc', name: 'Design doc', note: 'A doc with sections ready to fill in', act: () => onCreate(newFile(T('doc'))) },
       { k: 'sheet', name: 'Spreadsheet', note: 'Cells and formulas, like Excel', act: () => onCreate(sheetFile('Spreadsheet', newSheet('Sheet 1'))) },
       { k: 'sheet', name: 'Budget sheet', note: 'An example spreadsheet with totals', act: () => onCreate(sheetFile('Budget', SAMPLE())) },
-      { k: 'csv', name: 'Open a CSV file', note: 'Turn a CSV or TSV into a spreadsheet', act: () => csvRef.current?.click() },
+      { k: 'csv', name: 'Open an Excel or CSV file', note: 'Open a .xlsx, CSV or TSV as a spreadsheet', act: () => csvRef.current?.click() },
       { k: 'sql', name: 'Schema from SQL', note: 'Paste CREATE TABLEs, get an ERD', act: importSQL },
     ]],
     ['Code', [
@@ -101,7 +110,7 @@ export default function Tools({ q = '', onCreate, onGenerate, busy }) {
         </section>
       ))}
       {!groups.length && <div className="nofiles">No tools match “{q.trim()}”.</div>}
-      <input ref={csvRef} type="file" accept=".csv,.tsv,text/csv,text/plain" hidden onChange={e => importCSV(e.target.files[0])} />
+      <input ref={csvRef} type="file" accept=".xlsx,.xlsm,.csv,.tsv,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden onChange={e => importCSV(e.target.files[0])} />
     </div>
   );
 }

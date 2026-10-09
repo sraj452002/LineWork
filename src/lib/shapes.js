@@ -2,7 +2,7 @@ import { C, PAL, GLYPH } from './engines.js';
 import { esc, rid, trunc } from './utils.js';
 import { imageMissing, imageSrc } from './images.js';
 import { isPackIcon, packIcon } from './iconpacks.js';
-import { addr, colName, evaluate, formatValue, isErr, sheetById, usedRange } from './sheet.js';
+import { addr, allSheets, colName, evaluate, isErr, sheetById, shown, usedRange } from './sheet.js';
 
 /* Freehand objects drawn on top of a diagram: shapes, lines, text, icons, frames, images.
    Box objects have {x,y,w,h}; lines, arrows and pen strokes have pts:[[x,y],...].
@@ -500,7 +500,7 @@ function sheetBlock(s, col){
   if(!sh) return m + `<text x="${w/2}" y="${h/2 + 5}" text-anchor="middle" font-size="13" fill="${C.ink2}">This sheet was deleted</text>`;
   const u = (s.range && /^[A-Z]+\d+:[A-Z]+\d+$/.test(s.range) ? (() => { const [a, b] = s.range.split(':').map(x => /^([A-Z]+)(\d+)$/.exec(x)); const ci = t => [...t].reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0) - 1; return {c0:ci(a[1]), r0:+a[2] - 1, c1:ci(b[1]), r1:+b[2] - 1}; })() : usedRange(sh)) || {c0:0, r0:0, c1:2, r1:2};
   const c0 = 0, c1 = Math.min(u.c1, u.c0 + 11), r0 = Math.min(u.r0, 0), r1 = Math.min(u.r1, r0 + 29);
-  const val = evaluate(sh), fmt = sh.fmt || {};
+  const val = evaluate(sh, allSheets()), fmt = sh.fmt || {};
   const widths = []; for(let c = c0; c <= c1; c++) widths.push((sh.widths || {})[colName(c)] || 110);
   const k = w / widths.reduce((a, b) => a + b, 0), nr = r1 - r0 + 1, rh = (h - SHEET_TITLE) / nr;
   const fs = Math.max(8, Math.min(14, rh * .52));
@@ -515,13 +515,14 @@ function sheetBlock(s, col){
     const cx = x, ww = cw * k;
     if(i) m += `<path d="M${cx} ${SHEET_TITLE}V${h}" stroke="${C.line}" stroke-opacity=".8"/>`;
     for(let r = r0; r <= r1; r++){
-      const a = addr(c0 + i, r), v = val(a), f = fmt[a] || {}, t = formatValue(v, f.nf);
+      const a = addr(c0 + i, r), v = val(a), f = fmt[a] || {}, t = shown(val, sh, a), ry = SHEET_TITLE + (r - r0) * rh;
+      if(f.bg && f.bg !== '#ffffff') m += `<rect x="${f1(cx + .5)}" y="${f1(ry + .5)}" width="${f1(ww - 1)}" height="${f1(rh - 1)}" fill="${esc(f.bg)}"/>`;
       if(t === '') continue;
       const max = Math.max(1, Math.floor((ww - 10) / (fs * CW))), txt = t.length > max ? t.slice(0, Math.max(1, max - 1)) + '…' : t;
       const right = f.al ? f.al === 'right' : typeof v === 'number', center = f.al === 'center';
-      const tx = center ? cx + ww / 2 : right ? cx + ww - 6 : cx + 6, ty = SHEET_TITLE + (r - r0) * rh + rh / 2 + fs * .35;
+      const tx = center ? cx + ww / 2 : right ? cx + ww - 6 : cx + 6, ty = ry + rh / 2 + fs * .35;
       const bold = f.b || (headRow && r === r0);
-      m += `<text x="${f1(tx)}" y="${f1(ty)}" font-size="${f1(fs)}"${center ? ' text-anchor="middle"' : right ? ' text-anchor="end"' : ''}${bold ? ' font-weight="650"' : ''} fill="${isErr(v) ? C.err || '#a8322d' : C.ink}">${esc(txt)}</text>`;
+      m += `<text x="${f1(tx)}" y="${f1(ty)}" font-size="${f1(fs)}"${center ? ' text-anchor="middle"' : right ? ' text-anchor="end"' : ''}${bold ? ' font-weight="650"' : ''} fill="${isErr(v) ? C.err || '#a8322d' : f.fc ? esc(f.fc) : f.bg ? '#000' : C.ink}"${f.i ? ' font-style="italic"' : ''}>${esc(txt)}</text>`;
     }
     x += ww;
   });

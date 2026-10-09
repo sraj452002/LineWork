@@ -206,14 +206,17 @@ function appGuide() {
       </ul>
     </> },
     { id: 'sheets', title: 'Spreadsheets', body: <>
-      <p>The <b>Sheet</b> view keeps tables of numbers and text in the file, like Excel: costs, capacity estimates, schedules, test data. A file can hold several sheets, as tabs along the bottom.</p>
+      <p>The <b>Sheet</b> view works like Excel: a ribbon (<b>File</b>, <b>Home</b>, <b>Insert</b>, <b>Formulas</b>, <b>Data</b>, <b>View</b>), the name box and formula bar, and sheets as tabs along the bottom. Use it for costs, capacity estimates, schedules and test data.</p>
       <ul>
-        <li>Click a cell and type to replace it, or double-click (or <K>Enter</K>, <K>F2</K>) to change it. <K>Enter</K> and <K>Tab</K> move on; arrow keys move around, and <K>Shift</K> with them (or a drag) selects a block.</li>
-        <li>Start with <code>=</code> for a formula: <code>=B2*C2</code>, <code>=SUM(D2:D9)</code>, <code>=AVERAGE(…)</code>, <code>=IF(A2&gt;100,"high","ok")</code>, <code>=ROUND(…,2)</code>, <code>=SUMIF</code>, <code>=COUNTIF</code>, <code>=VLOOKUP</code> and more; the formula bar suggests names as you type. <code>$A$1</code> stays fixed when copied.</li>
-        <li><K>Ctrl C</K> / <K>Ctrl V</K> copy and paste, also to and from Excel and Google Sheets; formulas pasted inside Linework adjust their references. <K>Ctrl D</K> fills down, <K>Ctrl Z</K> undoes, <K>Delete</K> clears.</li>
-        <li>Right-click for inserting and deleting rows and columns and sorting; the toolbar has bold, alignment and number formats (decimals, percent, currency). Drag a column's edge to resize it.</li>
-        <li>Selecting several cells shows their sum, average and count at the bottom right. <b>Import CSV</b> and <b>Export CSV</b> move data in and out.</li>
-        <li><b>Show on canvas</b> (or <b>Insert → Spreadsheet</b> on the canvas) puts the sheet on the diagram as a table that stays up to date. Double-click it to open the sheet.</li>
+        <li>Click a cell and type to replace it, or double-click (or <K>F2</K>) to change it. <K>Enter</K> and <K>Tab</K> move on; arrow keys move around, <K>Ctrl</K> + arrow jumps to the edge of the data, and <K>Shift</K> (or a drag) selects a block. Type an address like <code>B2:D9</code> in the name box to go there.</li>
+        <li>Start with <code>=</code> for a formula. Over a hundred of Excel's functions work: <code>SUM</code>, <code>IF</code>, <code>IFS</code>, <code>XLOOKUP</code>, <code>VLOOKUP</code>, <code>INDEX</code>/<code>MATCH</code>, <code>SUMIFS</code>, <code>COUNTIFS</code>, <code>TEXT</code>, <code>TEXTJOIN</code>, dates (<code>TODAY</code>, <code>EDATE</code>, <code>NETWORKDAYS</code>…), <code>PMT</code> and more; <b>Formulas</b> lists them by group. While writing one, click cells to put their addresses in. <code>Sheet2!A1</code> reads another sheet; <code>$A$1</code> stays fixed when copied.</li>
+        <li>Typed dates, times, percents and amounts (<code>2026-03-15</code>, <code>12.5%</code>, <code>$1,200</code>) are kept as numbers with a matching format. <b>Home</b> has fonts, colours, fills, borders, alignment, wrap, merge, number formats and decimals; the Format Painter copies formats.</li>
+        <li>Drag the small square at the corner of the selection (the fill handle) to continue a series (1, 2, 3…, Mon, Tue…, Jan, Feb…, dates) or copy formulas; double-click it to fill down beside your data. <K>Ctrl D</K> / <K>Ctrl R</K> fill down and right; <K>Alt =</K> is AutoSum.</li>
+        <li><K>Ctrl C</K> / <K>Ctrl V</K> copy and paste, also to and from Excel and Google Sheets. Right-click to insert or delete rows and columns (formulas follow), sort, filter or add a chart. <K>Ctrl Z</K> undoes.</li>
+        <li><b>Data → Filter</b> (<K>Ctrl Shift L</K>) puts a menu on each header to sort and pick which values show. <K>Ctrl F</K> / <K>Ctrl H</K> find and replace. <b>View</b> freezes panes, hides gridlines, shows formulas and zooms.</li>
+        <li><b>Insert</b> adds a column, bar, line, area, pie, doughnut or scatter chart of the table around the selected cell. Drag it to move it, its corner to resize it; its bar changes the type, title and cells.</li>
+        <li><b>File → Open</b> opens <b>.xlsx</b> and CSV files; <b>Download .xlsx</b> saves the whole workbook for Excel, with formulas, formats, widths, merged cells and frozen panes (charts stay in Linework). Selecting cells shows their average, count and sum in the status bar.</li>
+        <li><b>Show on canvas</b> (under <b>File</b> or <b>Insert</b>, or <b>Insert → Spreadsheet</b> on the canvas) puts the sheet on the diagram as a table that stays up to date. Double-click it to open the sheet.</li>
       </ul>
     </> },
     { id: 'visualize', title: 'Visualizing code', body: <>
