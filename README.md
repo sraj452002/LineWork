@@ -91,6 +91,10 @@ The Code view's **Run** button, **Terminal** and **Python** prompt run code in t
 
 **Tools** in the home page's sidebar lists every tool, grouped (Diagrams, Docs & data, Code), and each one starts a new file open in that tool: the Code view can open straight into the Terminal, the Python prompt or the Visualize pane. See `src/components/Tools.jsx`.
 
+## Database schemas from SQL
+
+A `.sql` file becomes a database schema diagram without AI: drop it on the canvas, or use **Insert → Database schema from SQL**, **Tools → Open a .sql file**, or a schema's **⋯ → Import SQL**. `src/lib/sql.js` reads schema files, migrations and dumps from PostgreSQL (`pg_dump`), MySQL (`mysqldump`), SQLite and SQL Server: tables, column types, primary keys (including ones added by `ALTER TABLE`), unique columns and foreign keys, and follows `ALTER TABLE` column changes in order. It also writes a diagram back out as PostgreSQL or MySQL.
+
 ## Spreadsheets
 
 The **Sheet** view keeps spreadsheets in the file (`file.sheets`) and works like Excel: a ribbon (File, Home, Insert, Formulas, Data, View), the name box and formula bar, over a hundred Excel functions (`XLOOKUP`, `SUMIFS`, `IFS`, `TEXT`, date and financial functions…), cross-sheet references (`'Sheet 2'!A1`), real dates and number formats, fonts, fills, borders, merged cells, the fill handle with series, frozen panes, filters, find and replace, charts (column, bar, line, area, pie, doughnut, scatter), inserting and deleting rows and columns with formulas following, and the status-bar sum. It opens and saves **.xlsx** files (with ExcelJS, loaded only when needed) and CSV. **Show on canvas** (or **Insert → Spreadsheet**) draws a sheet on the diagram as a live table. The formula engine is `src/lib/sheet.js`, `.xlsx` files are `src/lib/xlsx.js`, charts are `src/lib/charts.js`, and the view is `src/components/SheetView.jsx`.

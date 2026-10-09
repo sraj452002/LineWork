@@ -132,7 +132,7 @@ function appGuide() {
       <ul className="gkeys">
         <li><K>/</K> Search</li><li><K>Alt N</K> New file</li><li><K>A</K> All Files</li><li><K>E</K> Archive</li>
       </ul>
-      <p><b>Tools</b> in the sidebar (or <K>T</K>) lists every tool in one place: each diagram type, a whiteboard, AI diagrams, design docs, spreadsheets, opening a CSV, a schema from SQL, the code editor, the Terminal, Python, a Node.js server and the code visualizer. Pick one and it starts a new file, open in that tool. The search box finds a tool by name.</p>
+      <p><b>Tools</b> in the sidebar (or <K>T</K>) lists every tool in one place: each diagram type, a whiteboard, AI diagrams, design docs, spreadsheets, opening an Excel or CSV file, opening a .sql file as a database diagram, a schema from pasted SQL, the code editor, the Terminal, Python, a Node.js server and the code visualizer. Pick one and it starts a new file, open in that tool. The search box finds a tool by name.</p>
     </> },
     { id: 'editor', title: 'The editor', body: <>
       <p>Opening a file shows the editor. Along the top:</p>
@@ -370,7 +370,7 @@ function erdGuide(onTry, theme) {
         <li><b>From a picture:</b> in AI Chat, click <b>From a picture</b> (or press <code>/</code> → Attach a picture) and pick a screenshot or photo of a diagram, even a whiteboard. Choose <b>Entity Relationship</b> first to be sure you get a schema.</li>
         <li><b>From another diagram:</b> click an architecture, flowchart or sequence diagram's name above it, then <b>⋯ → Generate ER diagram from this</b>. AI designs the tables behind it in a new tab.</li>
         <li><b>To SQL:</b> click the schema's name, then <b>⋯ → Export as SQL</b> (PostgreSQL or MySQL), or use the download button in the code editor. Columns, primary keys, unique columns and foreign keys (from relationships that name their columns) are all included.</li>
-        <li><b>From SQL:</b> <b>⋯ → Import SQL</b> takes pasted <code>CREATE TABLE</code> statements or a <code>.sql</code> file, no AI needed.</li>
+        <li><b>From a .sql file:</b> drop a <code>.sql</code> file on the canvas, or use <b>Insert → Database schema from SQL</b>, <b>Tools → Open a .sql file</b>, or the schema's <b>⋯ → Import SQL</b>. No AI is needed. It reads schema files, migrations and whole database dumps (<code>pg_dump</code>, <code>mysqldump</code>, SQLite <code>.schema</code>, SQL Server scripts): tables, columns and their types (<code>varchar(255)</code>, <code>numeric(10,2)</code>…), primary keys (also added later with <code>ALTER TABLE</code>), unique columns, and foreign keys as relationship lines (one-to-one when the key is unique). <code>ALTER TABLE</code> adding, dropping and renaming columns is followed in order; data, views and functions are skipped.</li>
       </ul>
     </> },
     { id: 'errors', title: 'Fixing mistakes', body: <>
