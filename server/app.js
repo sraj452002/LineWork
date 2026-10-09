@@ -53,6 +53,20 @@ export function createApp(store, opts = {}) {
     req.user = t ? s.session.get(tokenHash(t), Date.now()) || null : null;
     next();
   });
+  // A change is answered once it's in storage (Google Drive), so nothing reported as done is lost.
+  api.use((req, res, next) => {
+    if (req.method === 'GET' && !req.path.startsWith('/auth/oauth/')) return next();
+    const after = fn => (...a) => {
+      store.flush().then(() => fn.apply(res, a), e => {
+        console.error('Storage write failed:', e.message);
+        res.status(503).type('json'); send.call(res, JSON.stringify({ error: 'storage', message: 'Couldn’t save to storage. Try again in a moment.' }));
+      });
+      return res;
+    };
+    const send = res.send, redirect = res.redirect;
+    res.send = after(send); res.redirect = after(redirect);
+    next();
+  });
   const signedIn = (req, res, next) => (req.user ? next() : res.status(401).json({ error: 'unauthorized' }));
   const accounts = accountRoutes(api, { store, mailer, allowSignup, requireVerified, oauthConfig: oauth, appUrl, signedIn });
 
@@ -73,30 +87,30 @@ export function createApp(store, opts = {}) {
   };
   const idOk = (req, res, next) => (ID.test(req.params.id) ? next() : res.status(400).json({ error: 'bad_id' }));
 
-  api.get('/files', signedIn, (req, res) => {
-    res.json({ files: s.files.all(req.user.id).map(r => JSON.parse(r.data)) });
+  api.get('/files', signedIn, async (req, res) => {
+    res.json({ files: await store.listFiles(req.user.id) });
   });
-  api.get('/files/:id', signedIn, idOk, (req, res) => {
-    const r = s.file.get(req.user.id, req.params.id);
-    r ? res.type('json').send(r.data) : res.status(404).json({ error: 'not_found' });
+  api.get('/files/:id', signedIn, idOk, async (req, res) => {
+    const data = await store.readFile(req.user.id, req.params.id);
+    data ? res.type('json').send(data) : res.status(404).json({ error: 'not_found' });
   });
-  api.put('/files/:id', signedIn, idOk, (req, res) => {
+  api.put('/files/:id', signedIn, idOk, async (req, res) => {
     const p = parseFile(req.body, req.params.id);
     if (p.error) return res.status(p.status).json({ error: p.error });
-    store.saveFile(req.user.id, req.params.id, p.text, Number(p.file.updated) || Date.now());
+    await store.saveFile(req.user.id, req.params.id, p.text, Number(p.file.updated) || Date.now());
     res.json({ ok: true });
   });
-  api.delete('/files/:id', signedIn, idOk, (req, res) => {
-    s.dropFile.run(req.user.id, req.params.id);
+  api.delete('/files/:id', signedIn, idOk, async (req, res) => {
+    await store.dropFile(req.user.id, req.params.id);
     res.json({ ok: true });
   });
 
   /* ---- version history ---- */
   api.get('/files/:id/versions', signedIn, idOk, (req, res) => {
-    res.json({ versions: s.versions.all(req.user.id, req.params.id).map(v => ({ id: v.vid, saved: v.saved, size: v.size, title: v.title })) });
+    res.json({ versions: store.versions(req.user.id, req.params.id).map(v => ({ id: v.vid, saved: v.saved, size: v.size, title: v.title })) });
   });
-  api.get('/files/:id/versions/:vid', signedIn, idOk, (req, res) => {
-    const v = s.version.get(req.user.id, req.params.id, Number(req.params.vid) || 0);
+  api.get('/files/:id/versions/:vid', signedIn, idOk, async (req, res) => {
+    const v = await store.readVersion(req.user.id, req.params.id, Number(req.params.vid) || 0);
     v ? res.json({ saved: v.saved, file: JSON.parse(v.data) }) : res.status(404).json({ error: 'not_found' });
   });
 
@@ -117,7 +131,7 @@ export function createApp(store, opts = {}) {
   });
   api.post('/files/:id/shares', signedIn, idOk, (req, res) => {
     const mode = req.body?.mode === 'edit' ? 'edit' : 'view';
-    if (!s.file.get(req.user.id, req.params.id)) return res.status(404).json({ error: 'not_found', message: 'Save the file to your account first.' });
+    if (!store.hasFile(req.user.id, req.params.id)) return res.status(404).json({ error: 'not_found', message: 'Save the file to your account first.' });
     const token = newToken();
     s.addShare.run(token, req.user.id, req.params.id, mode, Date.now());
     res.status(201).json({ token, mode, url: shareUrl(req, token) });
@@ -127,19 +141,19 @@ export function createApp(store, opts = {}) {
     res.json({ ok: true });
   });
   // Anyone with the link: read the file, and with an edit link, save it (into the owner's account).
-  api.get('/shared/:token', (req, res) => {
+  api.get('/shared/:token', async (req, res) => {
     const sh = s.share.get(req.params.token);
-    const r = sh && s.file.get(sh.user_id, sh.file_id);
-    if (!r) return res.status(404).json({ error: 'not_found' });
-    res.json({ mode: sh.mode, owner: sh.owner_name || sh.owner_email.split('@')[0], file: JSON.parse(r.data) });
+    const data = sh && await store.readFile(sh.user_id, sh.file_id);
+    if (!data) return res.status(404).json({ error: 'not_found' });
+    res.json({ mode: sh.mode, owner: sh.owner_name || sh.owner_email.split('@')[0], file: JSON.parse(data) });
   });
-  api.put('/shared/:token', (req, res) => {
+  api.put('/shared/:token', async (req, res) => {
     const sh = s.share.get(req.params.token);
-    if (!sh || !s.file.get(sh.user_id, sh.file_id)) return res.status(404).json({ error: 'not_found' });
+    if (!sh || !store.hasFile(sh.user_id, sh.file_id)) return res.status(404).json({ error: 'not_found' });
     if (sh.mode !== 'edit') return res.status(403).json({ error: 'view_only' });
     const p = parseFile(req.body, sh.file_id);
     if (p.error) return res.status(p.status).json({ error: p.error });
-    store.saveFile(sh.user_id, sh.file_id, p.text, Number(p.file.updated) || Date.now());
+    await store.saveFile(sh.user_id, sh.file_id, p.text, Number(p.file.updated) || Date.now());
     res.json({ ok: true });
   });
 

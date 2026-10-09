@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomUUID, scrypt, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 
-/* Passwords (scrypt) and sessions (a random token in an HttpOnly cookie; the database keeps its hash). */
+/* Passwords (scrypt) and sessions (a random token in an HttpOnly cookie; storage keeps its hash). */
 
 const scryptP = promisify(scrypt);
 const N = 16384, KEYLEN = 64;

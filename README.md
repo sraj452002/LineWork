@@ -9,14 +9,14 @@ npm install
 npm run dev
 ```
 
-Open the URL Vite prints (usually http://localhost:5173).
+Open http://localhost:5173. This starts the Linework server (accounts, with data in `./data`, or Google Drive when `server/.env` sets it up) and the app. `npm run dev:app` starts only the app, without accounts.
 
 ## Accounts and where files are saved
 
 Linework runs with one of two backends, and works without either:
 
 - **On Netlify**: accounts are [Netlify Identity](https://docs.netlify.com/security/secure-access-to-sites/identity/) (email and password, or Google/GitHub if you turn them on). Files are saved with `netlify/functions/files.mts` in Netlify Blobs, and folders in the account's profile.
-- **On your own server** (`server/`, below): its own accounts and a SQLite database, plus **share links**, **version history** and a **daily AI allowance** per account.
+- **On your own server** (`server/`, below): its own accounts, with everything kept in **Google Drive** (no database), plus **share links**, **version history** and a **daily AI allowance** per account.
 - **Without an account**: files stay in the browser. Only where accounts aren't available (local development without the server, the tests), or the site allows it: `ALLOW_LOCAL_MODE=true` on the server, `VITE_ALLOW_LOCAL_MODE=true` when building for Netlify. Otherwise **sign-in is required**; files someone made without an account are offered for import when they sign in.
 
 The app asks `GET /api/server` which one it's talking to.
@@ -31,7 +31,7 @@ Set `ANTHROPIC_API_KEY` in Netlify environment variables. The edge function in `
 
 ## Run your own server
 
-`server/` is a standalone Node.js backend (Express, and Node's built-in SQLite) that serves the app and its API, so Linework runs on any host that runs Node 22.13 or later, without Netlify.
+`server/` is a standalone Node.js backend (Express) that serves the app and its API, so Linework runs on any host that runs Node 22.13 or later, without Netlify.
 
 ```bash
 npm install
@@ -40,6 +40,8 @@ npm start            # http://localhost:8787
 ```
 
 It adds, on top of what the Netlify backend does:
+
+- **Data in Google Drive**, not a database: accounts, sessions, folders, share links and the AI allowance in one `meta.json`, and each saved file and each version as its own JSON file, all in one Drive folder (see **Google Drive storage** below).
 
 - **Accounts** with email and password (scrypt hashes; sessions are an HttpOnly cookie for 30 days; 10 wrong passwords lock an email for 15 minutes).
 - **Email confirmation and password reset**, when the server can send email (`RESEND_API_KEY`, or `SMTP_URL` for any SMTP service, and `MAIL_FROM`). New accounts confirm their address with an emailed link before they can sign in; **Forgot password?** emails a one-hour reset link, and resetting signs out every other device. Without email, nothing needs confirming and passwords are reset by whoever runs the server (below).
@@ -56,7 +58,10 @@ Settings are environment variables; `server/.env.example` lists them all. The ma
 | Variable | Default | |
 |---|---|---|
 | `PORT` | `8787` | |
-| `DATABASE_PATH` | `data/linework.db` | Keep it on a persistent disk, and back it up. |
+| `GOOGLE_DRIVE_REFRESH_TOKEN`, `GOOGLE_DRIVE_CLIENT_ID`, `GOOGLE_DRIVE_CLIENT_SECRET` | | Keep data in your own Google Drive (`npm run drive-auth` gets the token). |
+| `GOOGLE_SERVICE_ACCOUNT_KEY` | | Or a service account's JSON key (or a path to it), with `GOOGLE_DRIVE_FOLDER_ID` in a Shared Drive. |
+| `GOOGLE_DRIVE_FOLDER_ID` | | The Drive folder. Empty: the server makes "Linework data" and prints its id. |
+| `DATA_DIR` | | A local folder instead of Drive, for development. |
 | `ANTHROPIC_API_KEY` | | Turns AI on. `ANTHROPIC_MODEL` picks the model. |
 | `AI_DAILY_LIMIT` | `50` | `0` for no limit. |
 | `ALLOW_SIGNUP` | `true` | `false` stops new accounts (Google/GitHub can still sign in to existing ones). |
@@ -67,12 +72,23 @@ Settings are environment variables; `server/.env.example` lists them all. The ma
 | `ALLOW_LOCAL_MODE` | `false` | `true` lets people use the app without an account. |
 | `TRUST_PROXY` | | `1` behind a host's proxy (Render, Railway, Fly.io), so cookies are marked Secure on HTTPS. |
 
-**Hosting.** Any Node host with a persistent disk works. Build command `npm install && npm run build`, start command `npm start`, a disk mounted where `DATABASE_PATH` points, and `TRUST_PROXY=1`. Or use the `Dockerfile`: `docker build -t linework . && docker run -p 8787:8787 -v linework-data:/data linework`. The server needs HTTPS in front of it for the Code view's runtimes and for secure cookies; hosts provide that.
+**Hosting.** Any Node host works, and it needs no disk, since the data is in Google Drive. Build command `npm install && npm run build`, start command `npm start`, the Drive settings, and `TRUST_PROXY=1`. Run **one** instance: it holds the accounts in memory and is the only writer to the Drive folder. Or use the `Dockerfile`: `docker build -t linework . && docker run -p 8787:8787 --env-file server/.env linework`. The server needs HTTPS in front of it for the Code view's runtimes and for secure cookies; hosts provide that.
 
-**Developing against it.** Run the server for the API only, and Vite with a proxy to it:
+### Google Drive storage
+
+The server keeps its data in one Drive folder. It signs in to Drive in one of two ways:
+
+- **Your own Drive (simplest).** In the Google Cloud console, turn on the **Google Drive API**, make an OAuth client of type **Desktop app**, and set the OAuth consent screen to **In production**. Refresh tokens from a project still in *Testing* stop working after 7 days. Then run `GOOGLE_DRIVE_CLIENT_ID=… GOOGLE_DRIVE_CLIENT_SECRET=… npm run drive-auth`, sign in, and put the three values it prints into the server's environment. The token has the `drive.file` permission, so it reaches only the files the server makes, not the rest of the Drive. Leave `GOOGLE_DRIVE_FOLDER_ID` empty the first time: the server makes a **Linework data** folder and prints its id. (A folder you made yourself isn't visible to `drive.file`.)
+- **A service account.** Make one, download its JSON key, and add its email as a *Content manager* of a folder in a **Shared Drive** (service accounts have no storage of their own). Set `GOOGLE_SERVICE_ACCOUNT_KEY` to the key's JSON or its path, and `GOOGLE_DRIVE_FOLDER_ID` to the folder.
+
+What's in the folder: `meta.json` (accounts with scrypt password hashes, sessions by the hash of their token, sign-in links, Google/GitHub identities, folders, share links, AI usage, and the list of files and versions), `file.<account>.<file>.json` for each saved file, and `version.<n>.json` for each version. Anyone who can open the folder can read every account's files, so keep it private. Back it up by copying the folder.
+
+The server loads `meta.json` when it starts and answers a change only after it's written to Drive. Stop the server before `npm run admin`, which edits the same `meta.json`.
+
+**Developing against it.** `npm run dev` does it all in one command, on any OS: the server for the API only (restarting on changes, settings from `server/.env`, data in Google Drive if that's set up there, else in `./data`) and Vite with `/api` sent to it. `npm run dev:app` has no server behind it, so it offers no accounts. Or run the two yourself:
 
 ```bash
-npm run server                                  # API on :8787, restarts on changes
+DATA_DIR=data npm run server                    # API on :8787 with data in ./data, restarts on changes
 LINEWORK_API=http://localhost:8787 npm run dev  # the app, with /api sent to the server
 ```
 
@@ -155,7 +171,9 @@ src/
 server/
   index.js              starts the server from environment variables
   app.js                the API: accounts, files, versions, folders, share links, AI
-  db.js                 SQLite schema and queries
+  store.js              accounts, files and versions, kept in a storage backend
+  drive.js              the backends: Google Drive, a local folder, memory (tests)
+  drive-auth.js         gets a Drive refresh token (npm run drive-auth)
   dbconnect.js          live database connections (PostgreSQL, MySQL, SQL Server, MongoDB)
   accounts.js           sign-up, sign-in, email links, two-step verification, Google/GitHub
   auth.js               passwords, sessions, sign-in limits

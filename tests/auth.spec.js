@@ -4,7 +4,8 @@ import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { openDb } from '../server/db.js';
+import { openStore } from '../server/store.js';
+import { memoryBackend } from '../server/drive.js';
 import { createApp } from '../server/app.js';
 import { codeAt, stepAt } from '../server/totp.js';
 
@@ -51,7 +52,7 @@ test.beforeAll(async () => {
     json({}, 404);
   }).listen(0);
   idpBase = `http://localhost:${idp.address().port}`;
-  store = openDb(join(dir, 'test.db'));
+  store = await openStore(memoryBackend());
   const app = createApp(store, {
     mailer,
     oauth: {

@@ -4,7 +4,8 @@ import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { openDb } from '../server/db.js';
+import { openStore } from '../server/store.js';
+import { memoryBackend } from '../server/drive.js';
 import { createApp } from '../server/app.js';
 
 // The Linework server (server/): its API directly, then the app running against it through Vite's proxy.
@@ -20,7 +21,7 @@ test.beforeAll(async () => {
     res.writeHead(200, { 'content-type': 'text/event-stream' });
     res.end('data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Hello"}}\n\ndata: {"type":"message_stop"}\n\n');
   }).listen(0);
-  store = openDb(join(dir, 'test.db'), { versionEvery: 0, keepVersions: 3 });
+  store = await openStore(memoryBackend(), { versionEvery: 0, keepVersions: 3 });
   const app = createApp(store, { aiKey: 'test-key', aiBase: `http://localhost:${fakeAi.address().port}`, aiDailyLimit: 2 });
   srv = app.listen(0);
   base = `http://localhost:${srv.address().port}`;
@@ -71,10 +72,12 @@ test('accounts: sign up, sign in, wrong password, sign out', async () => {
   expect((await b.call('POST', '/auth/logout', {})).status).toBe(200);
   expect((await b.call('GET', '/auth/me')).status).toBe(401);
 
-  // The database keeps only a hash of the session token, and a scrypt hash of the password.
-  const row = store.db.prepare('SELECT pass FROM users WHERE email = ?').get('ada@example.com');
-  expect(row.pass).toMatch(/^scrypt\$/);
-  expect(store.db.prepare('SELECT count(*) AS n FROM sessions WHERE token = ?').get(a.cookie.split('=')[1]).n).toBe(0);
+  // Storage keeps only a hash of the session token, and a scrypt hash of the password.
+  await store.flush();
+  const meta = store.backend.blobs.get('meta.json');
+  expect(store.s.userByEmail.get('ada@example.com').pass).toMatch(/^scrypt\$/);
+  expect(meta).not.toContain(decodeURIComponent(a.cookie.split('=')[1]));
+  expect(meta).not.toContain('correct horse');
 });
 
 test('changes must come from the same site, as JSON', async () => {

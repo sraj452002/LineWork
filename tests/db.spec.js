@@ -6,7 +6,8 @@ import { join } from 'node:path';
 import initSqlJs from 'sql.js';
 import { handle, isPrivateIp, mongoCommand, parseConn } from '../server/dbconnect.js';
 import { schemaToErd, shortType } from '../src/lib/dbclient.js';
-import { openDb } from '../server/db.js';
+import { openStore } from '../server/store.js';
+import { memoryBackend } from '../server/drive.js';
 import { createApp } from '../server/app.js';
 
 // Live databases (the Database view): the connector's parsing and safety checks, the server's /api/db, a SQLite
@@ -211,7 +212,7 @@ test('live PostgreSQL in the app, through the Linework server', async ({ browser
   test.skip(!LIVE.postgres, 'set LINEWORK_TEST_PG to run');
   test.setTimeout(120_000);
   const dir = mkdtempSync(join(tmpdir(), 'lw-db-'));
-  const store = openDb(join(dir, 'test.db'));
+  const store = await openStore(memoryBackend());
   const srv = createApp(store, { dbAllowPrivate: true, requireVerified: false }).listen(0);
   const port = 5194;
   const vite = spawn('npx', ['vite', '--port', String(port), '--strictPort'], { env: { ...process.env, LINEWORK_API: `http://localhost:${srv.address().port}` }, stdio: 'ignore', detached: true });

@@ -330,6 +330,16 @@ const ERD = {
     return {title, notation, tables, rels, errors, count:tables.size};
   },
   h: t => TH + Math.max(1, t.fields.length)*RH + 8,
+  // Wide enough for the longest row (name, then type and flag), so they never run into each other.
+  w(t){
+    let w = 11 + Math.min(t.label.length, 30)*7.6 + 40;
+    t.fields.forEach(f => {
+      const flag = f.key === 'pk' ? 'pk' : f.key === 'fk' ? 'fk' : f.key === 'uq' ? 'unique' : '';
+      const type = Math.min((f.type || '').length, 24)*6.4 + flag.length*6.6 + (f.type && flag ? 6 : 0);
+      w = Math.max(w, 11 + Math.min(f.name.length, 32)*(f.key === 'pk' ? 7 : 6.7) + 16 + type + 11);
+    });
+    return Math.min(380, Math.max(TW, Math.ceil(w)));
+  },
   layout(m){
     const res = new Map(), ids = [...m.tables.keys()]; if(!ids.length) return res;
     const adj = new Map(ids.map(i => [i, new Set()]));
@@ -342,10 +352,13 @@ const ERD = {
       while(q.length){ const u = q.shift(); order.push(u); [...adj.get(u)].sort((a,b) => deg(b)-deg(a)).forEach(v => { if(!seen.has(v)){ seen.add(v); q.push(v); } }); }
     });
     const cols = order.length <= 3 ? order.length : Math.ceil(Math.sqrt(order.length*1.3));
+    // Each column is as wide as its widest table.
+    const colX = [0];
+    for(let c = 0; c < cols; c++){ let w = TW; for(let i = c; i < order.length; i += cols) w = Math.max(w, ERD.w(m.tables.get(order[i]))); colX.push(colX[c] + w + 120); }
     let y = 0;
     for(let r = 0; r*cols < order.length; r++){
       const row = order.slice(r*cols, r*cols+cols);
-      row.forEach((id,c) => res.set(id, {x:c*(TW+120), y}));
+      row.forEach((id,c) => res.set(id, {x:colX[c], y}));
       y += Math.max(...row.map(id => ERD.h(m.tables.get(id)))) + 70;
     }
     return res;
@@ -368,10 +381,11 @@ const ERD = {
     m.rels.forEach(r => {
       const ta = m.tables.get(r.a), tb = m.tables.get(r.b), pa = ctx.P(r.a), pb = ctx.P(r.b); if(!pa || !pb) return;
       const ay = pa.y + rowY(ta, r.af), by = pb.y + rowY(tb, r.bf);
+      const wa = ERD.w(ta), wb = ERD.w(tb);
       let x1, n1, x2, n2;
-      if(pb.x > pa.x + TW + 20){ x1 = pa.x+TW; n1 = 1; x2 = pb.x; n2 = -1; }
-      else if(pb.x + TW + 20 < pa.x){ x1 = pa.x; n1 = -1; x2 = pb.x+TW; n2 = 1; }
-      else { x1 = pa.x+TW; n1 = 1; x2 = pb.x+TW; n2 = 1; }
+      if(pb.x > pa.x + wa + 20){ x1 = pa.x+wa; n1 = 1; x2 = pb.x; n2 = -1; }
+      else if(pb.x + wb + 20 < pa.x){ x1 = pa.x; n1 = -1; x2 = pb.x+wb; n2 = 1; }
+      else { x1 = pa.x+wa; n1 = 1; x2 = pb.x+wb; n2 = 1; }
       const mx = n1 === n2 ? (n1 > 0 ? Math.max(x1, x2) + 34 : Math.min(x1, x2) - 34) : (x1 + x2) / 2;
       routes.push({r, ay, by, x1, n1, x2, n2, mx, straight: Math.abs(ay - by) < 1 && n1 !== n2});
     });
@@ -387,7 +401,7 @@ const ERD = {
       });
     });
     // Tables a line must not pass through (all but its own two ends), padded a little.
-    const boxes = new Map(ids.map(id => { const p = ctx.P(id), t = m.tables.get(id); return [id, p && {x:p.x - 10, y:p.y - 10, w:TW + 20, h:ERD.h(t) + 20}]; }));
+    const boxes = new Map(ids.map(id => { const p = ctx.P(id), t = m.tables.get(id); return [id, p && {x:p.x - 10, y:p.y - 10, w:ERD.w(t) + 20, h:ERD.h(t) + 20}]; }));
     routes.forEach(o => { o.pts = o.straight ? [[o.x1, o.ay], [o.x2, o.by]] : [[o.x1, o.ay], [o.mx, o.ay], [o.mx, o.by], [o.x2, o.by]]; });
     routes.forEach(o => {
       const obstacles = ids.filter(id => id !== o.r.a && id !== o.r.b).map(id => boxes.get(id)).filter(Boolean);
@@ -403,12 +417,12 @@ const ERD = {
     });
     m.tables.forEach(t => {
       const p = ctx.P(t.id); if(!p) return;
-      const h = ERD.h(t), hu = hue(t.id), isSel = sel === t.id, ic = tableIcon(t.icon);
+      const h = ERD.h(t), TW = ERD.w(t), hu = hue(t.id), isSel = sel === t.id, ic = tableIcon(t.icon);
       s += `<g data-node="${esc(t.id)}" transform="translate(${p.x} ${p.y})"><title>${esc(t.label)}</title>`;
       if(isSel) s += `<rect x="-6" y="-6" width="${TW+12}" height="${h+12}" rx="14" fill="none" stroke="${C.hi}" stroke-width="3"/>`;
       s += `<rect width="${TW}" height="${h}" rx="10" fill="${C.surface}"/><rect width="${TW}" height="${h}" rx="10" fill="${hu}" fill-opacity=".07" stroke="${hu}" stroke-opacity=".9" stroke-width="1.4"/>`;
       s += `<path d="M0 10a10 10 0 0 1 10-10h${TW-20}a10 10 0 0 1 10 10v${TH-10}H0z" fill="${hu}" fill-opacity=".16"/><path d="M0 ${TH}h${TW}" stroke="${hu}" stroke-opacity=".45"/>`;
-      s += `<text x="11" y="22" font-size="12.5" font-weight="700" fill="${C.ink}">${esc(trunc(t.label,22))}</text>`;
+      s += `<text x="11" y="22" font-size="12.5" font-weight="700" fill="${C.ink}">${esc(trunc(t.label,30))}</text>`;
       const k = 16 / ic.vb;
       s += `<g transform="translate(${TW-27} 9) scale(${k})" ${ic.fill ? `fill="${hu}" stroke="none"` : `fill="none" stroke="${hu}" stroke-width="${(1.6/k).toFixed(2)}" stroke-linecap="round" stroke-linejoin="round"`}>${ic.body}</g>`;
       t.fields.forEach((f,i) => {
@@ -416,9 +430,9 @@ const ERD = {
         s += `<g data-field="${esc(f.name)}"><rect x="1" y="${y}" width="${TW-2}" height="${RH}" fill="transparent"/>`;
         if(i) s += `<path d="M10 ${y}h${TW-20}" stroke="${C.line}" stroke-opacity=".6"/>`;
         if(on) s += `<rect x="3" y="${y+1.5}" width="${TW-6}" height="${RH-3}" rx="5" fill="${hu}" fill-opacity=".22" stroke="${C.hi}" stroke-width="1.6"/>`;
-        s += `<text x="11" y="${y+16}" font-size="11.5" font-weight="${f.key==='pk'?600:400}" fill="${C.ink}">${esc(trunc(f.name,19))}</text>`;
+        s += `<text x="11" y="${y+16}" font-size="11.5" font-weight="${f.key==='pk'?600:400}" fill="${C.ink}">${esc(trunc(f.name,32))}</text>`;
         const flag = f.key === 'pk' ? 'pk' : f.key === 'fk' ? 'fk' : f.key === 'uq' ? 'unique' : '';
-        if(f.type || flag) s += `<text x="${TW-11}" y="${y+16}" text-anchor="end" font-size="10.5" fill="${hu}" font-family="JetBrains Mono, ui-monospace, monospace">${esc(trunc(f.type,14))}${flag ? `<tspan dx="${f.type ? 6 : 0}" font-weight="700">${flag}</tspan>` : ''}</text>`;
+        if(f.type || flag) s += `<text x="${TW-11}" y="${y+16}" text-anchor="end" font-size="10.5" fill="${hu}" font-family="JetBrains Mono, ui-monospace, monospace">${esc(trunc(f.type,24))}${flag ? `<tspan dx="${f.type ? 6 : 0}" font-weight="700">${flag}</tspan>` : ''}</text>`;
         s += `</g>`;
       });
       if(!t.fields.length) s += `<text x="11" y="${TH+16}" font-size="11.5" fill="${C.ink2}" font-style="italic">no columns</text>`;
@@ -428,11 +442,11 @@ const ERD = {
   },
   bounds(ctx){
     let b = null;
-    ctx.m.tables.forEach(t => { const p = ctx.P(t.id); if(!p) return; const h = ERD.h(t); if(!b) b = {x1:p.x, y1:p.y, x2:p.x+TW, y2:p.y+h}; else { b.x1 = Math.min(b.x1,p.x); b.y1 = Math.min(b.y1,p.y); b.x2 = Math.max(b.x2,p.x+TW); b.y2 = Math.max(b.y2,p.y+h); } });
+    ctx.m.tables.forEach(t => { const p = ctx.P(t.id); if(!p) return; const h = ERD.h(t), w = ERD.w(t); if(!b) b = {x1:p.x, y1:p.y, x2:p.x+w, y2:p.y+h}; else { b.x1 = Math.min(b.x1,p.x); b.y1 = Math.min(b.y1,p.y); b.x2 = Math.max(b.x2,p.x+w); b.y2 = Math.max(b.y2,p.y+h); } });
     return b && {x:b.x1-46, y:b.y1-14, w:b.x2-b.x1+92, h:b.y2-b.y1+28};
   },
   label(m, id){ const t = m.tables.get(id); return t ? t.label : id; },
-  rect(ctx, id){ const t = ctx.m.tables.get(id), p = t && ctx.P(id); return p ? {x:p.x, y:p.y, w:TW, h:ERD.h(t)} : null; }
+  rect(ctx, id){ const t = ctx.m.tables.get(id), p = t && ctx.P(id); return p ? {x:p.x, y:p.y, w:ERD.w(t), h:ERD.h(t)} : null; }
 };
 
 // A table's colour: its `color:` (a palette name or #hex), else the next palette colour.

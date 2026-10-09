@@ -4,14 +4,17 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "node scripts/dev-server.mjs",
+    "dev:server": "node scripts/dev-server.mjs",
+    "dev:app": "vite",
     "build": "vite build",
     "preview": "vite preview",
     "icons": "node scripts/build-icons.mjs",
     "test": "playwright test",
-    "start": "node --disable-warning=ExperimentalWarning server/index.js",
-    "server": "PUBLIC_DIR= node --disable-warning=ExperimentalWarning --watch server/index.js",
-    "admin": "node --disable-warning=ExperimentalWarning server/admin.js"
+    "start": "node --disable-warning=ExperimentalWarning --env-file-if-exists=server/.env server/index.js",
+    "server": "node --disable-warning=ExperimentalWarning --env-file-if-exists=server/.env --watch server/index.js --api-only",
+    "admin": "node --disable-warning=ExperimentalWarning --env-file-if-exists=server/.env server/admin.js",
+    "drive-auth": "node --env-file-if-exists=server/.env server/drive-auth.js"
   },
   "dependencies": {
     "@babel/parser": "^7.29.9",
