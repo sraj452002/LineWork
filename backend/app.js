@@ -5,7 +5,7 @@ import { accountRoutes } from './accounts.js';
 import { createMailer } from './mail.js';
 import { DbError, handle as dbHandle } from './dbconnect.js';
 
-/* The Linework API: accounts, files with version history, folders, share links, live databases and the
+/* The Workline API: accounts, files with version history, folders, share links, live databases and the
    AI proxy with a daily allowance, all under /api. The frontend (../frontend) is hosted on its own and
    reaches this through a proxy on its own site (Netlify's /api/* rewrite, or Vite's in development),
    so the session cookie stays first-party. GET /api/server tells the app it's talking to this API. */

@@ -1,7 +1,7 @@
 /* .xlsx files in and out, with ExcelJS (loaded only when a file is opened or saved).
    Kept: every sheet, values and formulas, number formats, fonts (bold, italic, underline, strike, size,
    family, colour), fills, alignment and wrapping, borders, column widths, row heights, merged cells and
-   frozen panes. Charts and pictures inside .xlsx files aren't read; Linework's charts aren't written. */
+   frozen panes. Charts and pictures inside .xlsx files aren't read; Workline's charts aren't written. */
 
 import { addr, colName, evaluate, isErr, literal, newSheet, parseAddr, shiftFormula } from './sheet.js';
 
@@ -120,7 +120,7 @@ export async function readXlsx(buffer) {
 export async function writeXlsx(sheets) {
   const ExcelJS = await load();
   const wb = new ExcelJS.Workbook();
-  wb.creator = 'Linework';
+  wb.creator = 'Workline';
   const used = new Set();
   for (const sh of sheets) {
     let name = String(sh.name || 'Sheet').replace(/[\\/?*[\]:]/g, ' ').slice(0, 31) || 'Sheet';

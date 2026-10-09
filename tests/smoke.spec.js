@@ -209,8 +209,8 @@ test('code view: VS Code style editor with explorer, tabs and quick open', async
   await expect(page.locator('.cw-crumbs')).toHaveText(/src›index\.ts/);
   await page.locator('.monaco-editor .view-lines').click();
   await page.keyboard.press('Control+End');
-  await page.keyboard.type('// edited in Linework');
-  await expect(page.locator('.monaco-editor .view-lines')).toContainText('edited in Linework');
+  await page.keyboard.type('// edited in Workline');
+  await expect(page.locator('.monaco-editor .view-lines')).toContainText('edited in Workline');
   await expect(page.locator('.cw-status')).toContainText('TypeScript');
 
   // Ctrl P opens a file by name.
@@ -234,7 +234,7 @@ test('code view: VS Code style editor with explorer, tabs and quick open', async
   await page.locator('.ftable tbody tr').first().click();
   await expect(page.getByRole('tree', { name: 'Files' }).getByRole('treeitem')).toHaveCount(5);
   await page.getByRole('tree', { name: 'Files' }).getByRole('treeitem', { name: /index\.ts/ }).click();
-  await expect(page.locator('.monaco-editor .view-lines')).toContainText('edited in Linework');
+  await expect(page.locator('.monaco-editor .view-lines')).toContainText('edited in Workline');
 });
 
 test('icon picker loads the big icon set', async ({ page }) => {
@@ -262,8 +262,8 @@ test('schema exports SQL and the guide opens', async ({ page }) => {
   const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('menuitem', { name: 'Download SQL (PostgreSQL)' }).click()]);
   expect(dl.suggestedFilename()).toMatch(/\.sql$/);
   await page.getByRole('button', { name: 'More actions' }).click();
-  await page.getByRole('menuitem', { name: /How to use Linework/ }).click();
-  await expect(page.getByRole('heading', { name: 'How to use Linework' })).toBeVisible();
+  await page.getByRole('menuitem', { name: /How to use Workline/ }).click();
+  await expect(page.getByRole('heading', { name: 'How to use Workline' })).toBeVisible();
 });
 
 test('without an account, the sign-in screen offers to keep files in this browser', async ({ page }) => {
@@ -273,5 +273,6 @@ test('without an account, the sign-in screen offers to keep files in this browse
   await expect(page.getByText('Accounts aren’t available here yet')).toBeVisible();
   await page.getByRole('button', { name: 'Continue without an account' }).click();
   await expect(page.getByRole('button', { name: 'Create a Blank File' })).toBeVisible();
-  await expect(page.getByText('Saved in this browser only')).toBeVisible();
+  await page.getByRole('button', { name: /^Account: / }).click();
+  await expect(page.getByText('Files are saved in this browser only')).toBeVisible();
 });

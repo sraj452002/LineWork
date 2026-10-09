@@ -48,7 +48,7 @@ export function checkCode(secret, code, after = 0, now = Date.now()) {
   return null;
 }
 
-export const otpauthUri = (secret, account, issuer = 'Linework') =>
+export const otpauthUri = (secret, account, issuer = 'Workline') =>
   `otpauth://totp/${encodeURIComponent(issuer)}:${encodeURIComponent(account)}?secret=${secret}&issuer=${encodeURIComponent(issuer)}&algorithm=SHA1&digits=6&period=30`;
 
 // Recovery codes, for when the phone is lost: ten, each usable once. Like "k7q2-9xm4".

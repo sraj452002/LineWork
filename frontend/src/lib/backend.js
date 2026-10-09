@@ -1,4 +1,4 @@
-/* The Linework API (../../backend), reached at /api on this site: Netlify proxies it to the backend's
+/* The Workline API (../../backend), reached at /api on this site: Netlify proxies it to the backend's
    host, and Vite does in development. GET /api/server answers when it's there; without it (the
    frontend on its own) the app works without accounts, in this browser. */
 

@@ -1,4 +1,4 @@
-# Linework
+# Workline
 
 A React web app for technical design docs and diagrams: architecture diagrams, flowcharts, sequence diagrams and database schemas, with a markdown design doc beside the canvas and a code editor (Monaco, the editor inside VS Code) for the code that goes with them.
 
@@ -7,7 +7,7 @@ The repository has two separate parts, each with its own `package.json`, that ta
 | | What | Hosted on |
 |---|---|---|
 | [`frontend/`](frontend) | The app: React + Vite. It calls the API at `/api` on its own site. | Netlify |
-| [`backend/`](backend) | The Linework API: Express, with accounts, files, version history, share links, AI and live databases. Data in Google Drive. | Render (or any Node host) |
+| [`backend/`](backend) | The Workline API: Express, with accounts, files, version history, share links, AI and live databases. Data in Google Drive. | Render (or any Node host) |
 
 The frontend's site proxies `/api/*` to the backend (Netlify's proxy rule in production, Vite's proxy in development), so the browser sees one site: the session cookie is first-party and the backend needs no CORS.
 
@@ -97,7 +97,7 @@ Settings are environment variables; [`backend/.env.example`](backend/.env.exampl
 | `DATA_DIR` | | A local folder instead of Drive (relative to `backend/`), for development. |
 | `ANTHROPIC_API_KEY` | | Turns AI on. `ANTHROPIC_MODEL` picks the model. |
 | `AI_DAILY_LIMIT` | `50` | `0` for no limit. |
-| `ALLOW_SIGNUP` | `true` | `false` stops new accounts (Google/GitHub can still sign in to existing ones). |
+| `ALLOW_SIGNUP` | `false` | `true` lets anyone create an account. Off: only the accounts already there and `DEFAULT_USERS` (Google/GitHub can still sign in to existing ones). |
 | `RESEND_API_KEY` or `SMTP_URL`, `MAIL_FROM` | | Email: confirmation and reset links. |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | | Continue with Google. |
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | | Continue with GitHub. |
@@ -149,7 +149,7 @@ The **Sheet** view keeps spreadsheets in the file (`file.sheets`) and works like
 
 ## Visualizing code
 
-The Code view's **Visualize** pane draws Python, JavaScript and TypeScript with Linework's own diagram engines: a flowchart of a function, a class diagram (as a database-schema diagram), and an import graph (as an architecture diagram). Any of them can be added to the file as a canvas tab.
+The Code view's **Visualize** pane draws Python, JavaScript and TypeScript with Workline's own diagram engines: a flowchart of a function, a class diagram (as a database-schema diagram), and an import graph (as an architecture diagram). Any of them can be added to the file as a canvas tab.
 
 - JavaScript and TypeScript are read with [`@babel/parser`](https://babeljs.io/docs/babel-parser); Python is read by Python's own `ast` module in the Pyodide worker. See `frontend/src/lib/codeviz.js`.
 - **Step through** records a run, like Python Tutor. Python uses `sys.settrace` in the worker. JavaScript is converted with [Sucrase](https://github.com/alangpierce/sucrase) (TypeScript and imports, keeping line numbers), instrumented with a call before each statement, and run in a separate web worker, so it can only `require` other files in the project. Recordings stop at 2,000 steps.

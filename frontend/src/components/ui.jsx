@@ -162,15 +162,21 @@ export function ThemeButton({ className = 'btn icon-only', withLabel = false }) 
   );
 }
 
+export function BrandMark({ size = 22 }) {
+  return (
+    <svg className="brand-mark" width={size} height={size} viewBox="0 0 22 22" aria-hidden="true">
+      <rect x="1.5" y="3" width="7" height="6" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+      <rect x="13.5" y="13" width="7" height="6" rx="1.5" fill="var(--hi)" stroke="currentColor" strokeWidth="1.6" />
+      <path className="brand-link" d="M8.5 6h3.5a2 2 0 0 1 2 2v5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+    </svg>
+  );
+}
+
 export function Brand() {
   return (
     <div className="brand">
-      <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true">
-        <rect x="1.5" y="3" width="7" height="6" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
-        <rect x="13.5" y="13" width="7" height="6" rx="1.5" fill="var(--hi)" stroke="currentColor" strokeWidth="1.6" />
-        <path d="M8.5 6h3.5a2 2 0 0 1 2 2v5" fill="none" stroke="currentColor" strokeWidth="1.6" />
-      </svg>
-      Linework
+      <BrandMark />
+      Workline
     </div>
   );
 }

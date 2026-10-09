@@ -11,7 +11,7 @@ import { codeAt, stepAt } from '../backend/totp.js';
 import { ensureUsers } from '../backend/accounts.js';
 import { checkPassword, hashPassword } from '../backend/auth.js';
 
-// Signing in to the Linework server: confirming email, resetting a password, two-step verification,
+// Signing in to the Workline server: confirming email, resetting a password, two-step verification,
 // Google and GitHub. Email goes to an in-memory outbox, and a stand-in plays Google and GitHub.
 
 test.describe.configure({ mode: 'serial' });
@@ -104,7 +104,7 @@ test('new accounts confirm their email before signing in', async () => {
   expect(up.status).toBe(202);
   expect(up.json).toEqual({ pending: 'verify', email: 'ada@example.com' });
   expect(a.cookie).toBe('');
-  expect(outbox.at(-1)).toMatchObject({ to: 'ada@example.com', subject: 'Confirm your email for Linework' });
+  expect(outbox.at(-1)).toMatchObject({ to: 'ada@example.com', subject: 'Confirm your email for Workline' });
   expect(outbox.at(-1).html).toContain('Confirm my email');
 
   const login = await a.call('POST', '/auth/login', { email: 'ada@example.com', password: 'correct horse' });
@@ -142,7 +142,7 @@ test('two-step verification: setup, codes at sign-in, no reuse, recovery codes, 
   const a = client();
   await a.call('POST', '/auth/login', { email: 'ada@example.com', password: 'new password 1' });
   const setup = (await a.call('POST', '/auth/2fa/setup', {})).json;
-  expect(setup.uri).toMatch(/^otpauth:\/\/totp\/Linework:ada%40example\.com\?secret=[A-Z2-7]{32}&issuer=Linework/);
+  expect(setup.uri).toMatch(/^otpauth:\/\/totp\/Workline:ada%40example\.com\?secret=[A-Z2-7]{32}&issuer=Workline/);
   expect(setup.qr).toMatch(/^<svg/);
   expect((await a.call('POST', '/auth/2fa/enable', { code: '000000' })).json.error).toBe('bad_code');
   const step = stepAt();
@@ -266,11 +266,12 @@ test('the app: sign-in required, confirm email, two-step verification, Google', 
   const link = linkIn('kj@example.com', 'verify');
   expect(link.startsWith(appUrl + '/#verify=')).toBe(true);
   await page.goto(link);
-  await expect(page.getByRole('heading', { name: /, Katherine$/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Account: Katherine/ })).toBeVisible();
   await expect(page.locator('.toast')).toContainText('Your email is confirmed');
   expect(page.url()).toBe(appUrl + '/');
 
   // Turn on two-step verification.
+  await page.getByRole('button', { name: /^Account: / }).click();
   await page.getByRole('button', { name: 'Account & security' }).click();
   const dlg = page.getByRole('dialog', { name: 'Account & security' });
   await dlg.getByRole('button', { name: 'Set up' }).click();
@@ -297,14 +298,15 @@ test('the app: sign-in required, confirm email, two-step verification, Google', 
   await expect(p2.getByRole('alert')).toContainText('That code isn’t right');
   await p2.getByLabel('Code').fill(codes[0]);
   await p2.getByRole('button', { name: 'Verify' }).click();
-  await expect(p2.getByRole('heading', { name: /, Katherine$/ })).toBeVisible();
+  await expect(p2.getByRole('button', { name: /^Account: Katherine/ })).toBeVisible();
 
   // Continue with Google: through the provider and back, signed in.
   nextPerson = { id: 'g-9', email: 'dorothy@example.com', verified: true, name: 'Dorothy Vaughan' };
   const p3 = await fresh();
   await p3.goto('/');
   await p3.getByRole('button', { name: 'Continue with Google' }).click();
-  await expect(p3.getByRole('heading', { name: /, Dorothy$/ })).toBeVisible();
+  await expect(p3.getByRole('button', { name: /^Account: Dorothy/ })).toBeVisible();
+  await p3.getByRole('button', { name: /^Account: / }).click();
   await p3.getByRole('button', { name: 'Account & security' }).click();
   await expect(p3.getByRole('dialog').getByRole('heading', { name: 'Set a password' })).toBeVisible();
   await expect(p3.getByRole('dialog').getByRole('listitem').filter({ hasText: 'Google' })).toContainText('Connected · dorothy@example.com');

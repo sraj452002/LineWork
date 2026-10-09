@@ -6,7 +6,7 @@ import { createApp } from './app.js';
 import { ensureUsers } from './accounts.js';
 import { createMailer } from './mail.js';
 
-// Start the Linework API. Settings come from environment variables (see .env.example).
+// Start the Workline API. Settings come from environment variables (see .env.example).
 const root = resolve(fileURLToPath(import.meta.url), '..');
 const env = process.env;
 const num = (v, d) => (v === undefined || v === '' ? d : Number(v));
@@ -23,7 +23,8 @@ console.log(`Data is kept in ${backend.describe()}.`);
 // Accounts to have from the start (DEFAULT_USERS), made once.
 for (const email of await ensureUsers(store, env.DEFAULT_USERS)) console.log(`Made the account ${email} (DEFAULT_USERS).`);
 const app = createApp(store, {
-  allowSignup: env.ALLOW_SIGNUP !== 'false',
+  // New accounts only with ALLOW_SIGNUP=true; otherwise just the ones there (and DEFAULT_USERS).
+  allowSignup: env.ALLOW_SIGNUP === 'true',
   aiKey: env.ANTHROPIC_API_KEY || '',
   aiModel: env.ANTHROPIC_MODEL || 'claude-sonnet-5-5',
   aiBase: env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com',
@@ -44,7 +45,7 @@ const app = createApp(store, {
 const port = num(env.PORT, 8787), host = env.HOST || '0.0.0.0';
 const server = app.listen(port, host, err => {
   if (err) { console.error(err.code === 'EADDRINUSE' ? `Port ${port} is already in use: stop whatever is on it, or set PORT.` : err.message); process.exit(1); }
-  console.log(`Linework API on http://${host === '0.0.0.0' ? 'localhost' : host}:${port}`);
+  console.log(`Workline API on http://${host === '0.0.0.0' ? 'localhost' : host}:${port}`);
 });
 // Finish writing to storage before exiting.
 const stop = () => server.close(() => store.close().then(() => process.exit(0), e => { console.error('Last write to storage failed:', e.message); process.exit(1); }));

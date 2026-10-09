@@ -3,7 +3,7 @@
    - Python (with pip for pure-Python and Pyodide-built packages) runs in Pyodide, in a worker.
    Both need a cross-origin isolated page (COOP/COEP headers, set in ../../netlify.toml and ../../vite.config.js).
 
-   Each Linework file gets its own folder in each runtime, so projects don't mix. The workspace's
+   Each Workline file gets its own folder in each runtime, so projects don't mix. The workspace's
    files are copied in before anything runs and kept in step as they're edited; files a program or
    npm creates or changes come back into the workspace (except node_modules and other build output). */
 
@@ -36,7 +36,7 @@ export function bootNode() {
 }
 
 /* The extra terminal commands (grep, find, git, curl, python, code…, see shell/lw.cjs): one script
-   plus a launcher per command in .lw/bin, put first on the PATH of everything Linework starts. */
+   plus a launcher per command in .lw/bin, put first on the PATH of everything Workline starts. */
 export const TOOL_NAMES = [...LW_TOOLS.matchAll(/^def\('([^']+)'/gm)].flatMap(m => m[1].split(' '));
 let envP = null;
 export function nodeEnv() {
@@ -117,7 +117,7 @@ export class NodeProject {
         await wc.fs.writeFile(this.dir + '/' + p, t);
         this.sent.set(p, t);
       }
-    }).catch(e => { console.warn('Linework: syncing files to Node failed', e); });
+    }).catch(e => { console.warn('Workline: syncing files to Node failed', e); });
     return this.queue;
   }
   // Report what programs create, change or delete: onBack({path, text}) for a file (text null when

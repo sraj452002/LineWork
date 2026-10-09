@@ -8,7 +8,7 @@ import { dg } from '../lib/engines.js';
 
 const Visualizer = lazy(() => import('./Visualizer.jsx'));
 
-/* A small VS Code inside each Linework file: an explorer, tabs and the Monaco editor.
+/* A small VS Code inside each Workline file: an explorer, tabs and the Monaco editor.
    Code lives on the file as  code: {files: [{id, path, text, lang?}], folders: [path], open: [id], active: id}
    so it saves and syncs with the doc and diagrams. Folders are implied by file paths ("src/app.js");
    empty folders are kept in `folders`. */

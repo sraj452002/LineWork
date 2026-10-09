@@ -11,7 +11,7 @@ export function createMailer({ resendKey = '', smtpUrl = '', from = '' } = {}) {
         const r = await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: { authorization: `Bearer ${resendKey}`, 'content-type': 'application/json' },
-          body: JSON.stringify({ from: from || 'Linework <onboarding@resend.dev>', to: [to], subject, text, html }),
+          body: JSON.stringify({ from: from || 'Workline <onboarding@resend.dev>', to: [to], subject, text, html }),
         });
         if (!r.ok) throw new Error(`Resend ${r.status}: ${await r.text().catch(() => '')}`);
       },
@@ -23,7 +23,7 @@ export function createMailer({ resendKey = '', smtpUrl = '', from = '' } = {}) {
       configured: true,
       async send({ to, subject, text, html }) {
         if (!transport) transport = (await import('nodemailer')).default.createTransport(smtpUrl);
-        await transport.sendMail({ from: from || 'Linework <no-reply@localhost>', to, subject, text, html });
+        await transport.sendMail({ from: from || 'Workline <no-reply@localhost>', to, subject, text, html });
       },
     };
   }

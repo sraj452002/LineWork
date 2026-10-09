@@ -170,7 +170,7 @@ export default function DatabaseView({ file, update, visible, onDiagram }) {
             </button>
           ))}
         </div>
-        <p className="dbv-fine">Connections are saved in this browser only, never in files. Databases on the internet (Supabase, Neon, RDS, Atlas, PlanetScale, Azure…) work from here; for one on your own network, run the Linework server there (see the guide).</p>
+        <p className="dbv-fine">Connections are saved in this browser only, never in files. Databases on the internet (Supabase, Neon, RDS, Atlas, PlanetScale, Azure…) work from here; for one on your own network, run the Workline server there (see the guide).</p>
       </div>
     );
   } else if (cs.status !== 'ok') {

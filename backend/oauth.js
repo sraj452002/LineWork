@@ -59,7 +59,7 @@ export async function finish(p, code, verifier, redirectUri) {
     body: new URLSearchParams({ client_id: p.clientId, client_secret: p.clientSecret, code, code_verifier: verifier, redirect_uri: redirectUri, grant_type: 'authorization_code' }),
   });
   if (!tok.access_token) throw new Error('no access token');
-  const auth = { authorization: `Bearer ${tok.access_token}`, accept: 'application/json', 'user-agent': 'Linework' };
+  const auth = { authorization: `Bearer ${tok.access_token}`, accept: 'application/json', 'user-agent': 'Workline' };
   const u = await getJson(p.userUrl, { headers: auth });
   if (p.id === 'github') {
     // The profile's email can be hidden or unverified; the emails list says which is primary and verified.

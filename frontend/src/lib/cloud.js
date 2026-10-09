@@ -1,4 +1,4 @@
-/* Talking to /api/files on the Linework API (../../backend). The session cookie identifies the user. */
+/* Talking to /api/files on the Workline API (../../backend). The session cookie identifies the user. */
 
 const req = async (path, opts = {}) => {
   const res = await fetch('/api/files' + path, { ...opts, headers: { 'content-type': 'application/json', ...(opts.headers || {}) } });

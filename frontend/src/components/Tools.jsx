@@ -6,7 +6,7 @@ import { readSql } from '../lib/sql.js';
 import { rid } from '../lib/utils.js';
 import { useUI } from './ui.jsx';
 
-/* The Tools page: every tool in Linework in one place. Each one makes a new file that opens in that tool. */
+/* The Tools page: every tool in Workline in one place. Each one makes a new file that opens in that tool. */
 
 const ICON = {
   arch: 'M4 5h6v5H4zM14 5h6v5h-6zM9 15h6v5H9zM7 10v2h10v-2M12 12v3',
@@ -72,7 +72,7 @@ export default function Tools({ q = '', onCreate, onGenerate, busy }) {
     toast(`Drew ${r.tables} table${r.tables === 1 ? '' : 's'} and ${r.rels} relationship${r.rels === 1 ? '' : 's'}`);
   };
   const importSQL = async () => {
-    const sql = ((await ask({ title: 'Database schema from SQL', text: 'Paste CREATE TABLE statements, a migration or a database dump (PostgreSQL, MySQL, SQLite, SQL Server). Linework draws the tables and the relationships between them.', multiline: true, ok: 'Draw it' })) || '').trim();
+    const sql = ((await ask({ title: 'Database schema from SQL', text: 'Paste CREATE TABLE statements, a migration or a database dump (PostgreSQL, MySQL, SQLite, SQL Server). Workline draws the tables and the relationships between them.', multiline: true, ok: 'Draw it' })) || '').trim();
     if (sql) sqlToFile(sql);
   };
   const openSQL = async f => {

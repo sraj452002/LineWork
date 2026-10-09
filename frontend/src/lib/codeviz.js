@@ -4,7 +4,7 @@
      {imports: [{spec} | {mod, level}], classes: [{name, bases, fields, methods, line}],
       functions: [{name, line, endLine, params, flow}]}
    where flow is a small control-flow form (stmt, if, loop, return, raise, break, continue, try)
-   that becomes a flowchart. Diagrams are written in Linework's own diagram languages, so they draw
+   that becomes a flowchart. Diagrams are written in Workline's own diagram languages, so they draw
    with the canvas engines and can be opened on the canvas.
    Step-through: Python is traced in the worker (sys.settrace); JavaScript is instrumented here and
    run in a throwaway worker. Both give [{file, line, stack: [{fn, vars}], out}] plus the output. */
@@ -123,7 +123,7 @@ export function analyzeJS(path, text) {
 }
 
 /* ---------------- diagrams ---------------- */
-// A function's flow as a flowchart (Linework's flowchart language).
+// A function's flow as a flowchart (Workline's flowchart language).
 export function flowchartCode(fn) {
   const nodes = [], edges = [], loops = [];
   let n = 0, capped = false;

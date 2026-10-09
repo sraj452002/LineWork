@@ -4,7 +4,7 @@ import { linkEmail } from './mail.js';
 import * as oauth from './oauth.js';
 import { checkCode, newRecoveryCodes, newSecret, normRecovery, otpauthUri } from './totp.js';
 
-/* Accounts on the Linework server:
+/* Accounts on the Workline server:
    - email and password, with the address confirmed by an emailed link (when email is set up);
    - forgotten passwords reset by an emailed link;
    - "Continue with Google / GitHub", linked to an existing account with the same verified email;
@@ -79,8 +79,8 @@ export function accountRoutes(api, { store, mailer, allowSignup, requireVerified
     const t = newSecretToken(user, kind, kind === 'verify' ? 48 * HOUR : HOUR);
     const url = `${base(req)}/#${kind}=${t}`;
     const m = kind === 'verify'
-      ? linkEmail({ title: 'Confirm your email for Linework', intro: `Hi${user.name ? ' ' + user.name.split(' ')[0] : ''}, open this link to confirm ${user.email} and start using Linework.`, button: 'Confirm my email', url, outro: 'The link works for 48 hours. If you didn’t create an account, ignore this email.' })
-      : linkEmail({ title: 'Reset your Linework password', intro: `Someone (hopefully you) asked to reset the password for ${user.email}.`, button: 'Choose a new password', url, outro: 'The link works for one hour, once. If you didn’t ask, ignore this email: your password stays the same.' });
+      ? linkEmail({ title: 'Confirm your email for Workline', intro: `Hi${user.name ? ' ' + user.name.split(' ')[0] : ''}, open this link to confirm ${user.email} and start using Workline.`, button: 'Confirm my email', url, outro: 'The link works for 48 hours. If you didn’t create an account, ignore this email.' })
+      : linkEmail({ title: 'Reset your Workline password', intro: `Someone (hopefully you) asked to reset the password for ${user.email}.`, button: 'Choose a new password', url, outro: 'The link works for one hour, once. If you didn’t ask, ignore this email: your password stays the same.' });
     try { await mailer.send({ to: user.email, ...m }); }
     catch (e) { console.error('Email failed:', e.message); }
   };

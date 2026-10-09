@@ -29,7 +29,7 @@ const fs = {
 };
 const WORKDIR = '/home/linework';
 // A pretend jsh: understands the commands the tests type, and sends the page the same requests
-// the real Linework commands (lib/shell/lw.cjs) do.
+// the real Workline commands (lib/shell/lw.cjs) do.
 function fakeShell(opts) {
   let ctl, buf = '', cwd = WORKDIR + '/' + opts.cwd, n = 0;
   const say = s => ctl.enqueue(s);
@@ -190,7 +190,7 @@ test('the Terminal links to the editor and Python: python, pip, code, and Open i
   await page.getByRole('menuitem', { name: /Open a terminal/ }).click();
   const term = page.locator('.rp-term[aria-label="Terminal"]');
   await expect(term.locator('.xterm-rows')).toContainText('$');
-  // Linework's commands are installed and first on the shell's PATH.
+  // Workline's commands are installed and first on the shell's PATH.
   const env = await page.evaluate(() => __fakeWc.env);
   expect(env.PATH).toBe('/home/linework/.lw/bin:/usr/local/bin:/bin');
   const tools = await page.evaluate(() => [...__fakeWc.files.keys()].filter(k => k.startsWith('.lw/')));

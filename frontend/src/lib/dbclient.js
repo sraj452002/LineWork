@@ -58,11 +58,11 @@ export async function dbRequest(conn, op, extra = {}) {
   const payload = { type: c.type, readOnly: !!c.readOnly, ssl: c.ssl, ...(c.url ? { url: c.url } : { host: c.host, port: c.port, database: c.database, user: c.user, password: c.password }) };
   let r;
   try { r = await fetch('/api/db', { method: 'POST', headers: { 'content-type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ op, conn: payload, ...extra }) }); }
-  catch (e) { throw new Error('Couldn’t reach the Linework server. Check your internet connection.'); }
+  catch (e) { throw new Error('Couldn’t reach the Workline server. Check your internet connection.'); }
   let body = null;
   try { body = await r.json(); } catch (e) {}
-  if (r.status === 401) throw new Error('Sign in to connect to databases. Connections go through your Linework account.');
-  if (r.status === 404 || (!body && r.status >= 400)) throw new Error('This copy of Linework has no database connector. It needs the Linework API (backend/, see the README).');
+  if (r.status === 401) throw new Error('Sign in to connect to databases. Connections go through your Workline account.');
+  if (r.status === 404 || (!body && r.status >= 400)) throw new Error('This copy of Workline has no database connector. It needs the Workline API (backend/, see the README).');
   if (!r.ok) throw new Error((body && body.message) || 'The database request failed.');
   return body;
 }

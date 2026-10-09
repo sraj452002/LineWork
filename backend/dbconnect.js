@@ -88,7 +88,7 @@ async function checkHost(host, allowPrivate) {
   try { addrs = isIP(host) ? [{ address: host }] : await lookup(host, { all: true }); }
   catch (e) { throw new DbError('host_not_found', `The host “${host}” wasn’t found. Check the spelling.`); }
   if (!allowPrivate && (/^localhost$/i.test(host) || addrs.some(a => isPrivateIp(a.address))))
-    throw new DbError('private_host', `“${host}” is a private or local address. This server only connects to databases on the internet; to reach one on your own network, run the Linework server there with DB_ALLOW_PRIVATE=1.`, 403);
+    throw new DbError('private_host', `“${host}” is a private or local address. This server only connects to databases on the internet; to reach one on your own network, run the Workline server there with DB_ALLOW_PRIVATE=1.`, 403);
   return addrs[0].address;
 }
 
@@ -133,7 +133,7 @@ async function openPostgres(c, ip, timeout) {
   const client = new pg.Client({
     host: ip, port: c.port, database: c.database || undefined, user: c.user || undefined, password: c.password || undefined,
     ssl: c.ssl === 'off' ? false : { servername: isIP(c.host) ? undefined : c.host, rejectUnauthorized: c.ssl === 'verify' },
-    connectionTimeoutMillis: Math.min(10_000, timeout), statement_timeout: timeout, query_timeout: timeout + 2000, application_name: 'Linework', types,
+    connectionTimeoutMillis: Math.min(10_000, timeout), statement_timeout: timeout, query_timeout: timeout + 2000, application_name: 'Workline', types,
   });
   await client.connect();
   if (c.readOnly) await client.query('SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY');
@@ -182,7 +182,7 @@ async function openMssql(c, ip, timeout) {
   const sql = (await import('mssql')).default;
   const pool = new sql.ConnectionPool({
     server: c.host, port: c.port, database: c.database || undefined, user: c.user || undefined, password: c.password || undefined,
-    options: { encrypt: c.ssl !== 'off', trustServerCertificate: c.ssl !== 'verify', appName: 'Linework' },
+    options: { encrypt: c.ssl !== 'off', trustServerCertificate: c.ssl !== 'verify', appName: 'Workline' },
     connectionTimeout: Math.min(10_000, timeout), requestTimeout: timeout, pool: { max: 1, min: 0 },
   });
   await pool.connect();
@@ -210,7 +210,7 @@ async function openMssql(c, ip, timeout) {
 async function openMongo(c, timeout) {
   const { MongoClient, BSON } = await import('mongodb');
   const { EJSON } = BSON;
-  const client = new MongoClient(c.url, { serverSelectionTimeoutMS: Math.min(10_000, timeout), connectTimeoutMS: Math.min(10_000, timeout), socketTimeoutMS: timeout + 5000, appName: 'Linework' });
+  const client = new MongoClient(c.url, { serverSelectionTimeoutMS: Math.min(10_000, timeout), connectTimeoutMS: Math.min(10_000, timeout), socketTimeoutMS: timeout + 5000, appName: 'Workline' });
   await client.connect();
   const db = client.db(c.database || undefined);
   return { client, db, EJSON, timeout, close: () => client.close().catch(() => {}) };

@@ -3,7 +3,9 @@ import { TEMPLATES, TYPES, dg, newFile, thumb } from '../lib/engines.js';
 import { LANG, NO_AI, copyFor, sampleP } from '../lib/ai.js';
 import { ago, rid } from '../lib/utils.js';
 import { setSheets } from '../lib/sheet.js';
-import { Brand, ThemeButton, useUI } from './ui.jsx';
+import { THEMES, setTheme, themePref } from '../lib/theme.js';
+import { BrandMark, useUI } from './ui.jsx';
+import { StorageMeter } from './ServerDialogs.jsx';
 import Tools from './Tools.jsx';
 
 const IC = {
@@ -23,10 +25,54 @@ const IC = {
   shield: 'M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6zM9 12l2 2 4-4',
   caret: 'M7 10l5 5 5-5',
   sort: 'M8 5v14M5 16l3 3 3-3M14 7h6M14 12h4M14 17h2',
+  help: 'M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17h.01',
 };
 const Ico = ({ d, size = 18 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={d} /></svg>
 );
+
+// The avatar at the top right, and what's under it: who's signed in, whether files are saved, the
+// storage used, the theme, account settings and signing out.
+function AccountMenu({ account, who, initial, saveState, storage, onAccount, onSignOut }) {
+  const [open, setOpen] = useState(false);
+  const [pref, setPref] = useState(themePref);
+  const pop = useRef(null), btn = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    pop.current?.querySelector('button')?.focus();
+    const down = e => { if (!pop.current?.contains(e.target) && !btn.current?.contains(e.target)) setOpen(false); };
+    const key = e => { if (e.key === 'Escape') { setOpen(false); btn.current?.focus(); } };
+    document.addEventListener('pointerdown', down);
+    document.addEventListener('keydown', key);
+    return () => { document.removeEventListener('pointerdown', down); document.removeEventListener('keydown', key); };
+  }, [open]);
+  const status = !account ? 'Files are saved in this browser only'
+    : saveState === 'Offline' ? 'Offline, will retry' : saveState === 'Storage full' ? 'Storage full: changes aren’t saved'
+    : saveState === 'Syncing' || saveState === 'Saving' ? 'Saving…' : 'All changes saved';
+  const go = fn => () => { setOpen(false); fn(); };
+  return (
+    <div className="acct-wrap">
+      <button ref={btn} className="avatar avatar-btn" aria-haspopup="dialog" aria-expanded={open} aria-label={`Account: ${who}`} title={who} onClick={() => setOpen(o => !o)}>{initial}</button>
+      {open && (
+        <div ref={pop} className="acct-pop" role="dialog" aria-label="Account">
+          <div className="acct-head">
+            <span className="avatar">{initial}</span>
+            <span><b>{who}</b><small>{account ? account.email : 'No account'}</small></span>
+          </div>
+          <p className={'acct-status' + (saveState === 'Offline' || saveState === 'Storage full' ? ' bad' : '')}>{status}</p>
+          {storage && storage.limit > 0 && <StorageMeter storage={storage} />}
+          <div className="acct-theme seg" role="group" aria-label="Theme">
+            {THEMES.map(([k, n]) => <button key={k} aria-pressed={pref === k} onClick={() => { setTheme(k); setPref(k); }}>{n}</button>)}
+          </div>
+          <div className="acct-items">
+            {onAccount && <button onClick={go(onAccount)}><Ico d={IC.shield} size={17} />Account &amp; security</button>}
+            <button onClick={go(onSignOut)}><Ico d={IC.logout} size={17} />{account ? 'Sign out' : 'Sign in or create an account'}</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 const COLS = [
   { key: 'title', label: 'Name' },
@@ -36,7 +82,6 @@ const COLS = [
   { key: 'diagrams', label: 'Diagrams', cls: 'c-num' },
 ];
 const WEEK = 7 * 864e5;
-const greeting = () => { const h = new Date().getHours(); return h < 5 ? 'Working late' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'; };
 // A small preview of a file's first diagram, cached until the file or the theme changes.
 const thumbs = new Map();
 function fileThumb(f, theme) {
@@ -51,7 +96,7 @@ const typing = e => {
   return t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName);
 };
 
-export default function Home({ files, folders, setFolders, account, saveState, onOpen, onCreate, onUpdate, onRename, onDuplicate, onDelete, onSignOut, onGuide, serverProps = () => ({}), onAccount }) {
+export default function Home({ files, folders, setFolders, account, saveState, storage, onOpen, onCreate, onUpdate, onRename, onDuplicate, onDelete, onSignOut, onGuide, serverProps = () => ({}), onAccount }) {
   const { popup, ask, toast, theme } = useUI();
   const [q, setQ] = useState('');
   const [view, setView] = useState('all'); // 'all' | 'archive' | 'tools' | folder id
@@ -82,7 +127,7 @@ export default function Home({ files, folders, setFolders, account, saveState, o
     if (!text) return;
     ctl.current = new AbortController();
     setBusy(true);
-    const p = `You are the AI in Linework, a tool for technical design docs and diagrams. Create a new file for this request.
+    const p = `You are the AI in Workline, a tool for technical design docs and diagrams. Create a new file for this request.
 
 ${LANG.graph}
 ${LANG.architecture}
@@ -202,6 +247,9 @@ Reply with ONLY a JSON object: {"title": "...", "doc": "...", "diagrams": [...]}
   const count = k => files.filter(f => !f.archived && f.folder === k).length;
   const who = account ? (account.name || account.userMetadata?.full_name || account.email || 'You') : 'This browser';
   const initial = (who[0] || '?').toUpperCase();
+  // "Shubham's workspace": the account's first name, or its email's.
+  const first = account ? String(account.name || account.userMetadata?.full_name || (account.email || '').split('@')[0]).split(/[\s._-]/)[0] : '';
+  const workspace = first ? `${first[0].toUpperCase()}${first.slice(1)}’s workspace` : 'Workline';
   const doc = TEMPLATES.find(t => t.key === 'doc');
 
   const empty = files.length === 0
@@ -214,7 +262,9 @@ Reply with ONLY a JSON object: {"title": "...", "doc": "...", "diagrams": [...]}
   return (
     <section className="screen dash">
       <aside className="side">
-        <div className="side-top"><Brand /></div>
+        <div className="side-top ws" title={account ? account.email : 'Files are saved in this browser only'}>
+          <BrandMark size={24} /><b>{workspace}</b>
+        </div>
         <nav className="side-nav" aria-label="Files">
           <button className="nav" aria-current={view === 'all' ? 'page' : undefined} onClick={() => setView('all')}>
             <Ico d={IC.grid} /><span>All Files</span><kbd>A</kbd>
@@ -240,19 +290,7 @@ Reply with ONLY a JSON object: {"title": "...", "doc": "...", "diagrams": [...]}
             </div>
           )) : <p className="side-empty">Group files into folders.</p>}
         </nav>
-        <div className="side-sec"><h2>Help</h2></div>
-        <nav className="side-nav" aria-label="Guides">
-          <button className="nav" onClick={() => onGuide('app')}><Ico d={IC.book} /><span>How to use Linework</span><kbd>G</kbd></button>
-          <button className="nav" onClick={() => onGuide('erd')}><Ico d={IC.table} /><span>Database schema guide</span></button>
-        </nav>
         <div className="side-foot">
-          <div className="side-acct" title={account ? account.email : 'Files are saved in this browser only'}>
-            <span className="avatar sm">{initial}</span>
-            <span><b>{account ? who : 'No account'}</b><small>{account ? (saveState === 'Offline' ? 'Offline, will retry' : saveState === 'Syncing' ? 'Syncing…' : 'Saved to your account') : 'Saved in this browser only'}</small></span>
-          </div>
-          {onAccount && <button className="nav" onClick={onAccount}><Ico d={IC.shield} /><span>Account &amp; security</span></button>}
-          <ThemeButton className="nav theme-nav" withLabel />
-          <button className="nav" onClick={onSignOut}><Ico d={IC.logout} /><span>{account ? 'Sign out' : 'Sign in or create an account'}</span></button>
           <button ref={newRef} className="new-btn" aria-haspopup="menu" onClick={e => newMenu(e.currentTarget)}>
             New File <small>Alt N</small><Ico d={IC.caret} size={16} />
           </button>
@@ -273,31 +311,26 @@ Reply with ONLY a JSON object: {"title": "...", "doc": "...", "diagrams": [...]}
                 onChange={e => setQ(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') { setQ(''); e.currentTarget.blur(); } }} />
               <kbd>/</kbd>
             </label>
-            <div className="avatar" title={who}>{initial}</div>
+            <AccountMenu account={account} who={who} initial={initial} saveState={saveState} storage={storage} onAccount={onAccount} onSignOut={onSignOut} />
           </header>
-
-          <div className="hello">
-            <h1>{greeting()}{account && (account.name || account.userMetadata?.full_name) ? ', ' + String(account.name || account.userMetadata.full_name).split(' ')[0] : ''}</h1>
-            <p>{view === 'tools' ? 'Every tool in Linework. Pick one to start a new file with it.' : files.length ? 'Pick up where you left off, or start something new.' : 'Start a design: a diagram, a doc, and the code that goes with them.'}</p>
-          </div>
 
           {view === 'tools' ? <Tools q={q} busy={busy} onCreate={onCreate} onGenerate={generate} /> : (<>
           <div className="actions">
-            <button className="action a-blue" aria-label="Create a Blank File" onClick={() => createFrom(TEMPLATES[0])}>
-              <i className="a-ico"><Ico d={IC.plus} size={24} /></i><span>Create a Blank File</span><small>An empty doc and canvas</small>
+            <button className="action a-blue" aria-label="Create a Blank File" title="An empty doc and canvas" onClick={() => createFrom(TEMPLATES[0])}>
+              <i className="a-ico"><Ico d={IC.plus} size={28} /></i><span>Create a Blank File</span>
             </button>
-            <button className={'action a-purple' + (busy ? ' working' : '')} aria-label={busy ? 'Generating, click to stop' : 'Generate an AI Diagram'} onClick={generate}>
-              <i className="a-ico"><Ico d={IC.sparkle} size={24} /></i><span className={busy ? 'busy' : undefined}>{busy ? 'Generating… click to stop' : 'Generate an AI Diagram'}</span><small>Describe a system, AI draws it</small>
+            <button className={'action a-purple' + (busy ? ' working' : '')} aria-label={busy ? 'Generating, click to stop' : 'Generate an AI Diagram'} title="Describe a system, AI draws it" onClick={generate}>
+              <i className="a-ico"><Ico d={IC.sparkle} size={28} /></i><span className={busy ? 'busy' : undefined}>{busy ? 'Generating… click to stop' : 'Generate an AI Diagram'}</span>
             </button>
-            <button className="action a-green" aria-label="Write a Design Doc" onClick={() => doc && createFrom(doc)}>
-              <i className="a-ico"><Ico d={IC.doc} size={24} /></i><span>Write a Design Doc</span><small>Sections ready to fill in</small>
+            <button className="action a-green" aria-label="Write a Design Doc" title="A doc with sections ready to fill in" onClick={() => doc && createFrom(doc)}>
+              <i className="a-ico"><Ico d={IC.doc} size={28} /></i><span>Write a Design Doc</span>
             </button>
-            <button className="action a-orange" aria-label="Start from a Template" aria-haspopup="menu" onClick={e => popup(e.currentTarget, TEMPLATES.filter(t => t.key !== 'blank' && t.key !== 'doc').map(t => ({ label: t.name, note: t.note, act: () => createFrom(t) })))}>
-              <i className="a-ico"><Ico d={IC.layers} size={24} /></i><span>Start from a Template</span><small>Architecture, flows, schemas</small>
+            <button className="action a-orange" aria-label="Start from a Template" title="Architecture, flows, schemas" aria-haspopup="menu" onClick={e => popup(e.currentTarget, TEMPLATES.filter(t => t.key !== 'blank' && t.key !== 'doc').map(t => ({ label: t.name, note: t.note, act: () => createFrom(t) })))}>
+              <i className="a-ico"><Ico d={IC.layers} size={28} /></i><span>Start from a Template</span>
             </button>
           </div>
 
-          <h2 className="list-title">{heading}</h2>
+          {view !== 'all' && <h2 className="list-title">{heading}</h2>}
           {!list.length ? <div className="nofiles">{empty}</div> : (
             <table className="ftable">
               <thead>
@@ -315,8 +348,8 @@ Reply with ONLY a JSON object: {"title": "...", "doc": "...", "diagrams": [...]}
                 </tr>
               </thead>
               <tbody>
-                {list.map(f => (
-                  <tr key={f.id} tabIndex={0} onClick={() => onOpen(f.id)}
+                {list.map((f, i) => (
+                  <tr key={f.id} tabIndex={0} style={{ '--i': Math.min(i, 12) }} onClick={() => onOpen(f.id)}
                     onKeyDown={e => { if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) { e.preventDefault(); onOpen(f.id); } }}>
                     <td className="c-name"><span className="f-cell">
                       <span className="f-thumb" aria-hidden="true" dangerouslySetInnerHTML={{ __html: fileThumb(f, theme) || '' }} />
@@ -338,6 +371,10 @@ Reply with ONLY a JSON object: {"title": "...", "doc": "...", "diagrams": [...]}
           )}
           </>)}
         </div>
+        <button className="help-fab" aria-label="Help" aria-haspopup="menu" title="Help" onClick={e => popup(e.currentTarget, [
+          { label: 'How to use Workline', kbd: 'G', act: () => onGuide('app') },
+          { label: 'Database schema guide', act: () => onGuide('erd') },
+        ])}><Ico d={IC.help} size={20} /></button>
       </main>
     </section>
   );

@@ -5,7 +5,7 @@ import { imagesOnServer } from '../lib/images.js';
 import { useUI } from './ui.jsx';
 import Editor from './Editor.jsx';
 
-/* What the Linework API (backend/) adds: share links, version history, the page a share link opens,
+/* What the Workline API (backend/) adds: share links, version history, the page a share link opens,
    and account settings (name, password, two-step verification, Google/GitHub). */
 
 /* ---- storage: how much of the account's allowance its files, versions and pictures use ---- */
@@ -184,7 +184,7 @@ export function SharedFile({ onGuide }) {
     return (
       <main className="login"><form onSubmit={e => e.preventDefault()}>
         <h1>Link unavailable</h1><p>{state.error}</p>
-        <a className="btn dark wide" href="/">Open Linework</a>
+        <a className="btn dark wide" href="/">Open Workline</a>
       </form></main>
     );
   }
@@ -235,7 +235,7 @@ export function AccountDialog({ onUser, onClose }) {
   const unlink = p => run(async () => { take(await api('/auth/unlink', { method: 'POST', body: { provider: p } })); toast(`Disconnected ${providers[p] || p}`); });
   const saveCodes = () => {
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([`Linework recovery codes for ${me.email}\nEach works once, in place of a code from your app.\n\n${codes.join('\n')}\n`], { type: 'text/plain' }));
+    a.href = URL.createObjectURL(new Blob([`Workline recovery codes for ${me.email}\nEach works once, in place of a code from your app.\n\n${codes.join('\n')}\n`], { type: 'text/plain' }));
     a.download = 'linework-recovery-codes.txt';
     a.click();
     URL.revokeObjectURL(a.href);

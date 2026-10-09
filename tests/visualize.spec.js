@@ -82,10 +82,12 @@ const codeView = async (page, files) => {
   await page.getByRole('button', { name: 'Visualize' }).click();
 };
 
-test('the theme button switches between light, dark and the system setting, and remembers it', async ({ page }) => {
+test('the theme switches between light, dark and the system setting, and remembers it', async ({ page }) => {
   const theme = () => page.evaluate(() => document.documentElement.dataset.theme || 'system');
-  await page.getByRole('button', { name: /^Theme:/ }).click();
-  await page.getByRole('menuitemradio', { name: 'Dark' }).click();
+  // On the home screen it's under the avatar.
+  await page.getByRole('button', { name: /^Account: / }).click();
+  await page.getByRole('group', { name: 'Theme' }).getByRole('button', { name: 'Dark' }).click();
+  await expect(page.getByRole('group', { name: 'Theme' }).getByRole('button', { name: 'Dark' })).toHaveAttribute('aria-pressed', 'true');
   expect(await theme()).toBe('dark');
   expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toContain('dark');
   await page.reload();

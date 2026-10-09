@@ -16,9 +16,10 @@ const DatabaseView = lazy(() => import('./DatabaseView.jsx'));
 
 const narrow = () => innerWidth <= 760;
 const AI_KEY = 'linework:ai-open';
-const aiPref = () => { try { const v = localStorage.getItem(AI_KEY); return v == null ? innerWidth > 1000 : v === '1'; } catch (e) { return false; } };
+// Closed until opened (Ctrl J), then as it was left.
+const aiPref = () => { try { return localStorage.getItem(AI_KEY) === '1'; } catch (e) { return false; } };
 
-// onShare and onHistory appear with the Linework API (backend/); a shared file has no onDelete.
+// onShare and onHistory appear with the Workline API (backend/); a shared file has no onDelete.
 // The views a file can be shown in (the View menu at the top). `wide` ones need a wide screen.
 const VIEW_GROUPS = ['Draw', 'Write', 'Data', 'Build'];
 const VIEWS = [
@@ -158,7 +159,7 @@ export default function Editor({ file, update, saveState, onBack, onRename, onDu
           onChange={e => { const v = e.target.value; update(c => { c.title = v; }); }}
           onBlur={() => { if (!file.title.trim()) update(c => { c.title = 'Untitled'; }); }}
           onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); }} />
-        <span className="saved">{saveState}</span>
+        <span className="saved" data-state={saveState}>{saveState}</span>
         <button className="btn viewpick" aria-haspopup="menu" aria-label={`View: ${current.label}`} title="Switch view"
           onClick={e => popup(e.currentTarget, viewMenu)}>
           <svg viewBox="0 0 24 24" aria-hidden="true" dangerouslySetInnerHTML={{ __html: current.icon }} />
@@ -181,7 +182,7 @@ export default function Editor({ file, update, saveState, onBack, onRename, onDu
           ...(onHistory ? [{ label: 'Version history…', note: 'See and restore earlier versions', act: onHistory }] : []),
           '-',
           ...(onDelete ? [{ label: 'Delete file', danger: true, act: onDelete }, '-'] : []),
-          { label: 'How to use Linework', note: 'Guide to the whole app', act: () => onGuide('app') },
+          { label: 'How to use Workline', note: 'Guide to the whole app', act: () => onGuide('app') },
           { label: 'Database schema guide', note: 'Tables, columns, relationships', act: () => onGuide('erd') },
         ])}>⋯</button>
       </div>

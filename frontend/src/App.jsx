@@ -70,7 +70,7 @@ function Workspace({ session, onSignOut, onUser }) {
   // Cloud: the account's storage ({used, limit}), from each save; full once a save was refused for room.
   const [storage, setStorage] = useState(cloud ? session.user.storage : null);
   const [full, setFull] = useState(false), [warned, setWarned] = useState(false);
-  // With the Linework server: share links and version history (for account files).
+  // With the Workline server: share links and version history (for account files).
   const [server, setServer] = useState(null);
   useEffect(() => { if (cloud) serverInfo().then(setServer); }, [cloud]);
   const [dialog, setDialog] = useState(null); // {type: 'share' | 'history' | 'account', id?}
@@ -280,7 +280,7 @@ function Workspace({ session, onSignOut, onUser }) {
     </>);
   }
   return (<>
-    <Home files={files} folders={folders} setFolders={setFolders} account={cloud ? session.user : null} saveState={saveState}
+    <Home files={files} folders={folders} setFolders={setFolders} account={cloud ? session.user : null} saveState={saveState} storage={storage}
       onOpen={setOpenId} onCreate={create} onUpdate={update} onRename={rename}
       onDuplicate={duplicate} onDelete={remove} onSignOut={onSignOut} onGuide={setGuide} serverProps={serverProps}
       onAccount={server && cloud ? () => setDialog({ type: 'account' }) : null} />

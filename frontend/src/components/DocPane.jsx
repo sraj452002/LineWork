@@ -27,7 +27,7 @@ export default function DocPane({ file, update }) {
     const diagrams = file.diagrams.filter(d => d.code && d.code.trim())
       .map(d => `Diagram "${d.name}" (${TYPES[d.type]?.name || 'Architecture'}):\n${d.code}`).join('\n\n') || '(no diagrams yet)';
     const task = kind === 'custom' ? `Apply this request to the doc: "${custom}". Reply with only the full revised markdown.` : TASKS[kind];
-    const prompt = `You are the writing assistant in Linework, a tool for technical design docs. File title: "${file.title}".\n\nDiagrams in this file:\n${diagrams}\n\nCurrent doc (markdown):\n<<<\n${before || '(empty)'}\n>>>\n\n${task}`;
+    const prompt = `You are the writing assistant in Workline, a tool for technical design docs. File title: "${file.title}".\n\nDiagrams in this file:\n${diagrams}\n\nCurrent doc (markdown):\n<<<\n${before || '(empty)'}\n>>>\n\n${task}`;
     const join = t => (kind === 'cont' ? before.replace(/\s*$/, '\n\n') + t : t);
 
     ctl.current = new AbortController();

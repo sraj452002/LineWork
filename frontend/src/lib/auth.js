@@ -1,7 +1,7 @@
 import { api, asUser, serverInfo } from './backend.js';
 
-/* Two ways to use Linework:
-   - 'cloud': signed in to an account on the Linework API (../../backend). Files are saved to it (see cloud.js).
+/* Two ways to use Workline:
+   - 'cloud': signed in to an account on the Workline API (../../backend). Files are saved to it (see cloud.js).
    - 'local': no account. Files stay in this browser only (and AI is off, since it costs money per request).
      Only where the API isn't there (the frontend on its own, the tests), or it allows it (ALLOW_LOCAL_MODE). */
 
@@ -44,14 +44,14 @@ export async function startSession() {
   if (!(await serverInfo())) return (await localAllowed()) ? { mode: 'local' } : null;
   const h = takeHash();
   let notice = h.auth_error ? AUTH_ERRORS[h.auth_error] || 'Sign-in didn’t work. Try again.' : null;
-  if (h.account) notice = h.account === 'taken' ? 'That account is already connected to a different Linework account.' : `Connected ${/github/.test(h.account) ? 'GitHub' : 'Google'}. You can sign in with it now.`;
+  if (h.account) notice = h.account === 'taken' ? 'That account is already connected to a different Workline account.' : `Connected ${/github/.test(h.account) ? 'GitHub' : 'Google'}. You can sign in with it now.`;
   if (h.reset) return { mode: null, pending: { type: 'recovery', token: h.reset } };
   if (h.mfa) return { mode: null, pending: { type: 'mfa', token: h.mfa } };
   if (h.verify) {
     try {
       const r = await api('/auth/verify', { method: 'POST', body: { token: h.verify } });
       if (r.mfa) return { mode: null, pending: { type: 'mfa', token: r.mfa } };
-      return { mode: 'cloud', user: asUser(r.user), notice: 'Your email is confirmed. Welcome to Linework!' };
+      return { mode: 'cloud', user: asUser(r.user), notice: 'Your email is confirmed. Welcome to Workline!' };
     } catch (e) { notice = e.message || 'That link didn’t work.'; }
   }
   try { return { mode: 'cloud', user: asUser((await api('/auth/me')).user), notice }; }

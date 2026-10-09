@@ -764,7 +764,7 @@ export default function SheetView({ file, update, visible, onAddToCanvas }) {
       toast('Preparing the .xlsx…');
       const { writeXlsx } = await import('../lib/xlsx.js');
       downloads.save({ filename: base + '.xlsx', data: await writeXlsx(sheets) });
-      if (sheets.some(s => (s.charts || []).length)) toast('Saved. Charts stay in Linework; .xlsx files get the cells and formatting.');
+      if (sheets.some(s => (s.charts || []).length)) toast('Saved. Charts stay in Workline; .xlsx files get the cells and formatting.');
     } catch (e) { console.error(e); toast('The .xlsx couldn’t be made.'); }
   };
   const saveCSV = () => downloads.save({ filename: (active.name || 'sheet').replace(/[^\w.-]+/g, '-') + '.csv', data: new Blob([toCSV(active, true, sheets)], { type: 'text/csv' }) });
@@ -901,7 +901,7 @@ export default function SheetView({ file, update, visible, onAddToCanvas }) {
         <B wide icon="chartLine" label="Scatter" act={() => addChart('scatter')} />
       </Group>
       <Group name="Cells"><B wide icon="insRow" label="Rows above" act={() => insert(true, true)} /><B wide icon="insRow" label="Columns left" act={() => insert(false, true)} /><B wide icon="sheet" label="Sheet" act={addSheet} /></Group>
-      <Group name="Linework"><B wide icon="canvas" label="Show on canvas" act={() => onAddToCanvas(active.id)} /></Group>
+      <Group name="Workline"><B wide icon="canvas" label="Show on canvas" act={() => onAddToCanvas(active.id)} /></Group>
     </>),
     formulas: (<>
       <Group name="Function Library">

@@ -1350,3 +1350,357 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .dbv-seg button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
 .dbv-form{display:grid;grid-template-columns:2fr 1fr;gap:10px}
 @media (max-width:760px){.dbv{flex-direction:column}.dbv-side{width:auto;max-height:40vh;border-right:0;border-bottom:1px solid var(--line)}.dbv-bar{flex-wrap:wrap}}
+
+/* =====================================================================
+   Calmer layout: less on screen, smaller controls, and motion.
+   The sidebar holds files and folders only; the account lives under the avatar, help under "?".
+   ===================================================================== */
+@keyframes lw-fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes lw-fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes lw-popIn{from{opacity:0;transform:translateY(-6px) scale(.97)}to{opacity:1;transform:none}}
+@keyframes lw-pulse{0%,100%{opacity:.9;transform:scale(1)}50%{opacity:.35;transform:scale(.7)}}
+.screen{animation:lw-fadeIn .25s var(--ease)}
+
+/* sidebar: workspace, files, folders, New File */
+.side{width:244px;padding:16px 12px 14px}
+.side-top.ws{display:flex;align-items:center;gap:10px;padding:4px 8px 22px;min-width:0}
+.side-top.ws b{font-size:15.5px;font-weight:700;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.side-top.ws .brand-mark{flex:none}
+.nav{padding:7px 10px;font-size:14px;gap:10px}
+.nav svg{width:17px;height:17px}
+.nav kbd{opacity:0;transition:opacity .15s}
+.nav:hover kbd,.nav:focus-visible kbd{opacity:1}
+.side-sec{margin:26px 0 6px}
+.side-sec h2{font-size:11px}
+.side-foot{padding-top:16px}
+.new-btn{padding:11px 14px;font-size:14.5px}
+
+/* top bar: tabs, search, avatar */
+.main-in{max-width:1280px;padding:18px 32px 80px}
+.topbar{margin-bottom:26px}
+.avatar-btn{border:0;cursor:pointer;font:inherit;font-weight:700;transition:transform .15s var(--ease),box-shadow .15s}
+.avatar-btn:hover{transform:scale(1.05)}
+.avatar-btn[aria-expanded="true"]{box-shadow:0 0 0 3px var(--surface),0 0 0 5px var(--hi)}
+.acct-wrap{position:relative;flex:none}
+.acct-pop{position:absolute;top:calc(100% + 10px);right:0;z-index:40;width:290px;display:flex;flex-direction:column;gap:12px;padding:14px;background:var(--surface);border:1px solid var(--hair);border-radius:16px;box-shadow:var(--shadow-lg);animation:lw-popIn .16s var(--ease);transform-origin:top right}
+.acct-head{display:flex;align-items:center;gap:11px;min-width:0}
+.acct-head>span:last-child{display:flex;flex-direction:column;min-width:0}
+.acct-head b{font-size:14.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.acct-head small{font-size:12.5px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.acct-head .avatar{width:40px;height:40px;font-size:16px;box-shadow:none}
+.acct-status{margin:0;display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink2)}
+.acct-status::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--c-green)}
+.acct-status.bad::before{background:var(--err)}
+.acct-pop .storage p{margin:0;font-size:12.5px;color:var(--ink2)}
+.acct-theme{display:flex}
+.acct-theme button{flex:1;font-size:12.5px;padding:5px 8px}
+.acct-items{display:flex;flex-direction:column;gap:2px;border-top:1px solid var(--hair);padding-top:8px;margin:0 -6px}
+.acct-items button{display:flex;align-items:center;gap:10px;border:0;background:none;border-radius:9px;padding:8px 10px;font-size:13.5px;font-weight:550;color:var(--ink);cursor:pointer;text-align:left}
+.acct-items button:hover{background:var(--panel)}
+.acct-items svg{color:var(--ink2)}
+
+/* the four ways to start: icon and name, centred (no descriptions) */
+.actions{gap:16px;margin-bottom:34px}
+.action{align-items:center;justify-content:center;text-align:center;gap:14px;min-height:150px;padding:22px 14px;border-radius:14px;font-size:15px;font-weight:600;background:var(--surface);animation:lw-fadeUp .4s var(--ease) both}
+.action:nth-child(2){animation-delay:.05s}.action:nth-child(3){animation-delay:.1s}.action:nth-child(4){animation-delay:.15s}
+.action .a-ico{width:auto;height:auto;margin:0;background:none;box-shadow:none;border-radius:0}
+.action .a-ico svg{stroke-width:1.4;transition:transform .25s var(--ease)}
+.action:hover{transform:translateY(-3px)}
+.action:hover .a-ico{transform:none}
+.action:hover .a-ico svg{transform:scale(1.12)}
+
+/* files: a flat, quiet table */
+.list-title{margin:0 0 10px}
+.ftable{background:none;border:0;border-radius:0;box-shadow:none}
+.ftable th{background:none;font-size:11.5px}
+.ftable th button{padding:10px 12px}
+.ftable td{padding:9px 12px;font-size:14px}
+.ftable .c-name{font-size:14.5px}
+.ftable tbody tr{animation:lw-fadeUp .35s var(--ease) both;animation-delay:calc(var(--i,0) * 30ms)}
+.ftable tbody tr:hover,.ftable tbody tr:focus-visible{background:color-mix(in srgb,var(--ink) 4%,transparent)}
+.ftable tbody td:first-child{border-radius:10px 0 0 10px}
+.ftable tbody td:last-child{border-radius:0 10px 10px 0}
+.f-thumb{width:48px;height:32px;border-radius:7px}
+.nofiles{animation:lw-fadeUp .35s var(--ease) both}
+
+/* help, bottom right */
+.help-fab{position:fixed;right:22px;bottom:calc(22px + env(safe-area-inset-bottom,0px));z-index:30;width:42px;height:42px;border-radius:50%;display:grid;place-items:center;border:1px solid var(--hair);background:var(--surface);color:var(--ink2);box-shadow:var(--shadow);cursor:pointer;transition:transform .15s var(--ease),color .15s,box-shadow .15s}
+.help-fab:hover{color:var(--ink);transform:translateY(-2px);box-shadow:var(--shadow-lg)}
+
+/* file editor: smaller controls */
+.bar{padding:6px 10px;gap:8px}
+.bar .btn{padding:5px 10px;font-size:12.5px;border-radius:9px}
+.bar .btn.icon-only{padding:5px 7px}
+.ftitle{font-size:14px;padding:4px 7px}
+.viewpick{min-width:0;padding:5px 9px}
+.viewpick svg{width:15px;height:15px}
+.ctabs{padding:4px 8px}
+.tab{padding:4px 9px;font-size:12.5px}
+.tbar{gap:6px}
+.tbtn{width:34px;height:32px}
+.tbtn svg{width:17px;height:17px}
+.tbtn kbd{display:none}
+.cempty h3{font-size:18px}
+.cempty p{font-size:13px}
+.qs{gap:6px;margin-top:12px}
+.qs button{padding:7px 10px;font-size:12.5px;border-radius:9px}
+.qs svg{width:16px;height:16px}
+.saved{font-size:11.5px}
+.saved[data-state="Saving"]::before,.saved[data-state="Syncing"]::before{background:var(--hi);animation:lw-pulse 1s ease-in-out infinite}
+.saved[data-state="Offline"]::before,.saved[data-state="Storage full"]::before,.saved[data-state="Not saved"]::before{background:var(--err)}
+@media (min-width:641px){
+  .aichat{width:340px}
+  .cwrap.side-open .zoom{right:350px}
+  .cwrap.side-open .ctools{max-width:calc(100% - 136px - 340px)}
+  .cwrap.side-open .sbar,.cwrap.side-open .hint,.cwrap.side-open .cempty{left:calc((100% - 340px) / 2)}
+}
+/* the AI button while its panel is open: readable on both themes (a pressed .btn is otherwise ink on paper) */
+.ai-toggle.on,.ai-toggle[aria-pressed="true"]{background:color-mix(in srgb,var(--hi) 22%,var(--surface));border-color:color-mix(in srgb,var(--hi) 70%,var(--line));color:var(--ink)}
+.ai-toggle.on:hover{background:color-mix(in srgb,var(--hi) 32%,var(--surface))}
+
+/* sign-in: a brand panel beside the form */
+.login{padding:24px}
+.login-card{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,420px);width:min(900px,100%);border:1px solid var(--hair);border-radius:24px;overflow:hidden;background:var(--glass);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);box-shadow:var(--shadow-lg);animation:lw-fadeUp .5s var(--ease) both}
+.login .login-card form{width:auto;border:0;border-radius:0;box-shadow:none;background:var(--surface);backdrop-filter:none;-webkit-backdrop-filter:none;padding:40px 38px 34px;animation:lw-fadeIn .3s var(--ease)}
+.login-brand{display:none;margin-bottom:22px}
+.login .login-card form>h1{margin-top:0}
+.pw{position:relative}
+.pw input{padding-right:64px}
+.pw-eye{position:absolute;right:6px;top:6px;border:0;background:none;border-radius:7px;padding:5px 9px;font-size:12px;font-weight:600;color:var(--ink2);cursor:pointer}
+.pw-eye:hover{background:var(--panel);color:var(--ink)}
+.login button[type=submit]{position:relative;overflow:hidden}
+.login button[type=submit]::after{content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent 30%,rgba(255,255,255,.35) 50%,transparent 70%);transform:translateX(-100%);transition:transform .6s var(--ease)}
+.login button[type=submit]:hover::after{transform:translateX(100%)}
+@media (max-width:760px){
+  .login-card{grid-template-columns:1fr;width:min(420px,100%)}
+  .login-brand{display:block}
+  .login .login-card form{padding:30px 24px 26px}
+}
+
+/* small screens: the sidebar narrows, cards stack in pairs */
+@media (max-width:900px){.actions{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:640px){.main-in{padding:14px 16px 80px}.help-fab{right:14px;bottom:14px}.acct-pop{width:min(290px,calc(100vw - 32px))}}
+
+@media (prefers-reduced-motion:reduce){
+  .screen,.action,.ftable tbody tr,.nofiles,.acct-pop,.login-card,.login .login-card form{animation:none!important}
+  .saved::before{animation:none!important}
+  .login button[type=submit]::after{display:none}
+}
+/* the layout above, on smaller screens (these come after it so they win) */
+@media (max-width:1100px){.action{min-height:120px}}
+@media (max-width:760px){
+  .side{width:auto;padding:8px 14px}
+  .side-top.ws{padding:0 6px 0 0}
+  .side-top.ws b{display:none}
+  .nav kbd{display:none}
+  .action{min-height:96px;padding:16px 10px;font-size:13.5px;gap:10px}
+}
+/* AI panel: smaller starting cards */
+@media (min-width:641px){
+  .ai-head{padding:9px 10px 9px 16px}
+  .ai-head h2{font-size:15px}
+  .ai-ib{width:30px;height:30px}
+  .ai-start h3{font-size:13.5px;margin:16px 0 10px}
+  .ai-grid{gap:6px}
+  .ai-card{min-height:74px;gap:7px;padding:10px 6px;font-size:12px;border-radius:10px;border-color:var(--hair)}
+  .ai-card svg{width:20px;height:20px}
+}
+.action .a-ico svg{width:30px;height:30px}
+.help-fab svg{width:22px;height:22px}
+
+/* sign-in: threads of light across the page, round the card, and through the diagram */
+@keyframes lw-flow{from{stroke-dashoffset:100}to{stroke-dashoffset:0}}
+.login{position:relative;overflow:hidden}
+.login-threads{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0}
+.thr-a{stop-color:var(--hi)}
+.thr-b{stop-color:var(--c-blue)}
+.thr-base{fill:none;stroke:url(#thr);stroke-width:1.2;opacity:.22}
+.thr-flow{fill:none;stroke:url(#thr);stroke-width:2.2;stroke-linecap:round;stroke-dasharray:12 88;filter:url(#thr-glow);opacity:.9;animation:lw-flow 8s linear infinite}
+.login-card{position:relative;z-index:1;isolation:isolate}
+/* Even with reduced motion the threads keep moving, slowly and softly (the page asks for it: it's the sign-in art). */
+@media (prefers-reduced-motion:reduce){
+  .thr-flow{animation:lw-flow 30s linear infinite!important;opacity:.55}
+}
+
+/* sign-in form: centred, fields with icons, clear footer */
+@keyframes lw-rot{to{transform:rotate(360deg)}}
+.glyph{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.login .login-card form{display:flex;flex-direction:column;justify-content:center;padding:44px 42px 34px}
+.login .login-card form>*{animation:lw-fadeUp .45s var(--ease) both}
+.login .login-card form>:nth-child(2){animation-delay:.04s}.login .login-card form>:nth-child(3){animation-delay:.08s}.login .login-card form>:nth-child(4){animation-delay:.12s}
+.login .login-card form>:nth-child(5){animation-delay:.16s}.login .login-card form>:nth-child(6){animation-delay:.2s}.login .login-card form>:nth-child(7){animation-delay:.24s}
+.login .login-card form>:nth-child(n+8){animation-delay:.28s}
+.login .login-card h1{font-size:32px;margin:0 0 8px}
+.login .login-sub{margin:0 0 26px;font-size:14.5px;line-height:1.5;color:var(--ink2)}
+.field{margin-bottom:16px}
+.login .field label{display:block;margin:0 0 7px;font-size:13px;font-weight:650;color:var(--ink)}
+.field-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.field-head .link{font-size:12.5px;padding:0;color:var(--ink2)}
+.field-head .link:hover{color:var(--ink)}
+.input{position:relative;display:flex;align-items:center}
+.input>.glyph{position:absolute;left:14px;width:18px;height:18px;color:var(--ink2);pointer-events:none;transition:color .15s}
+.input:focus-within>.glyph{color:color-mix(in srgb,var(--hi) 75%,var(--ink))}
+.login .input input{margin:0;height:48px;padding:0 14px 0 44px;font-size:15px;border-radius:12px;border:1px solid var(--hair);background:color-mix(in srgb,var(--paper) 72%,var(--surface));transition:border-color .15s,box-shadow .15s,background .15s}
+.login .input input::placeholder{color:color-mix(in srgb,var(--ink2) 55%,transparent)}
+.login .input input:hover{border-color:var(--line)}
+.login .input input:focus{border-color:color-mix(in srgb,var(--hi) 70%,var(--line));background:var(--surface);box-shadow:0 0 0 4px color-mix(in srgb,var(--hi) 16%,transparent)}
+.login .input input:-webkit-autofill{-webkit-box-shadow:0 0 0 40px var(--surface) inset;-webkit-text-fill-color:var(--ink)}
+.login .input input[type=password],.login .input input#p{padding-right:50px}
+.input .pw-eye{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:36px;height:36px;padding:0;display:grid;place-items:center;border-radius:9px;color:var(--ink2)}
+.input .pw-eye .glyph{width:18px;height:18px}
+.input .pw-eye[aria-pressed="true"]{color:var(--ink)}
+.login .login-card button[type=submit]{display:flex;align-items:center;justify-content:center;gap:9px;height:48px;margin-top:8px;padding:0 16px;font-size:15px}
+.login button[type=submit] .glyph{width:18px;height:18px;stroke-width:2.1;transition:transform .2s var(--ease)}
+.login button[type=submit]:hover .glyph{transform:translateX(3px)}
+.login button[type=submit].busy{cursor:progress}
+.spin{width:16px;height:16px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:lw-rot .7s linear infinite}
+.login .err{display:flex;align-items:flex-start;gap:8px;margin:0 0 18px;padding:10px 12px;border-radius:10px;font-size:13px;line-height:1.45;background:color-mix(in srgb,var(--err) 11%,transparent);border:1px solid color-mix(in srgb,var(--err) 32%,transparent)}
+.login .err .glyph{flex:none;width:16px;height:16px;margin-top:1px}
+.login-switch{margin-top:22px;padding-top:18px;border-top:1px solid var(--hair);text-align:center;font-size:13.5px;color:var(--ink2)}
+.login-switch:empty{display:none}
+.login-switch .link{margin-left:4px;padding:0;font-weight:650;color:var(--ink)}
+@media (max-width:760px){.login .login-card form{padding:30px 22px 24px}}
+@media (prefers-reduced-motion:reduce){.login .login-card form>*{animation:none!important}.spin{animation-duration:1.5s}}
+
+
+
+
+/* sign-in, minimal: one small card, the form only, faint threads behind */
+.login-card{grid-template-columns:1fr;width:min(400px,100%);border-radius:20px;background:var(--surface);backdrop-filter:none;-webkit-backdrop-filter:none;box-shadow:var(--shadow-lg)}
+.login .login-card form{padding:38px 34px 30px;background:none}
+.login-brand{display:flex;justify-content:center;margin-bottom:26px}
+.login .login-card h1{font-size:26px;text-align:center;margin:0 0 6px}
+.login .login-sub{text-align:center;font-size:14px;margin:0 0 28px}
+.login .input input{height:46px}
+.login .login-card button[type=submit]{height:46px;margin-top:10px}
+.login .login-note{margin:18px 0 0;text-align:center;font-size:12.5px;line-height:1.5;color:var(--ink2)}
+.login-switch{border-top:0;margin-top:14px;padding-top:0}
+.thr-base{opacity:.12}
+.thr-flow{opacity:.45;stroke-width:1.8}
+@media (max-width:760px){.login .login-card form{padding:32px 22px 26px}}
+
+.login-card{box-shadow:var(--shadow-lg),0 0 90px -24px color-mix(in srgb,var(--hi) 40%,transparent)}
+.login-card::after{content:"";position:absolute;left:16%;right:16%;top:0;height:1px;background:linear-gradient(90deg,transparent,var(--hi),transparent);opacity:.85;pointer-events:none}
+.login .login-card form{padding-top:34px}
+.login .login-foot{margin:26px -34px -30px;padding:12px 16px;border-top:1px solid var(--hair);background:color-mix(in srgb,var(--ink) 3%,transparent);text-align:center;font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--ink2)}
+.thr-base{opacity:.18}
+.thr-flow{opacity:.75;stroke-width:2}
+@media (max-width:760px){.login .login-foot{margin:22px -22px -26px}}
+
+/* sign-in: a glass card over slowly drifting colour */
+@keyframes lw-drift1{0%,100%{transform:translate(-50%,-50%) translate(-170px,-120px) scale(1)}50%{transform:translate(-50%,-50%) translate(-120px,-60px) scale(1.12)}}
+@keyframes lw-drift2{0%,100%{transform:translate(-50%,-50%) translate(170px,130px) scale(1)}50%{transform:translate(-50%,-50%) translate(110px,70px) scale(1.15)}}
+@keyframes lw-drift3{0%,100%{transform:translate(-50%,-50%) translate(150px,-150px) scale(.9)}50%{transform:translate(-50%,-50%) translate(190px,-80px) scale(1.05)}}
+.login-blobs{position:absolute;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+.login-blobs i{position:absolute;left:50%;top:50%;border-radius:50%;filter:blur(70px);opacity:.55}
+.login-blobs .b1{width:340px;height:340px;background:var(--hi);animation:lw-drift1 16s ease-in-out infinite}
+.login-blobs .b2{width:380px;height:380px;background:var(--c-blue);opacity:.45;animation:lw-drift2 19s ease-in-out infinite}
+.login-blobs .b3{width:240px;height:240px;background:var(--c-purple);opacity:.4;animation:lw-drift3 22s ease-in-out infinite}
+.login-card{background:color-mix(in srgb,var(--surface) 42%,transparent);backdrop-filter:blur(26px) saturate(1.6);-webkit-backdrop-filter:blur(26px) saturate(1.6);border:1px solid rgba(255,255,255,.12);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.14),inset 0 0 0 1px rgba(255,255,255,.03),0 30px 60px -20px rgba(0,0,0,.55)}
+.login-card::after{left:10%;right:10%;opacity:.7}
+.login .input input{background:rgba(0,0,0,.18);border-color:rgba(255,255,255,.1)}
+.login .input input:hover{border-color:rgba(255,255,255,.18)}
+.login .input input:focus{background:rgba(0,0,0,.24)}
+.login .login-foot{background:rgba(255,255,255,.03);border-top-color:rgba(255,255,255,.08)}
+/* light theme: frosted white */
+:root[data-theme="light"] .login-card{background:rgba(255,255,255,.5);border-color:rgba(255,255,255,.75);box-shadow:inset 0 1px 0 rgba(255,255,255,.9),0 30px 60px -24px rgba(29,35,32,.25)}
+:root[data-theme="light"] .login .input input{background:rgba(255,255,255,.55);border-color:rgba(29,35,32,.1)}
+:root[data-theme="light"] .login .login-foot{background:rgba(255,255,255,.35);border-top-color:rgba(29,35,32,.06)}
+:root[data-theme="light"] .login-blobs i{opacity:.4}
+@media (prefers-color-scheme:light){
+  :root:not([data-theme="dark"]) .login-card{background:rgba(255,255,255,.5);border-color:rgba(255,255,255,.75);box-shadow:inset 0 1px 0 rgba(255,255,255,.9),0 30px 60px -24px rgba(29,35,32,.25)}
+  :root:not([data-theme="dark"]) .login .input input{background:rgba(255,255,255,.55);border-color:rgba(29,35,32,.1)}
+  :root:not([data-theme="dark"]) .login .login-foot{background:rgba(255,255,255,.35);border-top-color:rgba(29,35,32,.06)}
+  :root:not([data-theme="dark"]) .login-blobs i{opacity:.4}
+}
+@media (max-width:760px){.login-blobs i{filter:blur(50px)}.login-blobs .b1{width:240px;height:240px}.login-blobs .b2{width:260px;height:260px}}
+@media (prefers-reduced-motion:reduce){.login-blobs i{animation-duration:60s!important}}
+
+/* sign-in, landscape: brand on the left, the form on the right, one glass card */
+.login-card.wide{grid-template-columns:minmax(0,1fr) minmax(0,1fr);width:min(880px,100%)}
+.login-side{display:flex;flex-direction:column;justify-content:center;align-items:flex-start;gap:22px;padding:44px 40px;border-right:1px solid rgba(255,255,255,.08);background:linear-gradient(160deg,rgba(255,255,255,.06),transparent 55%)}
+.login-side h2{margin:0;font-size:28px;line-height:1.15;letter-spacing:-.03em}
+.login-chips{display:flex;flex-wrap:wrap;gap:8px}
+.login-chips span{padding:5px 12px;border-radius:999px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.05);font-size:12px;font-weight:600;color:var(--ink2)}
+.login .login-card.wide form{padding:46px 42px 40px}
+.login .login-card.wide h1,.login .login-card.wide .login-sub,.login .login-card.wide .login-note,.login .login-card.wide .login-switch{text-align:left}
+.login .login-card.wide h1{font-size:28px}
+:root[data-theme="light"] .login-side{border-right-color:rgba(29,35,32,.08);background:linear-gradient(160deg,rgba(255,255,255,.45),transparent 60%)}
+:root[data-theme="light"] .login-chips span{border-color:rgba(29,35,32,.1);background:rgba(255,255,255,.5)}
+@media (prefers-color-scheme:light){
+  :root:not([data-theme="dark"]) .login-side{border-right-color:rgba(29,35,32,.08);background:linear-gradient(160deg,rgba(255,255,255,.45),transparent 60%)}
+  :root:not([data-theme="dark"]) .login-chips span{border-color:rgba(29,35,32,.1);background:rgba(255,255,255,.5)}
+}
+@media (max-width:760px){
+  .login-card.wide{grid-template-columns:1fr;width:min(420px,100%)}
+  .login-side{align-items:center;padding:26px 22px 0;border-right:0;background:none}
+  .login-side h2,.login-chips{display:none}
+  .login .login-card.wide form{padding:18px 22px 26px}
+  .login .login-card.wide h1,.login .login-card.wide .login-sub,.login .login-card.wide .login-note,.login .login-card.wide .login-switch{text-align:center}
+}
+
+/* sign-in: less yellow. The original logo; blue and violet behind the glass; neutral focus and edges */
+.login-side .brand{font-size:19px;gap:10px}
+.login-side .brand svg{width:30px;height:30px}
+.login{background-image:radial-gradient(700px 420px at 20% 15%,color-mix(in srgb,var(--c-blue) 10%,transparent),transparent 70%),radial-gradient(640px 420px at 85% 90%,color-mix(in srgb,var(--c-purple) 10%,transparent),transparent 70%),radial-gradient(circle,color-mix(in srgb,var(--edge) 22%,transparent) 1px,transparent 1.3px)}
+.login-blobs .b1{background:var(--c-blue);opacity:.38}
+.login-blobs .b2{background:var(--c-purple);opacity:.32}
+.login-blobs .b3{background:var(--hi);opacity:.14}
+.thr-a{stop-color:var(--c-blue)}
+.thr-b{stop-color:var(--c-purple)}
+.thr-flow{opacity:.55}
+.login-card{box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 30px 60px -20px rgba(0,0,0,.55)}
+.login-card::after{background:linear-gradient(90deg,transparent,rgba(255,255,255,.45),transparent)}
+.input:focus-within>.glyph{color:var(--ink)}
+.login .input input:focus{border-color:color-mix(in srgb,var(--ink) 35%,transparent);box-shadow:0 0 0 4px color-mix(in srgb,var(--ink) 8%,transparent)}
+.login .login-card button[type=submit]{box-shadow:0 6px 16px -10px color-mix(in srgb,var(--hi) 80%,transparent)}
+:root[data-theme="light"] .login-card::after{background:linear-gradient(90deg,transparent,rgba(255,255,255,.95),transparent)}
+
+
+/* background: living colour, rising motes, a light that follows the pointer */
+@keyframes lw-morph{0%,100%{border-radius:42% 58% 63% 37%/45% 41% 59% 55%}33%{border-radius:61% 39% 44% 56%/58% 62% 38% 42%}66%{border-radius:37% 63% 52% 48%/39% 47% 53% 61%}}
+@keyframes lw-drift4{0%,100%{transform:translate(-50%,-50%) translate(-260px,170px) scale(.9)}50%{transform:translate(-50%,-50%) translate(-200px,110px) scale(1.1)}}
+@keyframes lw-rise{0%{transform:translateY(0);opacity:0}15%{opacity:.9}70%{opacity:.6}100%{transform:translateY(-520px);opacity:0}}
+.login-blobs i{border-radius:42% 58% 63% 37%/45% 41% 59% 55%}
+.login-blobs .b1{animation:lw-drift1 16s ease-in-out infinite,lw-morph 18s ease-in-out infinite}
+.login-blobs .b2{animation:lw-drift2 19s ease-in-out infinite,lw-morph 22s ease-in-out infinite reverse}
+.login-blobs .b3{animation:lw-drift3 22s ease-in-out infinite,lw-morph 20s ease-in-out infinite}
+.login-blobs .b4{width:260px;height:260px;background:color-mix(in srgb,var(--c-green) 80%,var(--c-blue));opacity:.22;animation:lw-drift4 24s ease-in-out infinite,lw-morph 26s ease-in-out infinite}
+.motes circle{fill:color-mix(in srgb,var(--c-blue) 60%,#fff);opacity:0;animation:lw-rise 20s linear infinite;transform-box:fill-box}
+:root[data-theme="light"] .motes circle{fill:var(--c-blue)}
+.login-spot{position:absolute;inset:0;z-index:0;pointer-events:none;background:radial-gradient(420px circle at var(--mx,50%) var(--my,40%),color-mix(in srgb,var(--c-blue) 14%,transparent),transparent 65%)}
+@media (prefers-reduced-motion:reduce){.motes circle{animation-duration:60s!important}.login-blobs i{animation-duration:60s!important}}
+
+/* sign-in: tools orbiting Workline in 3D. The ring is tilted back and turns; each tool turns the other
+   way and tilts forward again, so it always faces the viewer; nearer tools look bigger. */
+@keyframes lw-ring3d{from{transform:rotateX(64deg) rotateZ(0deg)}to{transform:rotateX(64deg) rotateZ(360deg)}}
+@keyframes lw-face3d{from{transform:rotateZ(0deg) rotateX(-64deg)}to{transform:rotateZ(-360deg) rotateX(-64deg)}}
+@keyframes lw-spoke{from{transform:translateX(118px);opacity:0}15%{opacity:1}85%{opacity:1}to{transform:translateX(22px);opacity:0}}
+.orbit-scene{position:relative;width:100%;max-width:340px;height:220px;perspective:760px;perspective-origin:50% 40%;margin:2px 0 -6px}
+.orbit-ring{position:absolute;left:50%;top:50%;width:0;height:0;transform-style:preserve-3d;animation:lw-ring3d 32s linear infinite}
+.orbit-track{position:absolute;left:-128px;top:-128px;width:256px;height:256px;border-radius:50%;border:1px solid var(--orbit-edge);box-shadow:0 0 40px -10px color-mix(in srgb,var(--c-blue) 60%,transparent),inset 0 0 40px -10px color-mix(in srgb,var(--c-purple) 50%,transparent)}
+.orbit-track.inner{left:-74px;top:-74px;width:148px;height:148px;border-style:dashed;box-shadow:none;opacity:.7}
+.orbit-item,.orbit-pos,.orbit-core{position:absolute;left:0;top:0;width:0;height:0;transform-style:preserve-3d}
+.orbit-item{transform:rotateZ(var(--a))}
+.orbit-pos{left:128px;transform:rotateZ(calc(-1 * var(--a)))}
+.orbit-spoke{position:absolute;left:0;top:-.5px;width:128px;height:1px;background:linear-gradient(90deg,transparent,var(--orbit-edge) 35%,var(--orbit-edge))}
+.orbit-spoke::after{content:"";position:absolute;left:0;top:-1px;width:30px;height:3px;border-radius:3px;background:linear-gradient(90deg,transparent,var(--c-blue),var(--c-purple),transparent);filter:drop-shadow(0 0 3px var(--c-blue));animation:lw-spoke 3.4s linear infinite;animation-delay:calc(var(--i) * -.57s)}
+.orbit-face{position:absolute;left:-21px;top:-21px;width:42px;height:42px;border-radius:13px;display:grid;place-items:center;
+  background:linear-gradient(160deg,var(--orbit-glass-a),var(--orbit-glass-b));border:1px solid var(--orbit-edge);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.18),0 10px 24px -8px rgba(0,0,0,.45);animation:lw-face3d 32s linear infinite;backface-visibility:hidden}
+.orbit-face svg{width:19px;height:19px;fill:none;stroke:var(--ink);stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;opacity:.85}
+.orbit-face.core{left:-30px;top:-30px;width:60px;height:60px;border-radius:18px;box-shadow:inset 0 1px 0 rgba(255,255,255,.25),0 14px 34px -10px rgba(0,0,0,.55),0 0 50px -12px color-mix(in srgb,var(--c-blue) 70%,transparent)}
+.orbit-face.core svg{width:30px;height:30px;opacity:1}
+.orbit-face.core .m-o{fill:none;stroke:var(--ink);stroke-width:1.6}
+.orbit-face.core .m-f{fill:var(--hi);stroke:var(--ink);stroke-width:1.6}
+.login-side{--orbit-edge:rgba(255,255,255,.16);--orbit-glass-a:rgba(255,255,255,.12);--orbit-glass-b:rgba(255,255,255,.03)}
+:root[data-theme="light"] .login-side{--orbit-edge:rgba(29,35,32,.14);--orbit-glass-a:rgba(255,255,255,.95);--orbit-glass-b:rgba(255,255,255,.6)}
+@media (prefers-color-scheme:light){:root:not([data-theme="dark"]) .login-side{--orbit-edge:rgba(29,35,32,.14);--orbit-glass-a:rgba(255,255,255,.95);--orbit-glass-b:rgba(255,255,255,.6)}}
+@media (max-width:760px){.orbit-scene{display:none}}
+@media (prefers-reduced-motion:reduce){.orbit-ring,.orbit-face{animation-duration:90s!important}.orbit-spoke::after{animation-duration:10s!important}}
+
+/* the card leans a few degrees towards the pointer */
+.login-card{animation:lw-fadeUp .5s var(--ease) backwards;transform:perspective(1400px) rotateX(var(--tilt-x,0deg)) rotateY(var(--tilt-y,0deg));transition:transform .4s var(--ease)}
+@media (prefers-reduced-motion:reduce){.login-card{transform:none}}
+@media (hover:none){.login-card{transform:none}}

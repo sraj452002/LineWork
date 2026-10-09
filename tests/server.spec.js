@@ -8,7 +8,7 @@ import { openStore } from '../backend/store.js';
 import { memoryBackend } from '../backend/drive.js';
 import { createApp } from '../backend/app.js';
 
-// The Linework API (backend/): directly, then the app running against it through Vite's proxy.
+// The Workline API (backend/): directly, then the app running against it through Vite's proxy.
 // AI requests go to a stand-in for Anthropic's API.
 
 test.describe.configure({ mode: 'serial' });
@@ -208,13 +208,13 @@ test('the app against the server: account, folders, share link and version histo
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   await page.goto('/');
-  await expect(page.getByText('Forgot your password? Ask whoever runs this server to reset it.')).toBeVisible();
+  await expect(page.getByText('Forgot your password? Ask your admin to reset it.')).toBeVisible();
   await page.getByRole('button', { name: 'Create an account' }).click();
   await page.getByLabel('Name').fill('Grace Hopper');
   await page.getByLabel('Email').fill('grace@example.com');
   await page.getByLabel('Password').fill('a long password');
   await page.getByRole('button', { name: 'Create account' }).click();
-  await expect(page.getByRole('heading', { name: /, Grace$/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Account: Grace/ })).toBeVisible();
 
   // A folder, and a file saved to the account.
   await page.getByRole('button', { name: 'New folder' }).click();

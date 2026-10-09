@@ -209,7 +209,7 @@ for (const [type, url] of Object.entries(LIVE)) {
   });
 }
 
-test('live PostgreSQL in the app, through the Linework server', async ({ browser }) => {
+test('live PostgreSQL in the app, through the Workline server', async ({ browser }) => {
   test.skip(!LIVE.postgres, 'set LINEWORK_TEST_PG to run');
   test.setTimeout(120_000);
   const dir = mkdtempSync(join(tmpdir(), 'lw-db-'));

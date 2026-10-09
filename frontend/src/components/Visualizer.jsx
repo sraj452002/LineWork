@@ -6,7 +6,7 @@ import { useUI } from './ui.jsx';
 
 /* The Visualize pane beside the code editor.
    Structure: a flowchart of a function, the classes, or how the files import each other, drawn
-   with Linework's diagram engines (and openable on the canvas).
+   with Workline's diagram engines (and openable on the canvas).
    Step through: record a run of the open file, then move through it line by line: the line is
    highlighted in the editor, with the call stack, variables and output at that moment. */
 

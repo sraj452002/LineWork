@@ -103,13 +103,13 @@ const K = ({ children }) => <kbd className="gk">{children}</kbd>;
 function appGuide() {
   return [
     { id: 'basics', title: 'The basics', body: <>
-      <p>Linework is for technical design work. Every <b>file</b> holds two things side by side:</p>
+      <p>Workline is for technical design work. Every <b>file</b> holds two things side by side:</p>
       <ul>
         <li>A <b>design doc</b>, written in Markdown.</li>
         <li>One or more <b>diagrams</b>, each on its own tab: Architecture, Flowchart, Sequence or Database schema.</li>
       </ul>
       <p>You can make diagrams three ways, and mix them freely: write a few lines of <b>diagram code</b>, <b>ask AI</b> to draw them, or <b>draw by hand</b> on the canvas.</p>
-      <p>The <b>theme</b> button (a sun or moon, on the home page and at the top of every file) switches between Light, Dark and your computer's setting. Linework remembers the choice on this device.</p>
+      <p>The <b>theme</b> button (a sun or moon, on the home page and at the top of every file) switches between Light, Dark and your computer's setting. Workline remembers the choice on this device.</p>
     </> },
     { id: 'home', title: 'The home page', body: <>
       <ul>
@@ -215,7 +215,7 @@ function appGuide() {
         <li><b>Query</b> runs SQL (or MongoDB commands like <code>db.users.find({"{"} age: {"{"} $gt: 30 {"}"} {"}"})</code>) with <K>Ctrl Enter</K>. Results can go to a CSV or straight into a sheet. Statements that drop tables or change every row ask first.</li>
         <li>Tick <b>Read-only</b> on a connection to make sure nothing can change: PostgreSQL runs everything in a read-only transaction, and the others only allow reading statements.</li>
         <li>Connections are saved in this browser only, never inside files (which can be shared). Passwords are kept only if you tick <b>Remember the password</b>.</li>
-        <li>Connections go through Linework's server, so you need to be signed in, and the database must be reachable from the internet. Databases on your own computer or office network are refused; to use one, run the Linework server inside that network with <code>DB_ALLOW_PRIVATE=1</code>. On the hosted site each request has about 9 seconds.</li>
+        <li>Connections go through Workline's server, so you need to be signed in, and the database must be reachable from the internet. Databases on your own computer or office network are refused; to use one, run the Workline server inside that network with <code>DB_ALLOW_PRIVATE=1</code>. On the hosted site each request has about 9 seconds.</li>
       </ul>
     </> },
     { id: 'sheets', title: 'Spreadsheets', body: <>
@@ -228,7 +228,7 @@ function appGuide() {
         <li><K>Ctrl C</K> / <K>Ctrl V</K> copy and paste, also to and from Excel and Google Sheets. Right-click to insert or delete rows and columns (formulas follow), sort, filter or add a chart. <K>Ctrl Z</K> undoes.</li>
         <li><b>Data → Filter</b> (<K>Ctrl Shift L</K>) puts a menu on each header to sort and pick which values show. <K>Ctrl F</K> / <K>Ctrl H</K> find and replace. <b>View</b> freezes panes, hides gridlines, shows formulas and zooms.</li>
         <li><b>Insert</b> adds a column, bar, line, area, pie, doughnut or scatter chart of the table around the selected cell. Drag it to move it, its corner to resize it; its bar changes the type, title and cells.</li>
-        <li><b>File → Open</b> opens <b>.xlsx</b> and CSV files; <b>Download .xlsx</b> saves the whole workbook for Excel, with formulas, formats, widths, merged cells and frozen panes (charts stay in Linework). Selecting cells shows their average, count and sum in the status bar.</li>
+        <li><b>File → Open</b> opens <b>.xlsx</b> and CSV files; <b>Download .xlsx</b> saves the whole workbook for Excel, with formulas, formats, widths, merged cells and frozen panes (charts stay in Workline). Selecting cells shows their average, count and sum in the status bar.</li>
         <li><b>Show on canvas</b> (under <b>File</b> or <b>Insert</b>, or <b>Insert → Spreadsheet</b> on the canvas) puts the sheet on the diagram as a table that stays up to date. Double-click it to open the sheet.</li>
       </ul>
     </> },
@@ -275,14 +275,14 @@ function appGuide() {
     { id: 'saving', title: 'Where your work is saved', body: <>
       <p><b>Signed in</b>, files are saved to your account a moment after each change, so they follow you to any device. Your folders and archive go with them. A copy is kept in the browser too, so you can keep working offline; it uploads when you're back.</p>
       <p><b>Without an account</b>, files are saved <b>in this browser only</b>: they don't appear on another computer, and clearing site data or using a private window loses them. Export important files as Markdown to keep a copy.</p>
-      <p>When Linework runs on its own server (ask whoever set it up), a file's <b>⋯</b> menu also has:</p>
+      <p>When Workline runs on its own server (ask whoever set it up), a file's <b>⋯</b> menu also has:</p>
       <ul>
         <li><b>Share…</b> makes a link to the file. <b>Can view</b> links open it read-only; <b>Can edit</b> links let anyone with the link change it, and their changes are saved to your account. Turn a link off to stop it working.</li>
         <li><b>Version history…</b> lists earlier versions (one for each stretch of editing, the last 100) and restores one. The version you replace stays in the list.</li>
         <li>AI has a daily allowance per account; it resets at midnight UTC.</li>
       </ul>
       <p>You stay signed in for 30 days. <b>Sign out</b> is in the sidebar; it doesn't delete your files.</p>
-      <p>On a Linework server, <b>Account &amp; security</b> in the sidebar changes your name and password, connects Google or GitHub, and turns on <b>two-step verification</b>: scan the QR code with an authenticator app, enter its code, and save the ten recovery codes it gives you. After that, signing in also asks for the code from your app (or one recovery code, if you've lost your phone).</p>
+      <p>On a Workline server, <b>Account &amp; security</b> in the sidebar changes your name and password, connects Google or GitHub, and turns on <b>two-step verification</b>: scan the QR code with an authenticator app, enter its code, and save the ten recovery codes it gives you. After that, signing in also asks for the code from your app (or one recovery code, if you've lost your phone).</p>
     </> },
   ];
 }
@@ -297,7 +297,7 @@ function erdGuide(onTry, theme) {
         <li><b>Columns</b> in each table, with their type and whether they're a key.</li>
         <li><b>Relationships</b> between tables: “one customer places many orders”.</li>
       </ul>
-      <p>In Linework this diagram type is called <b>Database schema</b>. You describe it in a few lines of text and it draws itself.</p>
+      <p>In Workline this diagram type is called <b>Database schema</b>. You describe it in a few lines of text and it draws itself.</p>
     </> },
     { id: 'start', title: 'Starting one', body: <>
       <ul>
@@ -350,7 +350,7 @@ function erdGuide(onTry, theme) {
       {ex('self', 'Employees and managers')}
     </> },
     { id: 'read', title: 'Reading the line ends', body: <>
-      <p>Linework draws relationships in “crow's foot” style:</p>
+      <p>Workline draws relationships in “crow's foot” style:</p>
       <ul>
         <li><b>Crow's foot</b> (three prongs) at an end means <b>many</b> rows on that side.</li>
         <li><b>Two short bars</b> at an end means <b>exactly one</b> row on that side.</li>
@@ -420,7 +420,7 @@ export default function Guide({ which, onWhich, onClose, onTry }) {
         <Brand />
         <span className="grow" />
         <div className="seg" role="group" aria-label="Choose a guide">
-          <button aria-pressed={which !== 'erd'} onClick={() => onWhich('app')}>Using Linework</button>
+          <button aria-pressed={which !== 'erd'} onClick={() => onWhich('app')}>Using Workline</button>
           <button aria-pressed={which === 'erd'} onClick={() => onWhich('erd')}>Database schemas</button>
         </div>
       </div>
@@ -433,9 +433,9 @@ export default function Guide({ which, onWhich, onClose, onTry }) {
           </nav>
           <article className="g-doc">
             <header>
-              <h1>{which === 'erd' ? 'Database schemas (ERD)' : 'How to use Linework'}</h1>
+              <h1>{which === 'erd' ? 'Database schemas (ERD)' : 'How to use Workline'}</h1>
               <p>{which === 'erd'
-                ? 'Describe tables, columns and relationships as text, and Linework draws the entity relationship diagram.'
+                ? 'Describe tables, columns and relationships as text, and Workline draws the entity relationship diagram.'
                 : 'Everything you need to go from an idea to a design doc with diagrams.'}</p>
             </header>
             {sections.map((s, i) => (

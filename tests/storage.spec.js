@@ -6,7 +6,7 @@ import { openStore } from '../backend/store.js';
 import { folderBackend, memoryBackend } from '../backend/drive.js';
 import { createApp } from '../backend/app.js';
 
-// Where the Linework API keeps each account's data, and how much it may keep.
+// Where the Workline API keeps each account's data, and how much it may keep.
 
 const doc = (id, n) => JSON.stringify({ id, title: 'x'.repeat(n), diagrams: [] });
 

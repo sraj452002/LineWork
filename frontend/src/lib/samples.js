@@ -2,7 +2,7 @@
 export const SAMPLES = {
   ts: { label: 'TypeScript', files: [
     { path: 'README.md', text: '# Service\n\nNotes and code that go with this design.\n' },
-    { path: 'src/index.ts', text: "import { greet } from './greet';\n\nconsole.log(greet('Linework'));\n" },
+    { path: 'src/index.ts', text: "import { greet } from './greet';\n\nconsole.log(greet('Workline'));\n" },
     { path: 'src/greet.ts', text: 'export function greet(name: string): string {\n  return `Hello, ${name}`;\n}\n' },
   ] },
   node: { label: 'Node.js web server', files: [

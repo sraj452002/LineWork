@@ -1011,7 +1011,7 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
     try {
       if (K && K.k === 'doc') {
         setStatus('Writing the doc');
-        let p = `You are the writing assistant in Linework, a tool for technical design docs. File title: "${file.title}".\n\n`;
+        let p = `You are the writing assistant in Workline, a tool for technical design docs. File title: "${file.title}".\n\n`;
         p += `Diagrams in this file:\n${others || '(none yet)'}\n\n`;
         if (file.doc && file.doc.trim()) p += `Current doc (keep anything still useful):\n<<<\n${file.doc.slice(0, 12000)}\n>>>\n\n`;
         p += ctxText + `Request:\n<<<\n${text}\n>>>\n\nWrite the design doc in markdown, 300 to 700 words, with sections: Context, Goals, Non-goals, Proposal, Alternatives considered, Risks and open questions. Start with a "# " heading. Reply with only the markdown.`;
@@ -1031,8 +1031,8 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
       const tname = K && K.k === 'bpmn' ? 'BPMN-style process' : TYPES[type].name.toLowerCase();
       const selLabel = editing && sel && E.label ? E.label(ctx.m, sel) : '';
       let p = auto
-        ? `You turn pictures of diagrams into Linework diagram code. First choose the type that matches the picture: "erd" for database tables and their relationships, "sequence" for messages between participants over time, "flowchart" for steps and decisions, or "architecture" for systems and services.\n\n${LANG.graph}\n${LANG.architecture}\n${LANG.flowchart}\n\n${LANG.sequence}\n\n${LANG.erd}\n\n`
-        : `You draw ${tname} diagrams in Linework.\n\n${langFor(type)}\n\n`;
+        ? `You turn pictures of diagrams into Workline diagram code. First choose the type that matches the picture: "erd" for database tables and their relationships, "sequence" for messages between participants over time, "flowchart" for steps and decisions, or "architecture" for systems and services.\n\n${LANG.graph}\n${LANG.architecture}\n${LANG.flowchart}\n\n${LANG.sequence}\n\n${LANG.erd}\n\n`
+        : `You draw ${tname} diagrams in Workline.\n\n${langFor(type)}\n\n`;
       if (K && K.k === 'bpmn') p += 'Draw it as a business process: put each role, team or system in its own group so the groups show as swimlanes, use start and end nodes, and decision nodes for gateways.\n\n';
       p += 'If the input is code or config (Terraform, SQL, YAML, source code), diagram what it defines. When changing an existing diagram, keep existing ids and everything the request doesn\'t touch.\n\n';
       p += editing ? `Current diagram code:\n<<<\n${d.code}\n>>>\n\n` : 'There is no diagram yet. Create a new one.\n\n';
