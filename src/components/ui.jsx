@@ -75,7 +75,7 @@ function Menu({ anchor, items, onClose }) {
 function MenuItems({ items, onClose }) {
   const [open, setOpen] = useState(-1);
   const btns = useRef([]);
-  return items.map((it, i) => it === '-' ? <hr key={i} /> : (
+  return items.map((it, i) => it === '-' ? <hr key={i} /> : it.heading ? <div key={i} className="mhead" role="presentation">{it.heading}</div> : (
     <div key={i} className="mrow" onMouseEnter={() => setOpen(it.items ? i : -1)}>
       <button ref={el => { btns.current[i] = el; }} role={it.on === undefined ? 'menuitem' : 'menuitemradio'} aria-checked={it.on}
         aria-haspopup={it.items ? 'menu' : undefined} aria-expanded={it.items ? open === i : undefined}

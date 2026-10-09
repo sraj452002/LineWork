@@ -18,6 +18,16 @@ const AI_KEY = 'linework:ai-open';
 const aiPref = () => { try { const v = localStorage.getItem(AI_KEY); return v == null ? innerWidth > 1000 : v === '1'; } catch (e) { return false; } };
 
 // onShare and onHistory appear with the Linework server (server/); a shared file has no onDelete.
+// The views a file can be shown in (the View menu at the top). `wide` ones need a wide screen.
+const VIEW_GROUPS = ['Draw', 'Write', 'Data', 'Build'];
+const VIEWS = [
+  { k: 'canvas', group: 'Draw', label: 'Canvas', note: 'Diagrams, database schemas and the whiteboard', icon: '<rect x="3" y="3.5" width="7" height="5" rx="1"/><rect x="14" y="15.5" width="7" height="5" rx="1"/><path d="M6.5 8.5v4.5h11v2.5"/>' },
+  { k: 'doc', group: 'Write', label: 'Doc', note: 'The design doc', icon: '<path d="M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6"/>' },
+  { k: 'both', group: 'Write', label: 'Doc + Canvas', note: 'The doc beside the diagrams', wide: true, icon: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16M6 9h3M6 12h3M15 9h3v6h-3z"/>' },
+  { k: 'sheet', group: 'Data', label: 'Sheet', note: 'Spreadsheets with formulas and charts, like Excel', icon: '<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17M3.5 14.5h17M9 4.5v15"/>' },
+  { k: 'code', group: 'Build', label: 'Code', note: 'Editor, terminal, Python and the code visualizer', icon: '<path d="m8 7-5 5 5 5M16 7l5 5-5 5M14 4l-4 16"/>' },
+];
+
 export default function Editor({ file, update, saveState, onBack, onRename, onDuplicate, onDelete, onGuide, onShare, onHistory, duplicateLabel = 'Duplicate file' }) {
   const { popup, ask, toast } = useUI();
   const history = useRef(new Map()).current;
@@ -122,6 +132,14 @@ export default function Editor({ file, update, saveState, onBack, onRename, onDu
     { label: 'Copy doc text', act: () => copy(file.doc || '', 'Doc copied') },
   ]);
 
+  // The views, in groups. Add a view here and it appears in the View menu.
+  const shown = VIEWS.filter(v => !(v.wide && isNarrow));
+  const current = VIEWS.find(v => v.k === view) || VIEWS[0];
+  const viewMenu = VIEW_GROUPS.flatMap(g => {
+    const list = shown.filter(v => v.group === g);
+    return list.length ? [{ heading: g }, ...list.map(v => ({ label: v.label, note: v.note, icon: v.icon, on: v.k === view, act: () => setView(v.k) }))] : [];
+  });
+
   return (
     <section className="screen">
       <div className="bar">
@@ -131,13 +149,12 @@ export default function Editor({ file, update, saveState, onBack, onRename, onDu
           onBlur={() => { if (!file.title.trim()) update(c => { c.title = 'Untitled'; }); }}
           onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); }} />
         <span className="saved">{saveState}</span>
-        <div className="seg" role="group" aria-label="View">
-          <button aria-pressed={view === 'doc'} onClick={() => setView('doc')}>Doc</button>
-          {!isNarrow && <button aria-pressed={view === 'both'} onClick={() => setView('both')}>Both</button>}
-          <button aria-pressed={view === 'canvas'} onClick={() => setView('canvas')}>Canvas</button>
-          <button aria-pressed={view === 'code'} onClick={() => setView('code')}>Code</button>
-          <button aria-pressed={view === 'sheet'} onClick={() => setView('sheet')}>Sheet</button>
-        </div>
+        <button className="btn viewpick" aria-haspopup="menu" aria-label={`View: ${current.label}`} title="Switch view"
+          onClick={e => popup(e.currentTarget, viewMenu)}>
+          <svg viewBox="0 0 24 24" aria-hidden="true" dangerouslySetInnerHTML={{ __html: current.icon }} />
+          <span>{current.label}</span>
+          <svg className="caret" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5" /></svg>
+        </button>
         {onCanvas && (
           <button className={'btn ai-toggle' + (aiOpen ? ' on' : '')} aria-pressed={aiOpen} onClick={() => setAiOpen(!aiOpen)}
             title={aiOpen ? 'Close AI chat  Esc' : 'Open AI chat  Ctrl J'}>

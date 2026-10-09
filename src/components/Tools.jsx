@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { TEMPLATES, dg, newFile } from '../lib/engines.js';
 import { SAMPLES } from '../lib/samples.js';
 import { SAMPLE, fromCSV, newSheet } from '../lib/sheet.js';
@@ -29,6 +29,9 @@ const ICON = {
 export default function Tools({ q = '', onCreate, onGenerate, busy }) {
   const { ask, toast } = useUI();
   const csvRef = useRef(null), sqlRef = useRef(null);
+  const [cat, setCat] = useState('all');
+  // A search shows matches in every category.
+  useEffect(() => { if (q.trim()) setCat('all'); }, [q]);
   const T = key => TEMPLATES.find(t => t.key === key);
   const blank = (title, extra = {}) => {
     const now = Date.now();
@@ -81,50 +84,66 @@ export default function Tools({ q = '', onCreate, onGenerate, busy }) {
   };
 
 
+  // Tools grouped by what you're making. `view` is where the new file opens.
   const GROUPS = [
-    ['Diagrams', [
-      { k: 'arch', name: 'Architecture diagram', note: 'Services, databases and how they connect', act: () => onCreate(newFile(T('aws'))) },
-      { k: 'flow', name: 'Flowchart', note: 'Steps, decisions and loops', act: () => onCreate(newFile(T('flow'))) },
-      { k: 'seq', name: 'Sequence diagram', note: 'Calls between services over time', act: () => onCreate(newFile(T('seq'))) },
-      { k: 'erd', name: 'Database schema', note: 'Tables, columns and relationships', act: () => onCreate(newFile(T('erd'))) },
-      { k: 'board', name: 'Whiteboard', note: 'Draw freely: shapes, arrows, sticky notes', act: () => onCreate(blank('Whiteboard', { diagrams: [dg('architecture', 'Whiteboard', '')] })) },
-      { k: 'ai', name: busy ? 'Generating… click to stop' : 'AI diagram', note: 'Describe a system; AI writes the doc and draws it', act: onGenerate },
-    ]],
-    ['Docs & data', [
-      { k: 'doc', name: 'Design doc', note: 'A doc with sections ready to fill in', act: () => onCreate(newFile(T('doc'))) },
-      { k: 'sheet', name: 'Spreadsheet', note: 'Cells and formulas, like Excel', act: () => onCreate(sheetFile('Spreadsheet', newSheet('Sheet 1'))) },
-      { k: 'sheet', name: 'Budget sheet', note: 'An example spreadsheet with totals', act: () => onCreate(sheetFile('Budget', SAMPLE())) },
-      { k: 'csv', name: 'Open an Excel or CSV file', note: 'Open a .xlsx, CSV or TSV as a spreadsheet', act: () => csvRef.current?.click() },
-      { k: 'sql', name: 'Open a .sql file', note: 'Draw the database schema in a schema file, migration or dump', act: () => sqlRef.current?.click() },
-      { k: 'sql', name: 'Schema from SQL', note: 'Paste CREATE TABLEs, get an ERD', act: importSQL },
-    ]],
-    ['Code', [
-      { k: 'code', name: 'Code editor', note: 'VS Code’s editor, with files and folders', act: () => onCreate(code('Code', null)) },
-      { k: 'term', name: 'Terminal', note: 'node, npm, git, grep and more, in the browser', act: () => onCreate(code('Terminal', null, 'terminal')) },
-      { k: 'py', name: 'Python', note: 'A Python prompt, with pip install', act: () => onCreate(code('Python', 'py', 'python')) },
-      { k: 'node', name: 'Node.js web server', note: 'A small server with a live preview', act: () => onCreate(code('Node.js server', 'node')) },
-      { k: 'viz', name: 'Code visualizer', note: 'Flowcharts of code, and step-by-step runs', act: () => onCreate(code('Visualize code', 'ts', 'viz')) },
-    ]],
+    { id: 'diagrams', name: 'Diagrams', k: 'arch', note: 'Draw how a system works: its services, the steps of a process, the calls between parts, or anything freehand.', list: [
+      { k: 'arch', view: 'Canvas', name: 'Architecture diagram', note: 'Services, databases and how they connect', act: () => onCreate(newFile(T('aws'))) },
+      { k: 'flow', view: 'Canvas', name: 'Flowchart', note: 'Steps, decisions and loops', act: () => onCreate(newFile(T('flow'))) },
+      { k: 'seq', view: 'Canvas', name: 'Sequence diagram', note: 'Calls between services over time', act: () => onCreate(newFile(T('seq'))) },
+      { k: 'board', view: 'Canvas', name: 'Whiteboard', note: 'Draw freely: shapes, arrows, sticky notes', act: () => onCreate(blank('Whiteboard', { diagrams: [dg('architecture', 'Whiteboard', '')] })) },
+      { k: 'ai', view: 'Canvas', name: busy ? 'Generating… click to stop' : 'AI diagram', note: 'Describe a system; AI writes the doc and draws it', act: onGenerate },
+    ] },
+    { id: 'database', name: 'Databases', k: 'erd', note: 'Design tables, columns and the relationships between them, or draw the ones in SQL you already have.', list: [
+      { k: 'erd', view: 'Canvas', name: 'Database schema', note: 'Start from an example schema', act: () => onCreate(newFile(T('erd'))) },
+      { k: 'sql', view: 'Canvas', name: 'Open a .sql file', note: 'Draw the tables in a schema file, migration or dump', act: () => sqlRef.current?.click() },
+      { k: 'sql', view: 'Canvas', name: 'Schema from SQL', note: 'Paste CREATE TABLE statements', act: importSQL },
+    ] },
+    { id: 'docs', name: 'Docs & spreadsheets', k: 'doc', note: 'Write a design doc, or work with numbers and tables like in Excel.', list: [
+      { k: 'doc', view: 'Doc', name: 'Design doc', note: 'A doc with sections ready to fill in', act: () => onCreate(newFile(T('doc'))) },
+      { k: 'sheet', view: 'Sheet', name: 'Spreadsheet', note: 'Cells, formulas and charts, like Excel', act: () => onCreate(sheetFile('Spreadsheet', newSheet('Sheet 1'))) },
+      { k: 'sheet', view: 'Sheet', name: 'Budget sheet', note: 'An example spreadsheet with totals', act: () => onCreate(sheetFile('Budget', SAMPLE())) },
+      { k: 'csv', view: 'Sheet', name: 'Open an Excel or CSV file', note: 'Open a .xlsx, CSV or TSV as a spreadsheet', act: () => csvRef.current?.click() },
+    ] },
+    { id: 'code', name: 'Code', k: 'code', note: 'Write, run and understand code, all in the browser.', list: [
+      { k: 'code', view: 'Code', name: 'Code editor', note: 'VS Code’s editor, with files and folders', act: () => onCreate(code('Code', null)) },
+      { k: 'term', view: 'Code', name: 'Terminal', note: 'node, npm, git, grep and more', act: () => onCreate(code('Terminal', null, 'terminal')) },
+      { k: 'py', view: 'Code', name: 'Python', note: 'A Python prompt, with pip install', act: () => onCreate(code('Python', 'py', 'python')) },
+      { k: 'node', view: 'Code', name: 'Node.js web server', note: 'A small server with a live preview', act: () => onCreate(code('Node.js server', 'node')) },
+      { k: 'viz', view: 'Code', name: 'Code visualizer', note: 'Flowcharts of code, and step-by-step runs', act: () => onCreate(code('Visualize code', 'ts', 'viz')) },
+    ] },
   ];
   const needle = q.trim().toLowerCase();
-  const groups = GROUPS.map(([g, list]) => [g, list.filter(t => !needle || (t.name + ' ' + t.note).toLowerCase().includes(needle))]).filter(([, l]) => l.length);
+  const matching = GROUPS.map(g => ({ ...g, list: g.list.filter(t => !needle || (t.name + ' ' + t.note + ' ' + g.name).toLowerCase().includes(needle)) })).filter(g => g.list.length);
+  const groups = matching.filter(g => cat === 'all' || g.id === cat);
+  const Icon = ({ k }) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={ICON[k]} /></svg>;
 
   return (
     <div className="tools">
-      {groups.map(([g, list]) => (
-        <section key={g} aria-labelledby={'tools-' + g}>
-          <h2 className="list-title" id={'tools-' + g}>{g}</h2>
+      <div className="tools-cats" role="group" aria-label="Categories">
+        {[{ id: 'all', name: 'All', list: matching.flatMap(g => g.list) }, ...matching].map(g => (
+          <button key={g.id} className={'tcat' + (g.k ? ' t-' + g.k : '')} aria-pressed={cat === g.id} onClick={() => setCat(g.id)}>
+            {g.k && <Icon k={g.k} />}{g.name}<small>{g.list.length}</small>
+          </button>
+        ))}
+      </div>
+      {groups.map(g => (
+        <section key={g.id} className={'tools-sec t-' + g.k} aria-labelledby={'tools-' + g.id}>
+          <header>
+            <i className="tool-ico"><Icon k={g.k} /></i>
+            <div><h2 id={'tools-' + g.id}>{g.name}</h2><p>{g.note}</p></div>
+          </header>
           <div className="tools-grid">
-            {list.map(t => (
+            {g.list.map(t => (
               <button key={t.name} className={'tool-card t-' + t.k} onClick={t.act}>
-                <i className="tool-ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={ICON[t.k]} /></svg></i>
+                <i className="tool-ico"><Icon k={t.k} /></i>
                 <span><b>{t.name}</b><small>{t.note}</small></span>
+                <em className="tool-view">{t.view}</em>
               </button>
             ))}
           </div>
         </section>
       ))}
-      {!groups.length && <div className="nofiles">No tools match “{q.trim()}”.</div>}
+      {!matching.length && <div className="nofiles">No tools match “{q.trim()}”.</div>}
       <input ref={sqlRef} type="file" accept=".sql,.ddl,.txt,.psql,.mysql,application/sql" hidden onChange={e => openSQL(e.target.files[0])} />
       <input ref={csvRef} type="file" accept=".xlsx,.xlsm,.csv,.tsv,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden onChange={e => importCSV(e.target.files[0])} />
     </div>
