@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { addShare, api, asUser, getVersion, listShares, listVersions, openShared, removeShare, saveShared, serverInfo, sharedToken } from '../lib/backend.js';
 import { clone, rid } from '../lib/utils.js';
+import { imagesOnServer } from '../lib/images.js';
 import { useUI } from './ui.jsx';
 import Editor from './Editor.jsx';
 
@@ -108,6 +109,7 @@ export function HistoryDialog({ file, onRestore, onClose }) {
 export function SharedFile({ onGuide }) {
   const { toast } = useUI();
   const token = sharedToken();
+  useState(() => imagesOnServer(true, token)); // the file's pictures, from its owner's account
   const [state, setState] = useState(null); // {mode, owner, file} | {error}
   const [file, setFile] = useState(null);
   const [saveState, setSaveState] = useState('');

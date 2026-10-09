@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { openStore } from './store.js';
 import { backendFromEnv } from './drive.js';
 import { createApp } from './app.js';
+import { ensureUsers } from './accounts.js';
 import { createMailer } from './mail.js';
 
 // Start the Linework API. Settings come from environment variables (see .env.example).
@@ -18,6 +19,8 @@ if (!backend) {
 }
 const store = await openStore(backend);
 console.log(`Data is kept in ${backend.describe()}.`);
+// Accounts to have from the start (DEFAULT_USERS), made once.
+for (const email of await ensureUsers(store, env.DEFAULT_USERS)) console.log(`Made the account ${email} (DEFAULT_USERS).`);
 const app = createApp(store, {
   allowSignup: env.ALLOW_SIGNUP !== 'false',
   aiKey: env.ANTHROPIC_API_KEY || '',

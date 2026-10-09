@@ -6,8 +6,9 @@ import Guide from './components/Guide.jsx';
 import { UIProvider, useUI } from './components/ui.jsx';
 import { saveProfile, signOut, startSession } from './lib/auth.js';
 import { loadFiles, loadFolders, saveFiles, saveFolders } from './lib/storage.js';
-import { listFiles, loadCache, merge, putFile, removeFile, saveCache } from './lib/cloud.js';
-import { tidyImages } from './lib/images.js';
+import { listFiles, putFile, removeFile } from './lib/cloud.js';
+import { imagesOnServer, tidyImages } from './lib/images.js';
+import { startUserData } from './lib/userdata.js';
 import { refreshAI } from './lib/ai.js';
 import { clone, rid } from './lib/utils.js';
 import { dg } from './lib/engines.js';
@@ -52,8 +53,16 @@ function Workspace({ session, onSignOut, onUser }) {
   const { toast, ask } = useUI();
   useEffect(() => { if (session.notice) toast(session.notice); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const cloud = session.mode === 'cloud', uid = cloud ? session.user.id : null;
-  const cache = useRef(cloud ? loadCache(uid) : null);
-  const [files, setFiles] = useState(() => (cloud ? cache.current.files : loadFiles()));
+  // Signed in, everything is on the account (in Google Drive) and nothing is kept in this browser:
+  // what's been uploaded is tracked in memory only. synced: file id -> its `updated` on the account.
+  const book = useRef(null);
+  if (!book.current) {
+    book.current = { synced: {}, deleted: [] };
+    imagesOnServer(cloud);
+    if (!cloud) startUserData(false);
+  }
+  const [files, setFiles] = useState(() => (cloud ? [] : loadFiles()));
+  const [ready, setReady] = useState(!cloud), [loadError, setLoadError] = useState(null), [attempt, setAttempt] = useState(0);
   const [folders, setFolders] = useState(() => (cloud ? session.user.userMetadata?.folders || [] : loadFolders()));
   const [openId, setOpenId] = useState(null);
   const [guide, setGuide] = useState(null); // null | 'app' | 'erd'
@@ -68,12 +77,8 @@ function Workspace({ session, onSignOut, onUser }) {
 
   /* ---- saving ----
      Local: write to this browser shortly after each change, and right away when the page is hidden.
-     Cloud: also write to this browser first, then upload changed files and send deletes; retry what fails. */
-  const writeLocal = useCallback(fs => {
-    if (!cloud) return saveFiles(fs);
-    cache.current = { ...cache.current, files: fs };
-    return saveCache(uid, cache.current);
-  }, [cloud, uid]);
+     Cloud: upload changed files and send deletes shortly after each change; retry what fails. */
+  const writeLocal = useCallback(fs => (cloud ? true : saveFiles(fs)), [cloud]);
 
   const syncing = useRef(false), again = useRef(false), retry = useRef(0);
   const sync = useCallback(async () => {
@@ -81,7 +86,7 @@ function Workspace({ session, onSignOut, onUser }) {
     if (syncing.current) { again.current = true; return; }
     syncing.current = true;
     clearTimeout(retry.current);
-    const c = cache.current, fs = filesRef.current, ids = new Set(fs.map(f => f.id));
+    const c = book.current, fs = filesRef.current, ids = new Set(fs.map(f => f.id));
     const puts = fs.filter(f => c.synced[f.id] !== f.updated);
     const dels = [...new Set([...(c.deleted || []), ...Object.keys(c.synced).filter(id => !ids.has(id))])];
     let failed = false;
@@ -98,13 +103,11 @@ function Workspace({ session, onSignOut, onUser }) {
       try { await removeFile(id); const { [id]: _, ...rest } = c.synced; c.synced = rest; c.deleted = (c.deleted || []).filter(x => x !== id); }
       catch (e) { failed = true; c.deleted = [...new Set([...(c.deleted || []), id])]; }
     }
-    cache.current = { ...c, files: filesRef.current };
-    saveCache(uid, cache.current);
     setSaveState(failed ? 'Offline' : 'Saved');
     syncing.current = false;
     if (again.current) { again.current = false; sync(); }
     else if (failed) retry.current = setTimeout(sync, 15000);
-  }, [cloud, uid, toast]);
+  }, [cloud, toast]);
 
   const first = useRef(true);
   useEffect(() => {
@@ -126,18 +129,29 @@ function Workspace({ session, onSignOut, onUser }) {
     document.addEventListener('visibilitychange', vis);
     return () => { removeEventListener('pagehide', flush); removeEventListener('online', sync); document.removeEventListener('visibilitychange', vis); };
   }, [writeLocal, sync]);
+  // Cloud: changes not on the account yet would be lost with the page, so ask before it closes.
+  useEffect(() => {
+    if (!cloud) return;
+    const warn = e => {
+      const b = book.current;
+      if (b.deleted.length || filesRef.current.some(f => b.synced[f.id] !== f.updated)) { sync(); e.preventDefault(); e.returnValue = ''; }
+    };
+    addEventListener('beforeunload', warn);
+    return () => removeEventListener('beforeunload', warn);
+  }, [cloud, sync]);
 
-  // Cloud: fetch the account's files, combine them with this browser's copy, and offer to bring in
-  // files that were made here without an account.
+  // Cloud: fetch the account's files and settings, and offer to bring in files that were made in this
+  // browser without an account.
   useEffect(() => {
     if (!cloud) return;
     let live = true;
-    listFiles().then(async remote => {
+    try { localStorage.removeItem('linework:cloud:' + uid); } catch (e) { /* the copy earlier versions kept here */ }
+    Promise.all([listFiles(), startUserData(true)]).then(async ([remote]) => {
       if (!live) return;
-      const c = cache.current;
-      c.synced = Object.fromEntries(remote.map(f => [f.id, f.updated]));
-      let next = merge(remote, c);
+      book.current.synced = Object.fromEntries(remote.map(f => [f.id, f.updated]));
+      const next = remote;
       loaded.current = true;
+      setReady(true);
       const key = 'linework:imported:' + uid;
       const old = (() => { try { return localStorage.getItem(key) ? [] : loadFiles(); } catch (e) { return []; } })()
         .filter(f => !next.some(x => x.id === f.id));
@@ -150,13 +164,10 @@ function Workspace({ session, onSignOut, onUser }) {
       sync();
     }, e => {
       if (!live) return;
-      loaded.current = true; // work from this browser's copy; uploads retry later
-      setSaveState('Offline');
-      if (e && e.code === 'signed_out') toast('Your session ended. Sign in again to see your files.');
-      retry.current = setTimeout(sync, 15000);
+      setLoadError(e && (e.code === 'signed_out' || e.code === 'unauthorized') ? 'Your session ended. Sign in again to see your files.' : 'Couldn’t reach your account. Check your connection, then try again.');
     });
     return () => { live = false; clearTimeout(retry.current); };
-  }, [cloud, uid]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [cloud, uid, attempt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Folders live on the account (cloud) or in this browser (local).
   const firstF = useRef(true);
@@ -228,6 +239,15 @@ function Workspace({ session, onSignOut, onUser }) {
   } : {});
   const file = files.find(f => f.id === openId);
 
+  // Cloud: nothing to show until the account's files arrive (there's no copy in this browser).
+  if (!ready) {
+    return loadError
+      ? <div className="boot boot-error" role="alert">
+          <p>{loadError}</p>
+          <div><button className="btn primary" onClick={() => { setLoadError(null); setAttempt(n => n + 1); }}>Try again</button> <button className="btn" onClick={onSignOut}>Sign out</button></div>
+        </div>
+      : <div className="boot" aria-busy="true" />;
+  }
   if (guide) {
     return (
       <Guide which={guide} onWhich={setGuide} onClose={() => setGuide(null)}

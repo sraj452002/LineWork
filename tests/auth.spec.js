@@ -8,6 +8,8 @@ import { openStore } from '../backend/store.js';
 import { memoryBackend } from '../backend/drive.js';
 import { createApp } from '../backend/app.js';
 import { codeAt, stepAt } from '../backend/totp.js';
+import { ensureUsers } from '../backend/accounts.js';
+import { checkPassword, hashPassword } from '../backend/auth.js';
 
 // Signing in to the Linework server: confirming email, resetting a password, two-step verification,
 // Google and GitHub. Email goes to an in-memory outbox, and a stand-in plays Google and GitHub.
@@ -214,6 +216,23 @@ test('Google sign-in on an account with two-step verification still asks for the
   expect((await h.call('GET', '/auth/me')).status).toBe(401);
   expect((await h.call('POST', '/auth/2fa/verify', { challenge: to.split('=')[1], code: on.recovery[0] })).status).toBe(200);
   await h.call('POST', '/auth/2fa/disable', { code: on.recovery[1] });
+});
+
+test('DEFAULT_USERS: accounts made at start, once, leaving a changed password alone', async () => {
+  const st = await openStore(memoryBackend());
+  expect(await ensureUsers(st, ' One@Example.com:first password , two@example.com:pass:with:colons')).toEqual(['one@example.com', 'two@example.com']);
+  const one = st.s.userByEmail.get('one@example.com');
+  expect(one).toMatchObject({ name: 'one', verified: 1 });
+  expect(await checkPassword('first password', one.pass)).toBe(true);
+  expect(await checkPassword('pass:with:colons', st.s.userByEmail.get('two@example.com').pass)).toBe(true);
+  // Restarting the server makes nothing new, and keeps a password changed in the app.
+  st.s.setPass.run(await hashPassword('changed in the app'), one.id);
+  expect(await ensureUsers(st, 'one@example.com:first password, two@example.com:pass:with:colons')).toEqual([]);
+  expect(await checkPassword('changed in the app', st.s.userByEmail.get('one@example.com').pass)).toBe(true);
+  expect(st.s.listUsers.all()).toHaveLength(2);
+  expect(await ensureUsers(st, '')).toEqual([]);
+  await expect(ensureUsers(st, 'nobody')).rejects.toThrow(/email:password/);
+  await expect(ensureUsers(st, 'three@example.com:short')).rejects.toThrow(/8 characters/);
 });
 
 test('the app: sign-in required, confirm email, two-step verification, Google', async ({ browser }) => {

@@ -16,6 +16,24 @@ const HOUR = 3600_000;
 const OAUTH_COOKIE = 'lw_oauth';
 const msg = (res, status, error, message, extra = {}) => res.status(status).json({ error, message, ...extra });
 
+/* Accounts the server makes when it starts, if they aren't there yet (DEFAULT_USERS):
+   "ada@example.com:first password, grace@example.com:second password". An account that's already
+   there is left alone, so a password changed in the app stays changed. Returns the emails it made. */
+export async function ensureUsers(store, spec = '') {
+  const { s } = store, made = [];
+  for (const entry of String(spec).split(',').map(e => e.trim()).filter(Boolean)) {
+    const i = entry.indexOf(':');
+    const email = entry.slice(0, i).trim().toLowerCase(), password = entry.slice(i + 1);
+    if (i < 1 || !EMAIL.test(email)) throw new Error(`DEFAULT_USERS: "${entry.slice(0, 40)}" isn't email:password.`);
+    if (password.length < 8) throw new Error(`DEFAULT_USERS: the password for ${email} needs at least 8 characters.`);
+    if (s.userByEmail.get(email)) continue;
+    s.addUser.run(newId(), email, email.split('@')[0], await hashPassword(password), Date.now(), 1);
+    made.push(email);
+  }
+  await store.flush();
+  return made;
+}
+
 export function accountRoutes(api, { store, mailer, allowSignup, requireVerified, oauthConfig, appUrl, signedIn }) {
   const { s } = store;
   const byEmail = limiter({ max: 10 }), byIp = limiter({ max: 50 });  // failed sign-ins

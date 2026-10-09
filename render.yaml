@@ -29,5 +29,9 @@ services:
         sync: false
       - key: ANTHROPIC_API_KEY
         sync: false
+      # Only the accounts in DEFAULT_USERS (and ones made before): nobody new can sign up.
       - key: ALLOW_SIGNUP
-        value: "true"
+        value: "false"
+      # Accounts made at start: email:password, separated by commas (see backend/.env.example).
+      - key: DEFAULT_USERS
+        sync: false

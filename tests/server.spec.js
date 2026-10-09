@@ -162,6 +162,39 @@ test('AI: signed-in only, streamed through, and limited per day', async () => {
   expect(aiCalls).toBe(2);
 });
 
+test('pictures and the account\'s own settings are kept on the account', async () => {
+  const a = client(), b = client();
+  await a.call('POST', '/auth/signup', { email: 'pics@example.com', password: 'a long password' });
+  await b.call('POST', '/auth/signup', { email: 'other@example.com', password: 'a long password' });
+  const uid = (await a.call('GET', '/auth/me')).json.user.id;
+
+  // Pictures: the account's own, also through a share link of one of its files.
+  const png = 'data:image/png;base64,iVBORw0KGgo=';
+  expect((await a.call('PUT', '/images/img_abc', { data: 'not a picture' })).json.error).toBe('bad_image');
+  expect((await client().call('PUT', '/images/img_abc', { data: png })).status).toBe(401);
+  expect((await a.call('PUT', '/images/img_abc', { data: png })).status).toBe(200);
+  expect(store.backend.blobs.has(`image.${uid}.img_abc.json`)).toBe(true);
+  expect((await a.call('GET', '/images/img_abc')).json.data).toBe(png);
+  expect((await b.call('GET', '/images/img_abc')).status).toBe(404);
+  expect((await client().call('GET', '/images/img_abc')).status).toBe(401);
+  await a.call('PUT', '/files/f_pics', file('f_pics', 'Pictures'));
+  const token = (await a.call('POST', '/files/f_pics/shares', { mode: 'view' })).json.token;
+  expect((await client().call('GET', `/images/img_abc?share=${token}`)).json.data).toBe(png);
+  expect((await client().call('GET', '/images/img_abc?share=nope')).status).toBe(404);
+
+  // Settings by name: each account's own; null removes one.
+  expect((await a.call('GET', '/userdata')).json.data).toEqual({});
+  await a.call('PUT', '/userdata/db-connections', { value: [{ id: 'db1', name: 'Production' }] });
+  await a.call('PUT', '/userdata/db-history%3Adb1', { value: ['select 1'] });
+  expect((await a.call('GET', '/userdata')).json.data).toEqual({ 'db-connections': [{ id: 'db1', name: 'Production' }], 'db-history:db1': ['select 1'] });
+  expect((await b.call('GET', '/userdata')).json.data).toEqual({});
+  await a.call('PUT', '/userdata/db-history%3Adb1', { value: null });
+  expect(Object.keys((await a.call('GET', '/userdata')).json.data)).toEqual(['db-connections']);
+  expect((await a.call('PUT', '/userdata/' + 'x'.repeat(101), { value: 1 })).status).toBe(400);
+  expect((await a.call('PUT', '/userdata/big', { value: 'x'.repeat(200_001) })).status).toBe(413);
+  expect((await client().call('GET', '/userdata')).status).toBe(401);
+});
+
 test('the app against the server: account, folders, share link and version history', async ({ browser }) => {
   test.setTimeout(120_000);
   // The app from Vite's development server, with /api sent to this test's server.
@@ -233,5 +266,15 @@ test('the app against the server: account, folders, share link and version histo
   await other.getByRole('button', { name: 'Sign in' }).click();
   await expect(other.getByRole('navigation', { name: 'Folders' })).toContainText('Designs');
   await expect(other.locator('.ftable tbody tr')).toHaveCount(1);
+
+  // Nothing of the account is kept in the browser: pictures and saved connections go to the account too.
+  expect(await page.evaluate(() => Object.keys(localStorage).filter(k => /^linework:(cloud|db-)/.test(k)))).toEqual([]);
+  const key = await page.evaluate(() => import('/src/lib/images.js').then(m => m.saveImage('data:image/png;base64,iVBORw0KGgo=')));
+  expect(key).toMatch(/^img/);
+  const me = (await (await fetch(`${base}/api/auth/me`, { headers: { cookie: (await page.context().cookies()).map(c => `${c.name}=${c.value}`).join('; ') } })).json()).user;
+  expect(await store.readImage(me.id, key)).toBe('data:image/png;base64,iVBORw0KGgo=');
+  await page.evaluate(() => import('/src/lib/dbclient.js').then(m => m.saveConnections([{ id: 'db_1', name: 'Reports', type: 'postgres', host: 'db.example.com', password: 'secret', remember: true }])));
+  await expect.poll(() => store.s.userData.get(me.id)['db-connections']?.[0]?.name).toBe('Reports');
+  expect(await page.evaluate(() => Object.keys(localStorage).filter(k => /^linework:(cloud|db-)/.test(k)))).toEqual([]);
   expect(errors).toEqual([]);
 });

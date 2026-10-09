@@ -7,6 +7,8 @@ import { createHash } from 'node:crypto';
                         and written back after every change (changes close together go in one write).
    file.<user>.<id>.json      a saved file, as the app sends it.
    version.<n>.json           one version of a file.
+   image.<user>.<key>.json    a picture on a canvas ({data: a data: URL}); files keep only its key.
+   meta.json also keeps each account's own settings (`userdata`: saved database connections, query history).
 
    One server process owns the folder: run one instance, and stop it before `npm run admin`.
    `s` has the same calls the SQLite version had (get / run / all), so the account code reads the same;
@@ -15,8 +17,9 @@ import { createHash } from 'node:crypto';
 const META = 'meta.json';
 const fileName = (uid, id) => `file.${uid}.${id}.json`;
 const versionName = vid => `version.${vid}.json`;
+const imageName = (uid, key) => `image.${uid}.${key}.json`;
 const sha = t => createHash('sha256').update(t).digest('base64url');
-const empty = () => ({ v: 1, nextVid: 1, users: {}, sessions: {}, tokens: {}, identities: {}, folders: {}, shares: {}, ai: {}, files: {}, versions: {} });
+const empty = () => ({ v: 1, nextVid: 1, users: {}, sessions: {}, tokens: {}, identities: {}, folders: {}, shares: {}, ai: {}, files: {}, versions: {}, images: {}, userdata: {} });
 const USER_DEFAULTS = { verified: 1, totp_secret: null, totp_pending: null, totp_last: 0, recovery: '[]' };
 
 // Recently used file texts, so listing files doesn't download them all each time.
@@ -121,6 +124,14 @@ export async function openStore(backend, { versionEvery = 10 * 60_000, keepVersi
     folders: { get: uid => (m.folders[uid] ? { data: m.folders[uid] } : undefined) },
     putFolders: { run(uid, data) { m.folders[uid] = data; return changed(); } },
 
+    // The account's own settings by name (the app's saved database connections, query history…).
+    userData: { get: uid => ({ ...m.userdata[uid] }) },
+    putUserData: { run(uid, name, value) {
+      if (value === null) { if (m.userdata[uid]) delete m.userdata[uid][name]; }
+      else (m.userdata[uid] ||= {})[name] = value;
+      return changed();
+    } },
+
     addShare: { run(token, user_id, file_id, mode, created) { m.shares[token] = { token, user_id, file_id, mode, created }; return changed(); } },
     shares: { all: (uid, id) => Object.values(m.shares).filter(x => x.user_id === uid && x.file_id === id).sort((a, b) => a.created - b.created).map(({ token, mode, created }) => ({ token, mode, created })) },
     share: { get: token => { const x = m.shares[token], u = x && m.users[x.user_id]; return u ? { ...x, owner_name: u.name, owner_email: u.email } : undefined; } },
@@ -131,7 +142,9 @@ export async function openStore(backend, { versionEvery = 10 * 60_000, keepVersi
     dropUser: { run(id) {
       if (!m.users[id]) return { changes: 0 };
       for (const fid of Object.keys(m.files[id] || {})) dropFileNow(id, fid);
+      for (const key of Object.keys(m.images[id] || {})) removeLater(imageName(id, key));
       delete m.users[id]; delete m.files[id]; delete m.versions[id]; delete m.folders[id]; delete m.ai[id];
+      delete m.images[id]; delete m.userdata[id];
       for (const table of ['sessions', 'tokens', 'identities', 'shares']) dropWhere(table, x => x.user_id === id);
       return changed();
     } },
@@ -183,6 +196,18 @@ export async function openStore(backend, { versionEvery = 10 * 60_000, keepVersi
     return data ? { data, saved: v.saved } : null;
   };
 
+  /* ---- pictures on canvases: one blob each, read straight from the backend (not kept in memory) ---- */
+  const hasImage = (uid, key) => Boolean(m.images[uid]?.[key]);
+  const saveImage = async (uid, key, dataUrl, now = Date.now()) => {
+    (m.images[uid] ||= {})[key] = { size: dataUrl.length, saved: now };
+    await Promise.all([queue(imageName(uid, key), () => backend.write(imageName(uid, key), JSON.stringify({ data: dataUrl }))), saveMeta()]);
+  };
+  const readImage = async (uid, key) => {
+    if (!hasImage(uid, key)) return null;
+    const t = await backend.read(imageName(uid, key));
+    try { return t ? JSON.parse(t).data : null; } catch (e) { return null; }
+  };
+
   /* ---- AI allowance: count one request against today's (UTC) allowance; false when it's used up ---- */
   const today = now => new Date(now).toISOString().slice(0, 10);
   const aiUsed = (uid, now = Date.now()) => (m.ai[uid]?.day === today(now) ? m.ai[uid].count : 0);
@@ -206,6 +231,7 @@ export async function openStore(backend, { versionEvery = 10 * 60_000, keepVersi
   return {
     s, backend, meta: m,
     hasFile, readFile, listFiles, saveFile, dropFile, versions, readVersion,
+    hasImage, saveImage, readImage,
     useAi, aiUsed, flush, close: flush,
   };
 }

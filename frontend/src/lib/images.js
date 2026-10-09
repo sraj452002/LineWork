@@ -1,8 +1,15 @@
 import { useEffect, useState } from 'react';
 import { rid } from './utils.js';
+import { api } from './backend.js';
 
-/* Images live in IndexedDB, which has far more room than localStorage. Shapes keep only a key
-   ({img}); older files and browsers without IndexedDB keep the data inline ({src}). */
+/* Shapes keep only a key ({img}); the picture itself is kept apart. Signed in, that's on the account
+   (PUT/GET /api/images/:key, in Google Drive), and pictures left in this browser by earlier versions
+   move there the first time they're shown. Without an account (the frontend on its own, the tests),
+   they're in IndexedDB, which has far more room than localStorage. Older files, a shared file's own
+   additions, and browsers without IndexedDB keep the data inline ({src}). */
+let remote = false, share = null;
+// On a share link's page (share: its token), pictures come from the file owner's account.
+export function imagesOnServer(on, shareToken = null) { remote = on; share = shareToken; }
 const DB = 'linework', STORE = 'images';
 let dbP = null;
 function db() {
@@ -26,11 +33,13 @@ export const imageSrc = s => s.src || cache.get(s.img) || null;
 export const imageMissing = s => !s.src && missing.has(s.img);
 export const imageKeys = shapes => (shapes || []).filter(s => s.t === 'image' && s.img).map(s => s.img);
 
-// Returns the new key, or null when IndexedDB can't be used.
+// Returns the new key, or null when it can't be kept apart (the caller keeps it inline then).
 export async function saveImage(dataUrl) {
+  if (share) return null; // a shared file's additions stay in the file: the owner's account isn't ours
   try {
     const key = rid('img');
-    await done((await store('readwrite')).put(dataUrl, key));
+    if (remote) await api('/images/' + key, { method: 'PUT', body: { data: dataUrl } });
+    else await done((await store('readwrite')).put(dataUrl, key));
     cache.set(key, dataUrl);
     mine.add(key);
     return key;
@@ -39,13 +48,27 @@ export async function saveImage(dataUrl) {
   }
 }
 
+const localImage = async k => { try { return (await done((await store('readonly')).get(k))) || null; } catch (e) { return null; } };
+// From the account; a picture still only in this browser (from before) is moved there.
+async function fetchImage(k) {
+  try { return (await api('/images/' + encodeURIComponent(k) + (share ? '?share=' + encodeURIComponent(share) : ''))).data; }
+  catch (e) {
+    if (e.status !== 404 || share) return null;
+    const data = await localImage(k);
+    if (!data) return null;
+    await api('/images/' + encodeURIComponent(k), { method: 'PUT', body: { data } });
+    try { await done((await store('readwrite')).delete(k)); } catch (err) { /* it's on the account now */ }
+    return data;
+  }
+}
+
 export async function loadImages(keys) {
   const need = [...new Set(keys)].filter(k => !cache.has(k) && !missing.has(k) && !pending.has(k));
   if (!need.length) return;
   need.forEach(k => pending.add(k));
   try {
-    const st = await store('readonly');
-    const vals = await Promise.all(need.map(k => done(st.get(k))));
+    const vals = remote ? await Promise.all(need.map(k => fetchImage(k).catch(() => null)))
+      : await (async () => { const st = await store('readonly'); return Promise.all(need.map(k => done(st.get(k)))); })();
     need.forEach((k, i) => { if (vals[i]) cache.set(k, vals[i]); else missing.add(k); });
   } catch (e) {
     need.forEach(k => missing.add(k));
@@ -71,10 +94,12 @@ export function useImages(shapes) {
 const allShapes = files => files.flatMap(f => f.diagrams.flatMap(d => d.shapes || []));
 const keyTime = k => parseInt(k.slice(3, -5), 36) || 0;
 
-// On startup: move inline images into IndexedDB, then delete stored images no file uses.
-// Returns a Map of shape id -> new key for the moved images (empty if nothing moved).
+// Without an account, on startup: move inline images into IndexedDB, then delete stored images no
+// file uses. Returns a Map of shape id -> new key for the moved images (empty if nothing moved).
+// Signed in, inline images stay in their files, which are on the account already.
 export async function tidyImages(getFiles) {
   const moved = new Map();
+  if (remote) return moved;
   try { await db(); } catch (e) { return moved; }
   for (const s of allShapes(getFiles())) {
     if (s.t === 'image' && s.src && !s.img) {

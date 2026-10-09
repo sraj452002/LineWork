@@ -1,11 +1,12 @@
 /* The Database view's side of live connections.
-   - Saved connections live in this browser (localStorage). Passwords are kept only when "Remember password" is
-     ticked; otherwise only for this visit. They are never put in files, which can be shared.
+   - Saved connections live on the account (userdata.js, in Google Drive). Passwords are kept only when
+     "Remember password" is ticked; otherwise only for this visit. They are never put in files, which can be shared.
    - PostgreSQL, MySQL, SQL Server and MongoDB go through the server (POST /api/db, see backend/dbconnect.js).
    - SQLite files open right here in the browser (sql.js), and can be downloaded again after changes.
    - schemaToErd turns a live schema into database-schema diagram code for the canvas. */
 
 import { rid } from './utils.js';
+import { getData, setData } from './userdata.js';
 
 export const DB_KINDS = [
   { type: 'postgres', name: 'PostgreSQL', note: 'Also Supabase, Neon, RDS, CockroachDB', port: 5432, example: 'postgres://user:password@host:5432/database' },
@@ -17,20 +18,22 @@ export const DB_KINDS = [
 export const kindOf = type => DB_KINDS.find(k => k.type === type) || DB_KINDS[0];
 
 /* ---- saved connections ---- */
-const KEY = 'linework:db-connections';
+const KEY = 'db-connections';
 const secrets = new Map(); // id -> password (or connection string) for this visit only
 export function loadConnections() {
-  try { return JSON.parse(localStorage.getItem(KEY) || '[]').filter(c => c && c.id); } catch (e) { return []; }
+  const list = getData(KEY, []);
+  return Array.isArray(list) ? list.filter(c => c && c.id) : [];
 }
 export function saveConnections(list) {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(list.map(c => {
-      const { password, url, ...rest } = c;
-      if (!c.remember) { secrets.set(c.id, { password, url }); return { ...rest, url: url ? stripPassword(url) : '' }; }
-      return c;
-    })));
-  } catch (e) {}
+  setData(KEY, list.map(c => {
+    const { password, url, ...rest } = c;
+    if (!c.remember) { secrets.set(c.id, { password, url }); return { ...rest, url: url ? stripPassword(url) : '' }; }
+    return c;
+  }));
 }
+// The last queries run on a connection, newest first.
+export const queryHistory = id => { const h = getData('db-history:' + id, []); return Array.isArray(h) ? h : []; };
+export const saveQueryHistory = (id, list) => setData('db-history:' + id, list);
 // The connection with its password filled in from this visit, when it isn't remembered.
 export function withSecret(c) {
   const s = secrets.get(c.id);

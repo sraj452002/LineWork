@@ -121,6 +121,37 @@ export function createApp(store, opts = {}) {
     res.json({ ok: true });
   });
 
+  /* ---- pictures on canvases: files keep only a key, the picture is its own blob ---- */
+  const MAX_IMAGE = 12_000_000; // a data: URL; the app scales big pictures down to about 3 MB
+  const keyOk = (req, res, next) => (ID.test(req.params.key) ? next() : res.status(400).json({ error: 'bad_id' }));
+  // The account's own pictures; with ?share=<token>, the pictures of that shared file's owner.
+  api.get('/images/:key', keyOk, async (req, res) => {
+    const uid = req.query.share ? s.share.get(String(req.query.share))?.user_id : req.user?.id;
+    if (!uid) return res.status(req.query.share ? 404 : 401).json({ error: req.query.share ? 'not_found' : 'unauthorized' });
+    const data = await store.readImage(uid, req.params.key);
+    data ? res.json({ data }) : res.status(404).json({ error: 'not_found' });
+  });
+  api.put('/images/:key', signedIn, keyOk, async (req, res) => {
+    const data = req.body?.data;
+    if (typeof data !== 'string' || !/^data:image\/[\w.+-]+;base64,/.test(data)) return res.status(400).json({ error: 'bad_image' });
+    if (data.length > MAX_IMAGE) return res.status(413).json({ error: 'too_large' });
+    await store.saveImage(req.user.id, req.params.key, data);
+    res.json({ ok: true });
+  });
+
+  /* ---- the account's own settings: saved database connections, query history ---- */
+  const DATA_NAME = /^[\w:.-]{1,100}$/;
+  api.get('/userdata', signedIn, (req, res) => res.json({ data: s.userData.get(req.user.id) }));
+  // {value}: any JSON, or null to remove it.
+  api.put('/userdata/:name', signedIn, (req, res) => {
+    const name = req.params.name, value = req.body?.value;
+    if (!DATA_NAME.test(name) || value === undefined) return res.status(400).json({ error: 'bad_request' });
+    const all = s.userData.get(req.user.id);
+    if (JSON.stringify(value).length > 200_000 || (!(name in all) && Object.keys(all).length >= 200)) return res.status(413).json({ error: 'too_large' });
+    s.putUserData.run(req.user.id, name, value);
+    res.json({ ok: true });
+  });
+
   /* ---- share links ---- */
   // On the app's site (APP_URL), where /s/<token> opens the file; this API's own host serves no pages.
   const shareUrl = (req, t) => `${(appUrl || `${req.protocol}://${req.headers.host}`).replace(/\/$/, '')}/s/${t}`;

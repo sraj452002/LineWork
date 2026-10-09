@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   DB_KINDS, closeSqlite, dbRequest, editText, hasSecret, hostOf, kindOf, loadConnections, newConnection, openSqliteFile,
-  saveConnections, schemaToErd, showValue, sqliteBytes, sqliteOpen, stripPassword,
+  queryHistory, saveConnections, saveQueryHistory, schemaToErd, showValue, sqliteBytes, sqliteOpen, stripPassword,
 } from '../lib/dbclient.js';
 import { downloads } from '../lib/ai.js';
 import { newSheet } from '../lib/sheet.js';
@@ -471,10 +471,9 @@ function DataPane({ conn, table, ask, toast, onChanged }) {
 /* ---- Query: run SQL (or MongoDB commands) and see the results ---- */
 function QueryPane({ conn, ask, toast, update, onChanged }) {
   const { popup } = useUI();
-  const hk = 'linework:db-history:' + conn.id;
-  const [sql, setSql] = useState(() => { try { return (JSON.parse(localStorage.getItem(hk) || '[]')[0]) || ''; } catch (e) { return ''; } });
+  const [sql, setSql] = useState(() => queryHistory(conn.id)[0] || '');
   const [res, setRes] = useState(null), [err, setErr] = useState(null), [busy, setBusy] = useState(false);
-  const history = () => { try { return JSON.parse(localStorage.getItem(hk) || '[]'); } catch (e) { return []; } };
+  const history = () => queryHistory(conn.id);
   const run = async () => {
     const text = sql.trim();
     if (!text || busy) return;
@@ -483,7 +482,7 @@ function QueryPane({ conn, ask, toast, update, onChanged }) {
     try {
       const r = await dbRequest(conn, 'query', { sql: text });
       setRes(r);
-      try { localStorage.setItem(hk, JSON.stringify([text, ...history().filter(h => h !== text)].slice(0, 20))); } catch (e) {}
+      saveQueryHistory(conn.id, [text, ...history().filter(h => h !== text)].slice(0, 20));
       if (r.results.some(x => x.command !== 'SELECT' && x.command !== 'find' && x.command !== 'aggregate')) onChanged();
     } catch (e) { setErr(e.message); setRes(null); }
     setBusy(false);
