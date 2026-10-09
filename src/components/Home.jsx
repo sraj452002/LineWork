@@ -4,9 +4,11 @@ import { LANG, NO_AI, copyFor, sampleP } from '../lib/ai.js';
 import { ago, rid } from '../lib/utils.js';
 import { setSheets } from '../lib/sheet.js';
 import { Brand, ThemeButton, useUI } from './ui.jsx';
+import Tools from './Tools.jsx';
 
 const IC = {
   grid: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',
+  tools: 'M14.7 6.3a4 4 0 0 0-5.4 5.2L3 17.8V21h3.2l6.3-6.3a4 4 0 0 0 5.2-5.4l-2.6 2.6-2.4-.6-.6-2.4z',
   archive: 'M4 5h16v4H4zM5 9v10h14V9M10 13h4',
   folder: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z',
   folderPlus: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 10v6M9 13h6',
@@ -52,7 +54,7 @@ const typing = e => {
 export default function Home({ files, folders, setFolders, account, saveState, onOpen, onCreate, onUpdate, onRename, onDuplicate, onDelete, onSignOut, onGuide, serverProps = () => ({}), onAccount }) {
   const { popup, ask, toast, theme } = useUI();
   const [q, setQ] = useState('');
-  const [view, setView] = useState('all'); // 'all' | 'archive' | folder id
+  const [view, setView] = useState('all'); // 'all' | 'archive' | 'tools' | folder id
   const [tab, setTab] = useState('all'); // 'all' | 'recent'
   const [sort, setSort] = useState({ key: 'updated', dir: -1 });
   const [busy, setBusy] = useState(false);
@@ -176,6 +178,7 @@ Reply with ONLY a JSON object: {"title": "...", "doc": "...", "diagrams": [...]}
       if (e.key === '/') { e.preventDefault(); searchRef.current?.focus(); }
       else if (e.key === 'a' || e.key === 'A') setView('all');
       else if (e.key === 'e' || e.key === 'E') setView('archive');
+      else if (e.key === 't' || e.key === 'T') setView('tools');
       else if (e.key === 'g' || e.key === 'G') onGuide('app');
     };
     document.addEventListener('keydown', key);
@@ -219,6 +222,9 @@ Reply with ONLY a JSON object: {"title": "...", "doc": "...", "diagrams": [...]}
           <button className="nav" aria-current={view === 'archive' ? 'page' : undefined} onClick={() => setView('archive')}>
             <Ico d={IC.archive} /><span>Archive</span><kbd>E</kbd>
           </button>
+          <button className="nav" aria-current={view === 'tools' ? 'page' : undefined} onClick={() => setView('tools')}>
+            <Ico d={IC.tools} /><span>Tools</span><kbd>T</kbd>
+          </button>
         </nav>
         <div className="side-sec">
           <h2>Folders</h2>
@@ -256,14 +262,14 @@ Reply with ONLY a JSON object: {"title": "...", "doc": "...", "diagrams": [...]}
       <main className="main">
         <div className="main-in">
           <header className="topbar">
-            <div className="tabs" role="tablist" aria-label="Filter files">
+            <div className="tabs" role="tablist" aria-label="Filter files" hidden={view === 'tools'}>
               {[['all', 'All'], ['recent', 'Recents']].map(([k, l]) => (
                 <button key={k} role="tab" aria-selected={tab === k} className="tab-btn" onClick={() => setTab(k)}>{l}</button>
               ))}
             </div>
             <label className="dsearch">
               <Ico d={IC.search} size={17} />
-              <input ref={searchRef} type="search" placeholder="Search" aria-label="Search files" value={q}
+              <input ref={searchRef} type="search" placeholder={view === 'tools' ? 'Search tools' : 'Search'} aria-label={view === 'tools' ? 'Search tools' : 'Search files'} value={q}
                 onChange={e => setQ(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') { setQ(''); e.currentTarget.blur(); } }} />
               <kbd>/</kbd>
             </label>
@@ -272,9 +278,10 @@ Reply with ONLY a JSON object: {"title": "...", "doc": "...", "diagrams": [...]}
 
           <div className="hello">
             <h1>{greeting()}{account && (account.name || account.userMetadata?.full_name) ? ', ' + String(account.name || account.userMetadata.full_name).split(' ')[0] : ''}</h1>
-            <p>{files.length ? 'Pick up where you left off, or start something new.' : 'Start a design: a diagram, a doc, and the code that goes with them.'}</p>
+            <p>{view === 'tools' ? 'Every tool in Linework. Pick one to start a new file with it.' : files.length ? 'Pick up where you left off, or start something new.' : 'Start a design: a diagram, a doc, and the code that goes with them.'}</p>
           </div>
 
+          {view === 'tools' ? <Tools q={q} busy={busy} onCreate={onCreate} onGenerate={generate} /> : (<>
           <div className="actions">
             <button className="action a-blue" aria-label="Create a Blank File" onClick={() => createFrom(TEMPLATES[0])}>
               <i className="a-ico"><Ico d={IC.plus} size={24} /></i><span>Create a Blank File</span><small>An empty doc and canvas</small>
@@ -329,6 +336,7 @@ Reply with ONLY a JSON object: {"title": "...", "doc": "...", "diagrams": [...]}
               </tbody>
             </table>
           )}
+          </>)}
         </div>
       </main>
     </section>

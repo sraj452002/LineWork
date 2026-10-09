@@ -87,9 +87,13 @@ The Code view's **Run** button, **Terminal** and **Python** prompt run code in t
 - `curl` and `wget` run in the browser, so they can only fetch sites that allow cross-origin requests.
 - Native binaries, system packages (`apt-get`) and other languages need a real machine, which this in-browser setup doesn't provide.
 
+## Tools
+
+**Tools** in the home page's sidebar lists every tool, grouped (Diagrams, Docs & data, Code), and each one starts a new file open in that tool: the Code view can open straight into the Terminal, the Python prompt or the Visualize pane. See `src/components/Tools.jsx`.
+
 ## Spreadsheets
 
-The **Sheet** view keeps spreadsheets in the file (`file.sheets`): a grid with Excel-style formulas (`=SUM(B2:B9)`, `IF`, `ROUND`, `SUMIF`, `COUNTIF`, `VLOOKUP`, `$`-fixed references…), several sheets per file, copy and paste with Excel and Google Sheets, fill down, sort, number formats, and CSV import and export. **Show on canvas** (or **Insert → Spreadsheet**) draws a sheet on the diagram as a live table. The formula engine is `src/lib/sheet.js`; the view is `src/components/SheetView.jsx`.
+The **Sheet** view keeps spreadsheets in the file (`file.sheets`) and works like Excel: a ribbon (File, Home, Insert, Formulas, Data, View), the name box and formula bar, over a hundred Excel functions (`XLOOKUP`, `SUMIFS`, `IFS`, `TEXT`, date and financial functions…), cross-sheet references (`'Sheet 2'!A1`), real dates and number formats, fonts, fills, borders, merged cells, the fill handle with series, frozen panes, filters, find and replace, charts (column, bar, line, area, pie, doughnut, scatter), inserting and deleting rows and columns with formulas following, and the status-bar sum. It opens and saves **.xlsx** files (with ExcelJS, loaded only when needed) and CSV. **Show on canvas** (or **Insert → Spreadsheet**) draws a sheet on the diagram as a live table. The formula engine is `src/lib/sheet.js`, `.xlsx` files are `src/lib/xlsx.js`, charts are `src/lib/charts.js`, and the view is `src/components/SheetView.jsx`.
 
 ## Visualizing code
 
@@ -106,6 +110,7 @@ src/
   components/
     Login.jsx           sign-in screen
     Home.jsx            templates, file list, create with AI
+    Tools.jsx           the Tools page: every tool, each starting a new file
     Editor.jsx          file view: tabs, export, doc/canvas split
     DocPane.jsx         markdown doc with AI writing help
     Canvas.jsx          pan, zoom, drag, code drawer, AI prompt
@@ -113,7 +118,7 @@ src/
     RunPanel.jsx        Output, Terminal, Python prompt and Preview (xterm.js)
     ServerDialogs.jsx   Share links, version history and shared-file page (server/ only)
     Visualizer.jsx      Visualize pane: code diagrams and step-through
-    SheetView.jsx       Sheet view: spreadsheets with formulas
+    SheetView.jsx       Sheet view: an Excel-like workbook (ribbon, grid, charts)
     ui.jsx              menus, dialogs, toasts, theme button
   lib/
     auth.js             accounts: Netlify Identity, or the Linework server
@@ -125,7 +130,9 @@ src/
     monaco.js           loads Monaco and its language workers
     runtime.js          running code: Node.js (WebContainers) and Python (Pyodide)
     codeviz.js          reads code into flowcharts, class and import diagrams; records JS runs
-    sheet.js            spreadsheet formulas, CSV, and sheets drawn on the canvas
+    sheet.js            spreadsheet formulas, formats, dates, CSV
+    xlsx.js             .xlsx open and save (ExcelJS)
+    charts.js           charts from cells, as SVG
     theme.js            light, dark or system theme, remembered
     python.worker.js    Pyodide in a web worker
     shell/lw.cjs        the Terminal's extra commands (grep, git, curl, python, code…)
