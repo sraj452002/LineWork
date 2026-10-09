@@ -44,83 +44,197 @@ export function erdToSql(code, dialect = 'postgres') {
   return out.join('\n').replace(/\n+$/, '\n');
 }
 
-/* SQL -> ERD code. Reads CREATE TABLE (inline and table-level keys, REFERENCES, FOREIGN KEY)
-   and ALTER TABLE ... ADD [CONSTRAINT x] FOREIGN KEY. Everything else is ignored. */
-const unq = s => s.trim().replace(/^[`"[]|[`"\]]$/g, '');
-const lastPart = s => unq(s.split('.').pop());
+/* SQL -> ERD code, from a schema file or a database dump (pg_dump, mysqldump, SQLite .schema, SQL Server scripts,
+   migrations). Reads CREATE TABLE (columns, types, inline and table-level keys, REFERENCES, FOREIGN KEY), ALTER TABLE
+   (ADD/DROP/RENAME COLUMN, ADD PRIMARY KEY / UNIQUE / FOREIGN KEY), CREATE UNIQUE INDEX and DROP TABLE, in order.
+   Data (INSERT …), views, functions and everything else are skipped. */
+const IDENT = String.raw`(?:"(?:[^"]|"")+"|\x60[^\x60]+\x60|\[[^\]]+\]|[\w$]+)`;
+const NAME = String.raw`${IDENT}(?:\s*\.\s*${IDENT})*`;
+const unq = s => { s = s.trim(); return /^["`[]/.test(s) ? s.slice(1, -1).replace(/""/g, '"') : s; };
+const lastPart = s => unq((s.match(new RegExp(IDENT, 'g')) || [s]).pop());
 const ident = s => lastPart(s).replace(/[^\w-]/g, '_');
+const colList = s => (s || '').split(',').map(c => lastPart(c.trim().replace(/\s+(asc|desc)$/i, ''))).filter(Boolean);
 
-// Split on commas that aren't inside brackets.
-function splitTop(s) {
+// The SQL with comments removed and string literals emptied (so their commas, brackets and semicolons
+// can't confuse what follows); quoted names are kept.
+function clean(sql) {
+  let out = '', i = 0;
+  const n = sql.length;
+  while (i < n) {
+    const ch = sql[i], nx = sql[i + 1];
+    if (ch === '-' && nx === '-') { const j = sql.indexOf('\n', i); i = j < 0 ? n : j; continue; }
+    if (ch === '/' && nx === '*') { const j = sql.indexOf('*/', i + 2); i = j < 0 ? n : j + 2; out += ' '; continue; }
+    if (ch === "'") {
+      let j = i + 1;
+      while (j < n) { if (sql[j] === '\\') j += 2; else if (sql[j] === "'") { if (sql[j + 1] === "'") j += 2; else break; } else j++; }
+      out += "''"; i = j + 1; continue;
+    }
+    if (ch === '$') {
+      // PostgreSQL's $tag$ … $tag$ strings (function bodies).
+      const m = /^\$(\w*)\$/.exec(sql.slice(i, i + 64));
+      if (m) { const j = sql.indexOf(m[0], i + m[0].length); i = j < 0 ? n : j + m[0].length; out += "''"; continue; }
+    }
+    if (ch === '"' || ch === '`' || (ch === '[' && /[\w\s$-]/.test(nx || ''))) {
+      const close = ch === '[' ? ']' : ch, j = sql.indexOf(close, i + 1);
+      const end = j < 0 ? n : j + 1;
+      out += sql.slice(i, end); i = end; continue;
+    }
+    out += ch; i++;
+  }
+  return out;
+}
+
+// Split on commas (or semicolons) that aren't inside brackets.
+function splitTop(s, sep = ',') {
   const out = []; let depth = 0, cur = '';
-  for (const ch of s) {
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (ch === '"' || ch === '`') { const j = s.indexOf(ch, i + 1); const e = j < 0 ? s.length : j; cur += s.slice(i, e + 1); i = e; continue; }
     if (ch === '(') depth++;
     if (ch === ')') depth--;
-    if (ch === ',' && depth === 0) { out.push(cur); cur = ''; } else cur += ch;
+    if (ch === sep && depth <= 0) { out.push(cur); cur = ''; } else cur += ch;
   }
   if (cur.trim()) out.push(cur);
   return out.map(x => x.trim()).filter(Boolean);
 }
-// The body of "CREATE TABLE x ( ... )", with matching brackets.
-function bodyAt(sql, i) {
+// The text inside the brackets that open at i.
+function bodyAt(s, i) {
   let depth = 0;
-  for (let j = i; j < sql.length; j++) {
-    if (sql[j] === '(') depth++;
-    else if (sql[j] === ')' && --depth === 0) return { body: sql.slice(i + 1, j), end: j };
+  for (let j = i; j < s.length; j++) {
+    if (s[j] === '(') depth++;
+    else if (s[j] === ')' && --depth === 0) return s.slice(i + 1, j);
   }
-  return null;
+  return s.slice(i + 1);
 }
-const TYPE_BACK = { 'character varying': 'varchar', 'double precision': 'double', 'timestamp with time zone': 'timestamptz', 'timestamp without time zone': 'timestamp' };
 
-export function sqlToErd(sql) {
-  const src = sql.replace(/--[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
-  const tables = new Map(), rels = [];
-  const head = /create\s+(?:or\s+replace\s+)?(?:temporary\s+|temp\s+)?table\s+(?:if\s+not\s+exists\s+)?([`"\w.[\]]+)\s*\(/gi;
-  let h;
-  while ((h = head.exec(src))) {
-    const b = bodyAt(src, h.index + h[0].length - 1);
-    if (!b) break;
-    const name = ident(h[1]), cols = [], pks = new Set(), uniq = new Set();
-    splitTop(b.body).forEach(part => {
-      const p = part.replace(/\s+/g, ' ');
-      let m;
-      if ((m = p.match(/^(?:constraint \S+ )?primary key\s*\(([^)]*)\)/i))) { m[1].split(',').forEach(c => pks.add(lastPart(c))); return; }
-      if ((m = p.match(/^(?:constraint \S+ )?unique(?: key| index)?(?: \S+)?\s*\(([^)]*)\)/i))) { const cs = m[1].split(','); if (cs.length === 1) uniq.add(lastPart(cs[0])); return; }
-      if ((m = p.match(/^(?:constraint \S+ )?foreign key\s*\(([^)]*)\)\s*references\s+([`"\w.[\]]+)\s*\(([^)]*)\)/i))) {
-        rels.push({ from: name, fc: lastPart(m[1].split(',')[0]), to: ident(m[2]), tc: lastPart(m[3].split(',')[0]) }); return;
-      }
-      if (/^(?:constraint|key|index|check|exclude|fulltext|spatial)\b/i.test(p)) return;
-      if ((m = p.match(/^([`"[]?[\w$]+[`"\]]?)\s+(.+)$/))) {
-        const col = unq(m[1]), rest = m[2];
-        let type = (rest.match(/^((?:character varying|double precision|timestamp with(?:out)? time zone)|[\w]+)(\s*\([^)]*\))?/i) || ['', ''])[1].toLowerCase();
-        type = (TYPE_BACK[type] || type).replace(/\s+/g, '_');
-        if (/primary key/i.test(rest)) pks.add(col);
-        if (/\bunique\b/i.test(rest)) uniq.add(col);
-        const ref = rest.match(/references\s+([`"\w.[\]]+)\s*(?:\(([^)]*)\))?/i);
-        if (ref) rels.push({ from: name, fc: col, to: ident(ref[1]), tc: ref[2] ? lastPart(ref[2]) : 'id' });
-        cols.push({ col, type });
-      }
-    });
-    tables.set(name, cols.map(c => ({ ...c, key: pks.has(c.col) ? 'pk' : uniq.has(c.col) ? 'unique' : '' })));
-    head.lastIndex = b.end;
+const TYPE_WORDS = new Set(('bit tinyint smallint mediumint int integer bigint int2 int4 int8 serial bigserial smallserial decimal numeric dec money smallmoney ' +
+  'float real double bool boolean char nchar varchar nvarchar varchar2 nvarchar2 character text tinytext mediumtext longtext ntext string clob ' +
+  'binary varbinary blob tinyblob mediumblob longblob bytea date time timetz timestamp timestamptz datetime datetime2 smalldatetime datetimeoffset ' +
+  'year interval json jsonb xml uuid uniqueidentifier enum set inet cidr macaddr point geometry geography number').split(' '));
+// Types keep their size where it matters (varchar(255), numeric(10,2)); display widths and precisions (int(11), timestamp(6)) go.
+const SIZED = /^(n?var)?char|^character|^(var)?binary|^decimal|^numeric|^dec$|^number$|^bit$|^varchar2|^nvarchar2|^float$/;
+const TYPE_NAMES = { 'character varying': 'varchar', character: 'char', 'double precision': 'double', int4: 'int', int8: 'bigint', int2: 'smallint',
+  'national character varying': 'nvarchar', 'national character': 'nchar', 'bit varying': 'varbit' };
+
+function readType(rest) {
+  const m = rest.match(new RegExp(String.raw`^(${NAME}(?:\s+(?:varying|precision))?)\s*(\([^)]*\))?((?:\s*\[\s*\d*\s*\])*)(\s+with(?:out)?\s+time\s+zone)?`, 'i'));
+  if (!m) return '';
+  let base = lastPart(m[1].replace(/\s+(varying|precision)$/i, '')).toLowerCase();
+  const word = m[1].match(/\s+(varying|precision)$/i);
+  if (word) base += ' ' + word[1].toLowerCase();
+  base = TYPE_NAMES[base] || base;
+  if (m[4] && /with\s/i.test(m[4])) base = base === 'time' ? 'timetz' : base === 'timestamp' ? 'timestamptz' : base;
+  const size = m[2] && SIZED.test(base) ? m[2].replace(/\s+/g, '').toLowerCase() : '';
+  return (base.replace(/\s+/g, '_') + size + (m[3] || '').replace(/\s+/g, '')).replace(/[^\w(),.[\]-]/g, '');
+}
+
+const RE = {
+  create: new RegExp(String.raw`^create\s+(?:or\s+replace\s+)?(?:(?:global|local)\s+)?(?:temporary\s+|temp\s+|unlogged\s+|virtual\s+)?table\s+(?:if\s+not\s+exists\s+)?(${NAME})\s*\(`, 'i'),
+  alter: new RegExp(String.raw`^alter\s+table\s+(?:if\s+exists\s+)?(?:only\s+)?(${NAME})\s+([\s\S]*)$`, 'i'),
+  drop: new RegExp(String.raw`^drop\s+table\s+(?:if\s+exists\s+)?([\s\S]+?)(?:\s+(?:cascade|restrict))?$`, 'i'),
+  uindex: new RegExp(String.raw`^create\s+unique\s+(?:(?:clustered|nonclustered)\s+)?index\s+(?:concurrently\s+)?(?:if\s+not\s+exists\s+)?(?:${NAME}\s+)?on\s+(?:only\s+)?(${NAME})\s*(?:using\s+\w+\s*)?\(([^)]*)\)`, 'i'),
+  pk: new RegExp(String.raw`^(?:constraint\s+${NAME}\s+)?primary\s+key(?:\s+(?:clustered|nonclustered))?\s*\(([^)]*)\)`, 'i'),
+  uq: new RegExp(String.raw`^(?:constraint\s+${NAME}\s+)?unique(?:\s+(?:key|index))?(?:\s+(?:clustered|nonclustered))?(?:\s+${NAME})?\s*\(([^)]*)\)`, 'i'),
+  fk: new RegExp(String.raw`^(?:constraint\s+${NAME}\s+)?foreign\s+key(?:\s+${NAME})?\s*\(([^)]*)\)\s*references\s+(${NAME})\s*(?:\(([^)]*)\))?`, 'i'),
+  ref: new RegExp(String.raw`\breferences\s+(${NAME})\s*(?:\(([^)]*)\))?`, 'i'),
+  index: new RegExp(String.raw`^(?:fulltext\s+|spatial\s+|unique\s+)?(?:key|index)\s*(${IDENT})?\s*(?:using\s+\w+\s*)?\(`, 'i'),
+  col: new RegExp(String.raw`^(${IDENT})\s+([\s\S]+)$`, 'i'),
+};
+
+// Reads the schema in `sql`: {code, tables, rels} with the ERD code and the counts, or null when there are no tables.
+export function readSql(sql) {
+  const tables = new Map(); // name -> {cols: Map(col -> {type}), pk: [], uq: Set}
+  let rels = [];            // {from, fc, to, tc}
+  const table = n => { if (!tables.has(n)) tables.set(n, { cols: new Map(), pk: [], uq: new Set() }); return tables.get(n); };
+
+  // A column definition inside CREATE TABLE or ALTER TABLE … ADD COLUMN.
+  const addColumn = (t, name, part) => {
+    const m = part.match(RE.col);
+    if (!m) return;
+    const col = unq(m[1]), rest = m[2], T = table(t);
+    T.cols.set(col, { type: readType(rest) });
+    if (/\bprimary\s+key\b/i.test(rest)) T.pk = [col];
+    if (/\bunique\b/i.test(rest)) T.uq.add(col);
+    const ref = rest.match(RE.ref);
+    if (ref) rels.push({ from: t, fc: col, to: ident(ref[1]), tc: ref[2] ? colList(ref[2])[0] : '' });
+  };
+  // A table-level constraint; false when `part` isn't one.
+  const addConstraint = (t, part) => {
+    const T = table(t);
+    let m;
+    if ((m = part.match(RE.pk))) { T.pk = colList(m[1]); return true; }
+    if ((m = part.match(RE.uq))) { const cs = colList(m[1]); if (cs.length === 1) T.uq.add(cs[0]); return true; }
+    if ((m = part.match(RE.fk))) { const fc = colList(m[1]), tc = colList(m[3]); fc.forEach((c, i) => rels.push({ from: t, fc: c, to: ident(m[2]), tc: tc[i] || '' })); return true; }
+    if (/^(?:constraint\s+\S+\s+)?(?:check|exclude)\b/i.test(part) || /^(?:like|period\s+for)\b/i.test(part)) return true;
+    if ((m = part.match(RE.index)) && !(m[1] && TYPE_WORDS.has(unq(m[1]).toLowerCase()))) return true;
+    return false;
+  };
+
+  for (let st of splitTop(clean(sql), ';')) {
+    st = st.replace(/^(?:\s*\bgo\b\s*)+/i, '').replace(/\s+/g, ' ').trim();
+    let m;
+    if ((m = st.match(RE.create))) {
+      const t = ident(m[1]);
+      tables.delete(t);
+      rels = rels.filter(r => r.from !== t);
+      table(t);
+      splitTop(bodyAt(st, m[0].length - 1)).forEach(part => { if (!addConstraint(t, part)) addColumn(t, '', part); });
+    } else if ((m = st.match(RE.alter))) {
+      const t = ident(m[1]);
+      splitTop(m[2].replace(/^with\s+(?:no)?check\s+/i, '')).forEach(action => {
+        let a;
+        action = action.replace(/^with\s+(?:no)?check\s+/i, '');
+        if ((a = action.match(/^add\s+(?!column\b)(?!if\b)([\s\S]+)$/i)) && addConstraint(t, a[1])) return;
+        if ((a = action.match(/^add\s+(?:column\s+)?(?:if\s+not\s+exists\s+)?([\s\S]+)$/i))) { addColumn(t, '', a[1]); return; }
+        if ((a = action.match(new RegExp(String.raw`^drop\s+(?:column\s+)?(?:if\s+exists\s+)?(${IDENT})`, 'i'))) && !/^drop\s+(constraint|index|key|primary|foreign)\b/i.test(action)) {
+          const c = unq(a[1]), T = table(t);
+          T.cols.delete(c); T.pk = T.pk.filter(x => x !== c); T.uq.delete(c);
+          rels = rels.filter(r => !(r.from === t && r.fc === c));
+          return;
+        }
+        if ((a = action.match(new RegExp(String.raw`^rename\s+(?:column\s+)?(${IDENT})\s+to\s+(${IDENT})$`, 'i'))) && !/^rename\s+to\b/i.test(action)) {
+          const from = unq(a[1]), to = unq(a[2]), T = table(t);
+          if (T.cols.has(from)) T.cols = new Map([...T.cols].map(([k, v]) => [k === from ? to : k, v]));
+          T.pk = T.pk.map(x => (x === from ? to : x));
+          if (T.uq.delete(from)) T.uq.add(to);
+          rels.forEach(r => { if (r.from === t && r.fc === from) r.fc = to; if (r.to === t && r.tc === from) r.tc = to; });
+        }
+      });
+    } else if ((m = st.match(RE.uindex))) {
+      const cs = colList(m[2]);
+      if (cs.length === 1) table(ident(m[1])).uq.add(cs[0]);
+    } else if ((m = st.match(RE.drop))) {
+      splitTop(m[1]).forEach(n => { const t = ident(n); tables.delete(t); rels = rels.filter(r => r.from !== t && r.to !== t); });
+    }
   }
-  const alter = /alter\s+table\s+(?:only\s+)?([`"\w.[\]]+)\s+add\s+(?:constraint\s+\S+\s+)?foreign\s+key\s*\(([^)]*)\)\s*references\s+([`"\w.[\]]+)\s*\(([^)]*)\)/gi;
-  let a;
-  while ((a = alter.exec(src))) rels.push({ from: ident(a[1]), fc: lastPart(a[2].split(',')[0]), to: ident(a[3]), tc: lastPart(a[4].split(',')[0]) });
-
+  // Keep only tables that were created (ALTERs on unknown tables leave empty entries).
+  for (const [n, T] of tables) if (!T.cols.size) tables.delete(n);
   if (!tables.size) return null;
+
+  const safe = c => c.replace(/[^\w-]/g, '_');
+  // REFERENCES users (no column) means users' primary key.
+  rels.forEach(r => { if (!r.tc) { const T = tables.get(r.to); r.tc = T && T.pk.length === 1 ? T.pk[0] : 'id'; } });
   const fkCols = new Set(rels.map(r => r.from + '.' + r.fc));
   const lines = [];
-  tables.forEach((cols, t) => {
+  tables.forEach((T, t) => {
     lines.push(`${t} {`);
-    cols.forEach(c => {
-      const key = c.key === 'pk' && fkCols.has(t + '.' + c.col) ? 'pk,fk' : c.key || (fkCols.has(t + '.' + c.col) ? 'fk' : '');
-      lines.push(`  ${c.col.replace(/[^\w-]/g, '_')}${c.type ? ' ' + c.type : ''}${key ? ' ' + key : ''}`);
+    T.cols.forEach((c, col) => {
+      const pk = T.pk.includes(col), fk = fkCols.has(t + '.' + col);
+      const key = pk && fk ? 'pk,fk' : pk ? 'pk' : fk ? 'fk' : T.uq.has(col) ? 'unique' : '';
+      lines.push(`  ${safe(col)}${c.type ? ' ' + c.type : ''}${key ? ' ' + key : ''}`);
     });
     lines.push('}');
   });
-  // The same key is often declared twice (inline and in an ALTER TABLE).
-  const relLines = [...new Set(rels.map(r => `${r.from}.${r.fc.replace(/[^\w-]/g, '_')} > ${r.to}.${r.tc.replace(/[^\w-]/g, '_')}`))];
+  // One-to-one when the foreign key is itself unique (or the whole primary key); else many-to-one.
+  const relLines = [...new Set(rels.map(r => {
+    const T = tables.get(r.from), one = T && (T.uq.has(r.fc) || (T.pk.length === 1 && T.pk[0] === r.fc));
+    return `${r.from}.${safe(r.fc)} ${one ? '-' : '>'} ${r.to}.${safe(r.tc)}`;
+  }))];
   if (relLines.length) lines.push('', ...relLines);
-  return lines.join('\n') + '\n';
+  return { code: lines.join('\n') + '\n', tables: tables.size, rels: relLines.length };
+}
+
+export function sqlToErd(sql) {
+  const r = readSql(sql || '');
+  return r ? r.code : null;
 }

@@ -3,7 +3,7 @@ import { C, TEMPLATES, TYPES, engineOf, prep, tableHue, tableIcon } from '../lib
 import { addColumn, deleteColumn, deleteTable, getColumn, moveColumn, notationOf, renameTable, setColumn, setNotation, setTableAttr } from '../lib/erdcode.js';
 import { highlight } from '../lib/highlight.js';
 import { LANG, NO_AI, copyFor, downloads, langFor, sampleP } from '../lib/ai.js';
-import { DIALECTS, erdToSql, sqlToErd } from '../lib/sql.js';
+import { DIALECTS, erdToSql, readSql } from '../lib/sql.js';
 import { shapesToCode } from '../lib/erdconvert.js';
 import { HELP } from '../lib/help.js';
 import { imageKeys, loadImages, saveImage, useImages } from '../lib/images.js';
@@ -281,17 +281,25 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
     else downloads.save({ filename: slug(file.title) + '-' + slug(d.name) + (dialect === 'mysql' ? '.mysql' : '') + '.sql', data: sql });
   };
   const sqlFileRef = useRef(null);
-  const importSqlText = text => {
-    const code = sqlToErd(text || '');
-    if (!code) { toast('No CREATE TABLE statements found.'); return; }
-    const n = (code.match(/\{\n/g) || []).length;
-    const where = placeSchema(code, 'Imported schema');
-    toast(`Imported ${n} table${n === 1 ? '' : 's'}${where === 'tab' ? ' into a new tab' : ''}`);
+  // SQL (pasted, or a .sql file: a schema, a migration or a whole database dump) becomes a database schema diagram:
+  // here when this diagram is empty, else in a new tab.
+  const importSqlText = (text, from) => {
+    const r = readSql(text || '');
+    if (!r) { toast(from ? `No CREATE TABLE statements in ${from}.` : 'No CREATE TABLE statements found.'); return; }
+    const name = from ? from.replace(/\.\w+$/, '').slice(0, 40) : 'Imported schema';
+    const where = placeSchema(r.code, name);
+    toast(`Imported ${r.tables} table${r.tables === 1 ? '' : 's'} and ${r.rels} relationship${r.rels === 1 ? '' : 's'}${from ? ' from ' + from : ''}${where === 'tab' ? ' into a new tab' : ''}`);
+  };
+  const importSqlFile = f => {
+    if (!f) return;
+    if (f.size > 50e6) { toast('That file is too big (over 50 MB). Export just the schema, e.g. pg_dump --schema-only.'); return; }
+    f.text().then(t => importSqlText(t, f.name), () => toast('That file couldn’t be read.'));
   };
   const importSql = async () => {
-    const v = await ask({ title: 'Import SQL', text: 'Paste CREATE TABLE statements (PostgreSQL, MySQL, SQLite…). Primary keys, unique columns and foreign keys come across.', multiline: true, ok: 'Import' });
+    const v = await ask({ title: 'Import SQL', text: 'Paste CREATE TABLE statements, a migration or a database dump (PostgreSQL, MySQL, SQLite, SQL Server). Tables, columns, types, primary keys, unique columns and foreign keys come across.', multiline: true, ok: 'Import' });
     if (v && v.trim()) importSqlText(v);
   };
+  const openSqlFile = () => sqlFileRef.current?.click();
   const sqlMenu = [
     ...DIALECTS.map(([k, n]) => ({ label: `Download SQL (${n})`, icon: IC.download, act: () => exportSql(k) })),
     ...DIALECTS.map(([k, n]) => ({ label: `Copy SQL (${n})`, icon: IC.copy, act: () => exportSql(k, true) })),
@@ -1101,6 +1109,10 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
       key: 'dev-' + x.v, svg: DEVICE_ICON[x.v], label: x.name, act: () => place('device', { v: x.v }),
     })) },
     { key: 'figure', icon: 'frame', label: 'Figure', note: 'A labeled frame to group things', tile: true, act: () => place('frame', { text: 'Figure' }) },
+    { key: 'sql', icon: 'dErd', label: 'Database schema from SQL', note: 'Draw the tables in a .sql file or dump', children: [
+      { key: 'sql-file', icon: 'upload', label: 'Open a .sql file', note: 'A schema, migration or dump (PostgreSQL, MySQL, SQLite, SQL Server)', act: openSqlFile },
+      { key: 'sql-paste', icon: 'doc', label: 'Paste SQL', note: 'CREATE TABLE statements', act: importSql },
+    ] },
     { key: 'sheet', icon: 'sheet', label: 'Spreadsheet', note: 'A table with formulas, like Excel', children: [
       ...(file.sheets || []).map(sh => ({ key: 'shx-' + sh.id, icon: 'sheet', label: sh.name, note: 'Show this sheet', act: () => placeSheetNow(sh.id) })),
       { key: 'sh-new', icon: 'plus', label: 'New sheet', note: 'An empty sheet; double-click it to fill it in', act: () => {
@@ -1157,7 +1169,10 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
     <div className={'cwrap' + (drawer ? ' has-drawer side-open' : '') + (aiOpen ? ' ai-open side-open' : '')}
       onDragOver={e => { if ([...e.dataTransfer.types].includes('Files')) e.preventDefault(); }}
       onDrop={e => {
-        const f = [...e.dataTransfer.files].find(x => /^image\//.test(x.type));
+        const files = [...e.dataTransfer.files];
+        const sqlFile = files.find(x => /\.(sql|ddl)$/i.test(x.name));
+        if (sqlFile) { e.preventDefault(); importSqlFile(sqlFile); return; }
+        const f = files.find(x => /^image\//.test(x.type));
         if (!f) return;
         e.preventDefault();
         addImageFile(f, toWorld(e.clientX, e.clientY));
@@ -1189,7 +1204,7 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
 
       <Toolbar tool={tool} onTool={pickTool} panelOpen={panel != null} onInsert={() => setPanel(p => (p == null ? '' : null))} onAI={toggleAI} />
       {panel != null && <InsertPanel tree={tree} start={panel} onClose={closePanel} />}
-      <input ref={sqlFileRef} type="file" accept=".sql,.txt,.ddl" hidden onChange={e => { const f = e.target.files[0]; e.target.value = ''; if (f) f.text().then(importSqlText); }} />
+      <input ref={sqlFileRef} type="file" accept=".sql,.ddl,.txt,.psql,.mysql,application/sql" hidden onChange={e => { const f = e.target.files[0]; e.target.value = ''; importSqlFile(f); }} />
       <input ref={fileRef} type="file" accept="image/*" hidden onChange={e => { addImageFile(e.target.files[0]); e.target.value = ''; }} />
 
       <div className="ctools">
@@ -1235,8 +1250,9 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
           onCode={() => setDrawer(true)} onAI={focusAI}
           more={d.type === 'erd'
             ? [{ label: 'Export as SQL', icon: IC.download, items: sqlMenu }, { label: 'Import SQL…', icon: IC.upload, items: [
-                { label: 'Paste SQL…', act: importSql }, { label: 'Open a .sql file…', act: () => sqlFileRef.current?.click() }] }]
-            : [{ label: 'Generate ER diagram from this', note: 'AI designs the tables behind it', icon: IC.dErd, act: diagramToErd }]} />
+                { label: 'Open a .sql file…', act: openSqlFile }, { label: 'Paste SQL…', act: importSql }] }]
+            : [{ label: 'Generate ER diagram from this', note: 'AI designs the tables behind it', icon: IC.dErd, act: diagramToErd },
+              { label: 'Database schema from a .sql file…', note: 'Opens in a new tab', icon: IC.upload, act: openSqlFile }]} />
       )}
 
       {selShapes.length > 0 && !editing && (
@@ -1334,7 +1350,7 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
             <button className="ai-ib" aria-haspopup="menu" aria-label="Download" title="Download" onClick={e => popup(e.currentTarget, [
               { label: 'Download code', note: slug(d.name) + '.txt', act: () => downloads.save({ filename: slug(file.title) + '-' + slug(d.name) + '.txt', data: d.code }) },
               { label: 'Copy code', act: copyCode },
-              ...(d.type === 'erd' ? ['-', ...sqlMenu, '-', { label: 'Import SQL…', icon: IC.upload, act: importSql }] : []),
+              ...(d.type === 'erd' ? ['-', ...sqlMenu, '-', { label: 'Open a .sql file…', icon: IC.upload, act: openSqlFile }, { label: 'Paste SQL…', icon: IC.upload, act: importSql }] : []),
             ])}><Ico d={IC.download} /><Ico d={IC.caret} className="caret" /></button>
           </div>
         </aside>

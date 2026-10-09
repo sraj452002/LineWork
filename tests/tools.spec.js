@@ -25,7 +25,7 @@ test('the Tools page lists every tool, and search narrows it', async ({ page }) 
   await page.keyboard.press('t');
   await expect(page.getByRole('navigation', { name: 'Files' }).getByRole('button', { name: /^Tools/ })).toHaveAttribute('aria-current', 'page');
   for (const g of ['Diagrams', 'Docs & data', 'Code']) await expect(page.getByRole('heading', { name: g })).toBeVisible();
-  await expect(page.locator('.tool-card')).toHaveCount(16);
+  await expect(page.locator('.tool-card')).toHaveCount(17);
   await page.getByRole('searchbox', { name: 'Search tools' }).fill('python');
   await expect(page.locator('.tool-card')).toHaveCount(1);
   await page.getByRole('searchbox', { name: 'Search tools' }).fill('zzz');

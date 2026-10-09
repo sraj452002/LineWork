@@ -2,7 +2,7 @@ import { useRef } from 'react';
 import { TEMPLATES, dg, newFile } from '../lib/engines.js';
 import { SAMPLES } from '../lib/samples.js';
 import { SAMPLE, fromCSV, newSheet } from '../lib/sheet.js';
-import { sqlToErd } from '../lib/sql.js';
+import { readSql } from '../lib/sql.js';
 import { rid } from '../lib/utils.js';
 import { useUI } from './ui.jsx';
 
@@ -28,7 +28,7 @@ const ICON = {
 
 export default function Tools({ q = '', onCreate, onGenerate, busy }) {
   const { ask, toast } = useUI();
-  const csvRef = useRef(null);
+  const csvRef = useRef(null), sqlRef = useRef(null);
   const T = key => TEMPLATES.find(t => t.key === key);
   const blank = (title, extra = {}) => {
     const now = Date.now();
@@ -59,13 +59,27 @@ export default function Tools({ q = '', onCreate, onGenerate, busy }) {
     if (text == null) { toast('That file couldn’t be read.'); return; }
     onCreate(sheetFile(name, Object.assign(newSheet(name), fromCSV(text))));
   };
-  const importSQL = async () => {
-    const sql = ((await ask({ title: 'Database schema from SQL', text: 'Paste CREATE TABLE statements (PostgreSQL or MySQL). Linework draws the tables and the relationships between them.', multiline: true, ok: 'Draw it' })) || '').trim();
-    if (!sql) return;
-    const erd = sqlToErd(sql);
-    if (!erd) { toast('No CREATE TABLE statements found in that SQL.'); return; }
-    onCreate(blank('Schema from SQL', { diagrams: [dg('erd', 'Schema', erd)] }));
+  // SQL (pasted, or a .sql schema / migration / dump) → a new file with its database schema diagram.
+  const sqlToFile = (sql, name) => {
+    const r = readSql(sql);
+    if (!r) { toast(name ? `No CREATE TABLE statements in ${name}.` : 'No CREATE TABLE statements found in that SQL.'); return; }
+    const title = name ? name.replace(/\.\w+$/, '').slice(0, 40) : 'Schema from SQL';
+    onCreate(blank(title, { diagrams: [dg('erd', 'Schema', r.code)] }));
+    toast(`Drew ${r.tables} table${r.tables === 1 ? '' : 's'} and ${r.rels} relationship${r.rels === 1 ? '' : 's'}`);
   };
+  const importSQL = async () => {
+    const sql = ((await ask({ title: 'Database schema from SQL', text: 'Paste CREATE TABLE statements, a migration or a database dump (PostgreSQL, MySQL, SQLite, SQL Server). Linework draws the tables and the relationships between them.', multiline: true, ok: 'Draw it' })) || '').trim();
+    if (sql) sqlToFile(sql);
+  };
+  const openSQL = async f => {
+    if (!f) return;
+    sqlRef.current.value = '';
+    if (f.size > 50e6) { toast('That file is too big (over 50 MB). Export just the schema, e.g. pg_dump --schema-only.'); return; }
+    const text = await f.text().catch(() => null);
+    if (text == null) { toast('That file couldn’t be read.'); return; }
+    sqlToFile(text, f.name);
+  };
+
 
   const GROUPS = [
     ['Diagrams', [
@@ -81,6 +95,7 @@ export default function Tools({ q = '', onCreate, onGenerate, busy }) {
       { k: 'sheet', name: 'Spreadsheet', note: 'Cells and formulas, like Excel', act: () => onCreate(sheetFile('Spreadsheet', newSheet('Sheet 1'))) },
       { k: 'sheet', name: 'Budget sheet', note: 'An example spreadsheet with totals', act: () => onCreate(sheetFile('Budget', SAMPLE())) },
       { k: 'csv', name: 'Open an Excel or CSV file', note: 'Open a .xlsx, CSV or TSV as a spreadsheet', act: () => csvRef.current?.click() },
+      { k: 'sql', name: 'Open a .sql file', note: 'Draw the database schema in a schema file, migration or dump', act: () => sqlRef.current?.click() },
       { k: 'sql', name: 'Schema from SQL', note: 'Paste CREATE TABLEs, get an ERD', act: importSQL },
     ]],
     ['Code', [
@@ -110,6 +125,7 @@ export default function Tools({ q = '', onCreate, onGenerate, busy }) {
         </section>
       ))}
       {!groups.length && <div className="nofiles">No tools match “{q.trim()}”.</div>}
+      <input ref={sqlRef} type="file" accept=".sql,.ddl,.txt,.psql,.mysql,application/sql" hidden onChange={e => openSQL(e.target.files[0])} />
       <input ref={csvRef} type="file" accept=".xlsx,.xlsm,.csv,.tsv,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden onChange={e => importCSV(e.target.files[0])} />
     </div>
   );
