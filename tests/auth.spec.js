@@ -258,6 +258,7 @@ test('the app: sign-in required, confirm email, two-step verification, Google', 
   const secret = (await dlg.locator('.acct-secret code').textContent()).replace(/\s/g, '');
   await dlg.getByLabel('Code from the app').fill(codeAt(secret, stepAt()));
   await dlg.getByRole('button', { name: 'Turn on' }).click();
+  await expect(dlg.getByRole('list', { name: 'Recovery codes' }).getByRole('listitem')).toHaveCount(10);
   const codes = await dlg.getByRole('list', { name: 'Recovery codes' }).getByRole('listitem').allTextContents();
   expect(codes).toHaveLength(10);
   await dlg.getByRole('button', { name: 'I’ve saved them' }).click();
