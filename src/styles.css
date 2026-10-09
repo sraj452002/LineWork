@@ -1085,3 +1085,25 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .sv-tab .tm:hover{background:var(--panel)}
 .sv-foot .addtab{font-size:12.5px}
 .sv-stats{font-size:12px;color:var(--ink2);white-space:nowrap}
+
+/* ---- Home → Tools ---- */
+.topbar .tabs[hidden]{display:flex;visibility:hidden}
+.tools{display:flex;flex-direction:column;gap:6px}
+.tools section{margin-bottom:12px}
+.tools-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+.tool-card{display:flex;align-items:center;gap:14px;text-align:left;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:var(--surface);color:var(--ink);font:inherit;cursor:pointer;transition:border-color .15s,box-shadow .15s,transform .15s}
+.tool-card:hover{border-color:color-mix(in srgb,var(--ink) 25%,var(--line));box-shadow:0 6px 20px rgba(0,0,0,.07);transform:translateY(-1px)}
+.tool-card:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.tool-card span{display:flex;flex-direction:column;gap:3px;min-width:0}
+.tool-card b{font-size:14px;font-weight:650}
+.tool-card small{font-size:12.5px;color:var(--ink2);line-height:1.35}
+.tool-ico{flex:none;width:42px;height:42px;border-radius:11px;display:grid;place-items:center;--tc:#4f6bed;background:color-mix(in srgb,var(--tc) 14%,transparent);color:var(--tc)}
+.t-flow .tool-ico,.t-seq .tool-ico{--tc:#0e9f8a}
+.t-erd .tool-ico,.t-sql .tool-ico{--tc:#c2410c}
+.t-board .tool-ico,.t-ai .tool-ico{--tc:#8b5cf6}
+.t-doc .tool-ico{--tc:#16a34a}
+.t-sheet .tool-ico,.t-csv .tool-ico{--tc:#15803d}
+.t-code .tool-ico,.t-node .tool-ico{--tc:#2563eb}
+.t-term .tool-ico{--tc:#475569}
+.t-py .tool-ico{--tc:#ca8a04}
+.t-viz .tool-ico{--tc:#db2777}

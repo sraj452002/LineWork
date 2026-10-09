@@ -132,6 +132,7 @@ function appGuide() {
       <ul className="gkeys">
         <li><K>/</K> Search</li><li><K>Alt N</K> New file</li><li><K>A</K> All Files</li><li><K>E</K> Archive</li>
       </ul>
+      <p><b>Tools</b> in the sidebar (or <K>T</K>) lists every tool in one place: each diagram type, a whiteboard, AI diagrams, design docs, spreadsheets, opening a CSV, a schema from SQL, the code editor, the Terminal, Python, a Node.js server and the code visualizer. Pick one and it starts a new file, open in that tool. The search box finds a tool by name.</p>
     </> },
     { id: 'editor', title: 'The editor', body: <>
       <p>Opening a file shows the editor. Along the top:</p>

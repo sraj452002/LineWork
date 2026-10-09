@@ -87,6 +87,10 @@ The Code view's **Run** button, **Terminal** and **Python** prompt run code in t
 - `curl` and `wget` run in the browser, so they can only fetch sites that allow cross-origin requests.
 - Native binaries, system packages (`apt-get`) and other languages need a real machine, which this in-browser setup doesn't provide.
 
+## Tools
+
+**Tools** in the home page's sidebar lists every tool, grouped (Diagrams, Docs & data, Code), and each one starts a new file open in that tool: the Code view can open straight into the Terminal, the Python prompt or the Visualize pane. See `src/components/Tools.jsx`.
+
 ## Spreadsheets
 
 The **Sheet** view keeps spreadsheets in the file (`file.sheets`): a grid with Excel-style formulas (`=SUM(B2:B9)`, `IF`, `ROUND`, `SUMIF`, `COUNTIF`, `VLOOKUP`, `$`-fixed references…), several sheets per file, copy and paste with Excel and Google Sheets, fill down, sort, number formats, and CSV import and export. **Show on canvas** (or **Insert → Spreadsheet**) draws a sheet on the diagram as a live table. The formula engine is `src/lib/sheet.js`; the view is `src/components/SheetView.jsx`.
@@ -106,6 +110,7 @@ src/
   components/
     Login.jsx           sign-in screen
     Home.jsx            templates, file list, create with AI
+    Tools.jsx           the Tools page: every tool, each starting a new file
     Editor.jsx          file view: tabs, export, doc/canvas split
     DocPane.jsx         markdown doc with AI writing help
     Canvas.jsx          pan, zoom, drag, code drawer, AI prompt

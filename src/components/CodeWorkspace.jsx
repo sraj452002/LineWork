@@ -3,6 +3,7 @@ import { downloads } from '../lib/ai.js';
 import { rid } from '../lib/utils.js';
 import { useUI } from './ui.jsx';
 import RunPanel from './RunPanel.jsx';
+import { SAMPLES } from '../lib/samples.js';
 import { dg } from '../lib/engines.js';
 
 const Visualizer = lazy(() => import('./Visualizer.jsx'));
@@ -14,21 +15,6 @@ const Visualizer = lazy(() => import('./Visualizer.jsx'));
 
 const EMPTY = { files: [], folders: [], open: [], active: null };
 const MAX_UPLOAD = 1_000_000;
-const SAMPLES = {
-  ts: { label: 'TypeScript', files: [
-    { path: 'README.md', text: '# Service\n\nNotes and code that go with this design.\n' },
-    { path: 'src/index.ts', text: "import { greet } from './greet';\n\nconsole.log(greet('Linework'));\n" },
-    { path: 'src/greet.ts', text: 'export function greet(name: string): string {\n  return `Hello, ${name}`;\n}\n' },
-  ] },
-  node: { label: 'Node.js web server', files: [
-    { path: 'package.json', text: JSON.stringify({ name: 'demo', private: true, type: 'module', scripts: { start: 'node server.js' } }, null, 2) + '\n' },
-    { path: 'server.js', text: "import { createServer } from 'node:http';\n\nconst port = 3000;\ncreateServer((req, res) => {\n  res.writeHead(200, { 'content-type': 'text/html' });\n  res.end('<h1>Hello from Node.js</h1><p>Edit server.js and run it again.</p>');\n}).listen(port, () => console.log(`Listening on http://localhost:${port}`));\n" },
-  ] },
-  py: { label: 'Python', files: [
-    { path: 'main.py', text: 'from stats import summary\n\nnumbers = [3, 1, 4, 1, 5, 9, 2, 6]\nprint("Numbers:", numbers)\nprint(summary(numbers))\n' },
-    { path: 'stats.py', text: 'from statistics import mean, median\n\n\ndef summary(xs):\n    return {"count": len(xs), "mean": mean(xs), "median": median(xs)}\n' },
-  ] },
-};
 // Short badges for the explorer and tabs, by extension.
 const BADGE = {
   js: ['JS', '#C9A400'], mjs: ['JS', '#C9A400'], cjs: ['JS', '#C9A400'], jsx: ['JSX', '#1E9BC2'], ts: ['TS', '#2F74C0'], tsx: ['TSX', '#1E9BC2'],
@@ -90,6 +76,14 @@ export default function CodeWorkspace({ file, update, visible }) {
   const VIZ_KEY = 'linework:code-viz';
   const [viz, setViz] = useState(() => { try { return localStorage.getItem(VIZ_KEY) === '1'; } catch (e) { return false; } });
   useEffect(() => { try { localStorage.setItem(VIZ_KEY, viz ? '1' : ''); } catch (e) {} }, [viz]);
+  // Opened from the Tools page: start in the Terminal, the Python prompt or the Visualize pane.
+  useEffect(() => {
+    const l = code.launch;
+    if (!l) return;
+    if (l === 'terminal' || l === 'python') { setPanelTab(l); setPanel(p => ({ ...p, open: true })); }
+    if (l === 'viz') setViz(true);
+    mut(c => { delete c.launch; });
+  }, [code.launch]); // eslint-disable-line react-hooks/exhaustive-deps
   const [running, setRunning] = useState(false);
   const runRef = useRef(null);
   const filesRef = useRef(files), foldersRef = useRef(folders);
