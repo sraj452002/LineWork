@@ -25,16 +25,16 @@ test('the Tools page lists every tool, and search narrows it', async ({ page }) 
   await page.keyboard.press('t');
   await expect(page.getByRole('navigation', { name: 'Files' }).getByRole('button', { name: /^Tools/ })).toHaveAttribute('aria-current', 'page');
   for (const g of ['Diagrams', 'Databases', 'Docs & spreadsheets', 'Code']) await expect(page.getByRole('heading', { name: g })).toBeVisible();
-  await expect(page.locator('.tool-card')).toHaveCount(17);
+  await expect(page.locator('.tool-card')).toHaveCount(18);
   // Each card says where it opens.
   await expect(page.locator('.tool-card').filter({ hasText: 'Open a .sql file' }).locator('.tool-view')).toHaveText('Canvas');
   // A category chip shows just that category.
   const cats = page.getByRole('group', { name: 'Categories' });
   await cats.getByRole('button', { name: /^Databases/ }).click();
-  await expect(page.locator('.tool-card')).toHaveCount(3);
+  await expect(page.locator('.tool-card')).toHaveCount(4);
   await expect(page.getByRole('heading', { name: 'Code' })).toHaveCount(0);
   await cats.getByRole('button', { name: /^All/ }).click();
-  await expect(page.locator('.tool-card')).toHaveCount(17);
+  await expect(page.locator('.tool-card')).toHaveCount(18);
   await page.getByRole('searchbox', { name: 'Search tools' }).fill('python');
   await expect(page.locator('.tool-card')).toHaveCount(1);
   await page.getByRole('searchbox', { name: 'Search tools' }).fill('zzz');

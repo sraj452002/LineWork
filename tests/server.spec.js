@@ -51,7 +51,7 @@ const file = (id, title, more = {}) => ({ id, title, diagrams: [], doc: '', upda
 
 test('accounts: sign up, sign in, wrong password, sign out', async () => {
   const a = client();
-  expect((await a.call('GET', '/server')).json).toMatchObject({ name: 'linework-server', features: ['versions', 'share', 'folders', 'ai-limits', '2fa'] });
+  expect((await a.call('GET', '/server')).json).toMatchObject({ name: 'linework-server', features: ['versions', 'share', 'folders', 'ai-limits', '2fa', 'db'] });
   expect((await a.call('GET', '/auth/me')).status).toBe(401);
   expect((await a.call('POST', '/auth/signup', { email: 'ada@example.com', password: 'short' })).json.error).toBe('weak_password');
   const up = await a.call('POST', '/auth/signup', { email: ' Ada@Example.com ', password: 'correct horse', name: 'Ada' });

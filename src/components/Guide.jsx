@@ -205,6 +205,19 @@ function appGuide() {
         <li>Everything runs in your browser, so it needs Chrome, Edge or Firefox on a computer. Files programs create (like <code>package.json</code> or <code>package-lock.json</code>) appear in the Explorer; installed packages (<code>node_modules</code>) don't, and are installed again after the page reloads.</li>
       </ul>
     </> },
+    { id: 'database', title: 'Live databases', body: <>
+      <p>The <b>Database</b> view (in the <b>View</b> menu, or <b>Tools → Connect to a database</b>) connects to a real database so you can see its schema and data as they are right now.</p>
+      <ul>
+        <li><b>PostgreSQL</b> (also Supabase, Neon, RDS, CockroachDB), <b>MySQL / MariaDB</b> (also PlanetScale), <b>SQL Server</b> (also Azure SQL) and <b>MongoDB</b> (also Atlas): paste the connection string, or fill in the host, database and user. <b>Test</b> checks it before saving.</li>
+        <li><b>SQLite files</b> open right in your browser; nothing is uploaded. After changing data, <b>⋯ → Download .sqlite file</b> saves it.</li>
+        <li><b>Schema</b> lists every table with its columns, keys and links. <b>Draw on canvas</b> turns it into a database schema diagram; draw again, or use the diagram's <b>⋯ → Refresh from the database</b>, after the database changes.</li>
+        <li><b>Data</b> shows a table's rows: click a column to sort, add filters, page through. Double-click a cell to change it, <b>Add row</b> to insert, the bin to delete (tables need a primary key for this).</li>
+        <li><b>Query</b> runs SQL (or MongoDB commands like <code>db.users.find({"{"} age: {"{"} $gt: 30 {"}"} {"}"})</code>) with <K>Ctrl Enter</K>. Results can go to a CSV or straight into a sheet. Statements that drop tables or change every row ask first.</li>
+        <li>Tick <b>Read-only</b> on a connection to make sure nothing can change: PostgreSQL runs everything in a read-only transaction, and the others only allow reading statements.</li>
+        <li>Connections are saved in this browser only, never inside files (which can be shared). Passwords are kept only if you tick <b>Remember the password</b>.</li>
+        <li>Connections go through Linework's server, so you need to be signed in, and the database must be reachable from the internet. Databases on your own computer or office network are refused; to use one, run the Linework server inside that network with <code>DB_ALLOW_PRIVATE=1</code>. On the hosted site each request has about 9 seconds.</li>
+      </ul>
+    </> },
     { id: 'sheets', title: 'Spreadsheets', body: <>
       <p>The <b>Sheet</b> view works like Excel: a ribbon (<b>File</b>, <b>Home</b>, <b>Insert</b>, <b>Formulas</b>, <b>Data</b>, <b>View</b>), the name box and formula bar, and sheets as tabs along the bottom. Use it for costs, capacity estimates, schedules and test data.</p>
       <ul>

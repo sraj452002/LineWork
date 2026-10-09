@@ -23,10 +23,15 @@
     "exceljs": "^4.4.0",
     "express": "^5.1.0",
     "monaco-editor": "^0.57.0",
+    "mongodb": "^6.21.0",
+    "mssql": "^11.0.2",
+    "mysql2": "^3.24.5",
     "nodemailer": "^7.0.6",
+    "pg": "^8.23.1",
     "qrcode": "^1.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "sql.js": "^1.14.2",
     "sucrase": "^3.35.1"
   },
   "devDependencies": {

@@ -18,3 +18,8 @@
   [headers.values]
     Cross-Origin-Opener-Policy = "same-origin"
     Cross-Origin-Embedder-Policy = "credentialless"
+
+# The database drivers ship as they are rather than bundled (they load optional parts at run time).
+[functions]
+  node_bundler = "esbuild"
+  external_node_modules = ["pg", "mysql2", "mssql", "tedious", "mongodb"]
