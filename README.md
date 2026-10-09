@@ -87,6 +87,10 @@ The Code view's **Run** button, **Terminal** and **Python** prompt run code in t
 - `curl` and `wget` run in the browser, so they can only fetch sites that allow cross-origin requests.
 - Native binaries, system packages (`apt-get`) and other languages need a real machine, which this in-browser setup doesn't provide.
 
+## Spreadsheets
+
+The **Sheet** view keeps spreadsheets in the file (`file.sheets`): a grid with Excel-style formulas (`=SUM(B2:B9)`, `IF`, `ROUND`, `SUMIF`, `COUNTIF`, `VLOOKUP`, `$`-fixed references…), several sheets per file, copy and paste with Excel and Google Sheets, fill down, sort, number formats, and CSV import and export. **Show on canvas** (or **Insert → Spreadsheet**) draws a sheet on the diagram as a live table. The formula engine is `src/lib/sheet.js`; the view is `src/components/SheetView.jsx`.
+
 ## Visualizing code
 
 The Code view's **Visualize** pane draws Python, JavaScript and TypeScript with Linework's own diagram engines: a flowchart of a function, a class diagram (as a database-schema diagram), and an import graph (as an architecture diagram). Any of them can be added to the file as a canvas tab.
@@ -109,6 +113,7 @@ src/
     RunPanel.jsx        Output, Terminal, Python prompt and Preview (xterm.js)
     ServerDialogs.jsx   Share links, version history and shared-file page (server/ only)
     Visualizer.jsx      Visualize pane: code diagrams and step-through
+    SheetView.jsx       Sheet view: spreadsheets with formulas
     ui.jsx              menus, dialogs, toasts, theme button
   lib/
     auth.js             accounts: Netlify Identity, or the Linework server
@@ -120,6 +125,7 @@ src/
     monaco.js           loads Monaco and its language workers
     runtime.js          running code: Node.js (WebContainers) and Python (Pyodide)
     codeviz.js          reads code into flowcharts, class and import diagrams; records JS runs
+    sheet.js            spreadsheet formulas, CSV, and sheets drawn on the canvas
     theme.js            light, dark or system theme, remembered
     python.worker.js    Pyodide in a web worker
     shell/lw.cjs        the Terminal's extra commands (grep, git, curl, python, code…)

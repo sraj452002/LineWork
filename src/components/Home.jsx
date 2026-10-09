@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { TEMPLATES, TYPES, dg, newFile, thumb } from '../lib/engines.js';
 import { LANG, NO_AI, copyFor, sampleP } from '../lib/ai.js';
 import { ago, rid } from '../lib/utils.js';
+import { setSheets } from '../lib/sheet.js';
 import { Brand, ThemeButton, useUI } from './ui.jsx';
 
 const IC = {
@@ -39,7 +40,7 @@ const thumbs = new Map();
 function fileThumb(f, theme) {
   const d = f.diagrams.find(x => (x.code && x.code.trim()) || (x.shapes && x.shapes.length));
   const key = f.id + ':' + f.updated + ':' + theme;
-  if (!thumbs.has(key)) { try { thumbs.set(key, d ? thumb(d) : ''); } catch (e) { thumbs.set(key, ''); } }
+  if (!thumbs.has(key)) { try { setSheets(f.sheets); thumbs.set(key, d ? thumb(d) : ''); } catch (e) { thumbs.set(key, ''); } }
   return thumbs.get(key);
 }
 

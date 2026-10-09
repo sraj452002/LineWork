@@ -204,6 +204,17 @@ function appGuide() {
         <li>Everything runs in your browser, so it needs Chrome, Edge or Firefox on a computer. Files programs create (like <code>package.json</code> or <code>package-lock.json</code>) appear in the Explorer; installed packages (<code>node_modules</code>) don't, and are installed again after the page reloads.</li>
       </ul>
     </> },
+    { id: 'sheets', title: 'Spreadsheets', body: <>
+      <p>The <b>Sheet</b> view keeps tables of numbers and text in the file, like Excel: costs, capacity estimates, schedules, test data. A file can hold several sheets, as tabs along the bottom.</p>
+      <ul>
+        <li>Click a cell and type to replace it, or double-click (or <K>Enter</K>, <K>F2</K>) to change it. <K>Enter</K> and <K>Tab</K> move on; arrow keys move around, and <K>Shift</K> with them (or a drag) selects a block.</li>
+        <li>Start with <code>=</code> for a formula: <code>=B2*C2</code>, <code>=SUM(D2:D9)</code>, <code>=AVERAGE(…)</code>, <code>=IF(A2&gt;100,"high","ok")</code>, <code>=ROUND(…,2)</code>, <code>=SUMIF</code>, <code>=COUNTIF</code>, <code>=VLOOKUP</code> and more; the formula bar suggests names as you type. <code>$A$1</code> stays fixed when copied.</li>
+        <li><K>Ctrl C</K> / <K>Ctrl V</K> copy and paste, also to and from Excel and Google Sheets; formulas pasted inside Linework adjust their references. <K>Ctrl D</K> fills down, <K>Ctrl Z</K> undoes, <K>Delete</K> clears.</li>
+        <li>Right-click for inserting and deleting rows and columns and sorting; the toolbar has bold, alignment and number formats (decimals, percent, currency). Drag a column's edge to resize it.</li>
+        <li>Selecting several cells shows their sum, average and count at the bottom right. <b>Import CSV</b> and <b>Export CSV</b> move data in and out.</li>
+        <li><b>Show on canvas</b> (or <b>Insert → Spreadsheet</b> on the canvas) puts the sheet on the diagram as a table that stays up to date. Double-click it to open the sheet.</li>
+      </ul>
+    </> },
     { id: 'visualize', title: 'Visualizing code', body: <>
       <p>The <b>Visualize</b> button (next to <b>Run</b>) opens a pane beside the editor that draws your Python, JavaScript and TypeScript code.</p>
       <ul>

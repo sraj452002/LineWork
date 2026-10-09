@@ -9,6 +9,7 @@ import { HELP } from '../lib/help.js';
 import { imageKeys, loadImages, saveImage, useImages } from '../lib/images.js';
 import { isPackIcon, loadIconPacks, useIconPacks } from '../lib/iconpacks.js';
 import { esc, rid, slug, trunc } from '../lib/utils.js';
+import { colName, newSheet, usedRange } from '../lib/sheet.js';
 import {
   DEVICES, KEEP_RATIO, SHAPE_LIST, bbox, contains, drawn, dropDeadLinks, editBox, handlesMarkup,
   brandColor, hasText, icons, isBox, shapesDoc, isLink, make, marqueeMarkup, measure, moved, outlinesMarkup, overlaps, resized, resolveLinks, selKey,
@@ -108,7 +109,7 @@ const SHORTCUTS = [
 // One canvas per diagram. The parent keys it by diagram id, so switching tabs starts fresh.
 export const AI_W = 380; // width of the AI chat panel on wide screens
 
-export default function Canvas({ file, d, visible, updateDiagram, updateFile, history, onAddDiagram, onGuide, aiOpen, onAIOpen }) {
+export default function Canvas({ file, d, visible, updateDiagram, updateFile, history, onAddDiagram, onGuide, aiOpen, onAIOpen, onOpenSheet, placeSheet, onPlaced }) {
   const { toast, theme, popup } = useUI();
   const svgRef = useRef(null), stageRef = useRef(null), fileRef = useRef(null);
   const dRef = useRef(d);
@@ -181,7 +182,7 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
   // A selected column only counts while its table is the selection and the column still exists.
   const field = selField && sel === selField.t && ctx.m.tables && ctx.m.tables.get(sel)?.fields.some(x => x.name === selField.f) ? selField : null;
   const markup = useMemo(() => ctx.E.markup(ctx, sel, field), [ctx, sel, packs, field && field.t, field && field.f]); // eslint-disable-line react-hooks/exhaustive-deps
-  const layers = useMemo(() => shapesMarkup(shapes, { editing }), [shapes, editing, theme, imgV, packs]); // eslint-disable-line react-hooks/exhaustive-deps
+  const layers = useMemo(() => shapesMarkup(shapes, { editing }), [shapes, editing, theme, imgV, packs, file.sheets]); // eslint-disable-line react-hooks/exhaustive-deps
   const overlay = (() => {
     if (editing) return '';
     const k = view.k;
@@ -446,6 +447,19 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
     setSelection([s.id]); setTool('select');
     return s;
   };
+  const placeSheetNow = id => {
+    const sh = (file.sheets || []).find(x => x.id === id);
+    if (!sh) return;
+    const u = usedRange(sh) || { c1: 2, r1: 2 };
+    const cw = Array.from({ length: Math.min(u.c1, 11) + 1 }, (_, c) => (sh.widths || {})[colName(c)] || 110).reduce((a, b) => a + b, 0);
+    place('sheet', { sheet: sh.id, w: Math.round(Math.min(900, Math.max(240, cw * .85))), h: Math.round(26 + Math.min(u.r1 + 1, 30) * 26) });
+  };
+  // A sheet sent here from the Sheet view ("Show on canvas"), sized to its cells.
+  useEffect(() => {
+    if (!placeSheet || !visible) return;
+    placeSheetNow(placeSheet);
+    onPlaced && onPlaced();
+  }, [placeSheet, visible]); // eslint-disable-line react-hooks/exhaustive-deps
   const patchSel = p => {
     if (!selShapes.length) return;
     putShapes(baseShapes().map(s => (selSet.has(s.id) ? { ...s, ...p } : s)));
@@ -711,6 +725,12 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
       const id = sEl.dataset.shape, s = shapes.find(x => x.id === id);
       if (!s) return;
       const now = Date.now(), lt = prevTap;
+      // Double-click: a sheet opens in the Sheet view; text is edited in place.
+      if (!e.shiftKey && lt.id === id && now - lt.t < 400 && s.t === 'sheet') {
+        lastTap.current = { id: null, t: 0 }; drag.current = null;
+        onOpenSheet && onOpenSheet(s.sheet);
+        return;
+      }
       if (!e.shiftKey && lt.id === id && now - lt.t < 400 && hasText(s)) {
         lastTap.current = { id: null, t: 0 };
         startEdit(s); drag.current = null;
@@ -1081,6 +1101,14 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
       key: 'dev-' + x.v, svg: DEVICE_ICON[x.v], label: x.name, act: () => place('device', { v: x.v }),
     })) },
     { key: 'figure', icon: 'frame', label: 'Figure', note: 'A labeled frame to group things', tile: true, act: () => place('frame', { text: 'Figure' }) },
+    { key: 'sheet', icon: 'sheet', label: 'Spreadsheet', note: 'A table with formulas, like Excel', children: [
+      ...(file.sheets || []).map(sh => ({ key: 'shx-' + sh.id, icon: 'sheet', label: sh.name, note: 'Show this sheet', act: () => placeSheetNow(sh.id) })),
+      { key: 'sh-new', icon: 'plus', label: 'New sheet', note: 'An empty sheet; double-click it to fill it in', act: () => {
+        const sh = newSheet(`Sheet ${(file.sheets || []).length + 1}`);
+        updateFile(c => { c.sheets = [...(c.sheets || []), sh]; });
+        place('sheet', { sheet: sh.id, w: 440, h: 26 + 6 * 26 });
+      } },
+    ] },
     { key: 'codeblock', icon: 'codeblock', label: 'Code block', note: 'A snippet of code', tile: true, act: () => place('code') },
     { key: 'image', icon: 'image', label: 'Image', note: 'Upload a picture', tile: true, act: () => fileRef.current?.click() },
   ];

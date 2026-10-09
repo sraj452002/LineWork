@@ -2,6 +2,7 @@ import { C, PAL, GLYPH } from './engines.js';
 import { esc, rid, trunc } from './utils.js';
 import { imageMissing, imageSrc } from './images.js';
 import { isPackIcon, packIcon } from './iconpacks.js';
+import { addr, colName, evaluate, formatValue, isErr, sheetById, usedRange } from './sheet.js';
 
 /* Freehand objects drawn on top of a diagram: shapes, lines, text, icons, frames, images.
    Box objects have {x,y,w,h}; lines, arrows and pen strokes have pts:[[x,y],...].
@@ -74,7 +75,7 @@ export const DEVICES = [
   {v:'browser', name:'Browser', w:880, h:560}, {v:'desktop', name:'Desktop', w:900, h:640},
 ];
 const SIZE = {rect:[160,90], ellipse:[140,100], diamond:[150,110], triangle:[140,110], hexagon:[160,96], para:[170,90],
-  cylinder:[120,130], pill:[170,70], trapezoid:[170,96], doc:[160,110], star:[130,124], sticky:[180,160], frame:[480,320], code:[380,210], icon:[56,56]};
+  cylinder:[120,130], pill:[170,70], trapezoid:[170,96], doc:[160,110], star:[130,124], sticky:[180,160], frame:[480,320], code:[380,210], icon:[56,56], sheet:[440,200]};
 const CODE_SAMPLE = 'function greet(name) {\n  return `Hello, ${name}`;\n}';
 
 // c is an index into these names (0 = ink, 1-6 = the diagram palette, 7-8 below) or a custom "#rrggbb".
@@ -491,6 +492,42 @@ function device(s, col){
     + [18, 34, 50].map(x => `<circle cx="${x}" cy="18" r="5" fill="${C.line}"/>`).join('')
     + `<rect x="70" y="9" width="${Math.max(20, w - 90)}" height="18" rx="9" fill="${C.paper}" stroke="${C.line}"/>`;
 }
+// A spreadsheet from the file (file.sheets, via setSheets), drawn as a table: its used cells, or s.range.
+const SHEET_TITLE = 26;
+function sheetBlock(s, col){
+  const {w, h} = s, sh = sheetById(s.sheet), frame = s.c ? col : C.line;
+  let m = `<rect width="${w}" height="${h}" rx="8" fill="${C.surface}" stroke="${frame}" stroke-width="1.2"/>`;
+  if(!sh) return m + `<text x="${w/2}" y="${h/2 + 5}" text-anchor="middle" font-size="13" fill="${C.ink2}">This sheet was deleted</text>`;
+  const u = (s.range && /^[A-Z]+\d+:[A-Z]+\d+$/.test(s.range) ? (() => { const [a, b] = s.range.split(':').map(x => /^([A-Z]+)(\d+)$/.exec(x)); const ci = t => [...t].reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0) - 1; return {c0:ci(a[1]), r0:+a[2] - 1, c1:ci(b[1]), r1:+b[2] - 1}; })() : usedRange(sh)) || {c0:0, r0:0, c1:2, r1:2};
+  const c0 = 0, c1 = Math.min(u.c1, u.c0 + 11), r0 = Math.min(u.r0, 0), r1 = Math.min(u.r1, r0 + 29);
+  const val = evaluate(sh), fmt = sh.fmt || {};
+  const widths = []; for(let c = c0; c <= c1; c++) widths.push((sh.widths || {})[colName(c)] || 110);
+  const k = w / widths.reduce((a, b) => a + b, 0), nr = r1 - r0 + 1, rh = (h - SHEET_TITLE) / nr;
+  const fs = Math.max(8, Math.min(14, rh * .52));
+  m += `<path d="M1 ${SHEET_TITLE}H${w - 1}" stroke="${C.line}"/><path d="M8 0h${w - 16}a8 8 0 0 1 8 8v${SHEET_TITLE - 8}H0V8a8 8 0 0 1 8-8z" fill="${col}" fill-opacity=".08"/>`
+    + `<rect x="10" y="8" width="10" height="10" rx="2" fill="none" stroke="${col}" stroke-width="1.4"/><path d="M10 13h10M15 8v10" stroke="${col}" stroke-width="1.2"/>`
+    + `<text x="28" y="17.5" font-size="12.5" font-weight="650" fill="${C.ink}">${esc(trunc(sh.name || 'Sheet', Math.max(4, Math.floor((w - 40) / 7))))}</text>`;
+  // The first row reads as a header when it holds text.
+  const headRow = [...Array(c1 - c0 + 1)].some((_, i) => typeof val(addr(c0 + i, r0)) === 'string' && val(addr(c0 + i, r0)) !== '');
+  if(headRow) m += `<rect x="1" y="${SHEET_TITLE}" width="${w - 2}" height="${rh}" fill="${C.ink}" fill-opacity=".04"/>`;
+  let x = 0;
+  widths.forEach((cw, i) => {
+    const cx = x, ww = cw * k;
+    if(i) m += `<path d="M${cx} ${SHEET_TITLE}V${h}" stroke="${C.line}" stroke-opacity=".8"/>`;
+    for(let r = r0; r <= r1; r++){
+      const a = addr(c0 + i, r), v = val(a), f = fmt[a] || {}, t = formatValue(v, f.nf);
+      if(t === '') continue;
+      const max = Math.max(1, Math.floor((ww - 10) / (fs * CW))), txt = t.length > max ? t.slice(0, Math.max(1, max - 1)) + '…' : t;
+      const right = f.al ? f.al === 'right' : typeof v === 'number', center = f.al === 'center';
+      const tx = center ? cx + ww / 2 : right ? cx + ww - 6 : cx + 6, ty = SHEET_TITLE + (r - r0) * rh + rh / 2 + fs * .35;
+      const bold = f.b || (headRow && r === r0);
+      m += `<text x="${f1(tx)}" y="${f1(ty)}" font-size="${f1(fs)}"${center ? ' text-anchor="middle"' : right ? ' text-anchor="end"' : ''}${bold ? ' font-weight="650"' : ''} fill="${isErr(v) ? C.err || '#a8322d' : C.ink}">${esc(txt)}</text>`;
+    }
+    x += ww;
+  });
+  for(let r = 1; r < nr; r++) m += `<path d="M1 ${f1(SHEET_TITLE + r * rh)}H${w - 1}" stroke="${C.line}" stroke-opacity=".8"/>`;
+  return m;
+}
 function one(s, opt){
   const col = colorOf(s.c), open = `<g data-shape="${esc(s.id)}"`, text = opt.editing === s.id ? '' : (s.text || '');
   if(s.t === 'line' || s.t === 'arrow'){
@@ -541,6 +578,9 @@ function one(s, opt){
       m += lines(text.split('\n').slice(0, max).map(l => l.length > cw ? l.slice(0, cw - 1) + '…' : l), {x:12, y:34, fs, fill:C.ink, mono:true});
       break;
     }
+    case 'sheet':
+      m = sheetBlock(s, col);
+      break;
     case 'image':
       m = imageSrc(s) ? `<image href="${esc(imageSrc(s))}" width="${w}" height="${h}" preserveAspectRatio="none"/>`
         : `<rect width="${w}" height="${h}" rx="6" fill="${C.surface}" stroke="${C.line}" stroke-dasharray="6 5"/><text x="${w/2}" y="${h/2 + 5}" text-anchor="middle" font-size="13" fill="${C.ink2}">${imageMissing(s) ? 'Image not found in this browser' : 'Loading image…'}</text>`;

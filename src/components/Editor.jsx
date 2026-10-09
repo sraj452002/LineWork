@@ -4,12 +4,14 @@ import { downloads } from '../lib/ai.js';
 import { imageKeys, loadImages } from '../lib/images.js';
 import { isPackIcon, loadIconPacks } from '../lib/iconpacks.js';
 import { clone, rid, slug, trunc } from '../lib/utils.js';
+import { setSheets } from '../lib/sheet.js';
 import DocPane from './DocPane.jsx';
 import Canvas from './Canvas.jsx';
 import { ThemeButton, useUI } from './ui.jsx';
 
 // The code editor (Monaco) is large, so it loads the first time the Code view opens.
 const CodeWorkspace = lazy(() => import('./CodeWorkspace.jsx'));
+const SheetView = lazy(() => import('./SheetView.jsx'));
 
 const narrow = () => innerWidth <= 760;
 const AI_KEY = 'linework:ai-open';
@@ -35,6 +37,11 @@ export default function Editor({ file, update, saveState, onBack, onRename, onDu
   const onCanvas = view === 'canvas' || view === 'both';
   const [codeSeen, setCodeSeen] = useState(view === 'code'); // keep the editor mounted once opened
   useEffect(() => { if (view === 'code') setCodeSeen(true); }, [view]);
+  // Spreadsheets: the Sheet view, and canvas blocks that show a sheet (drawn from this registry).
+  setSheets(file.sheets);
+  const [placeSheet, setPlaceSheet] = useState(null);
+  const openSheet = id => update(c => { if (id) c.activeSheet = id; c.view = 'sheet'; });
+  const sheetToCanvas = id => { setPlaceSheet(id); update(c => { c.view = 'canvas'; }); };
 
   const setView = v => update(c => { c.view = v; });
   const activate = i => update(c => { c.active = i; });
@@ -129,6 +136,7 @@ export default function Editor({ file, update, saveState, onBack, onRename, onDu
           {!isNarrow && <button aria-pressed={view === 'both'} onClick={() => setView('both')}>Both</button>}
           <button aria-pressed={view === 'canvas'} onClick={() => setView('canvas')}>Canvas</button>
           <button aria-pressed={view === 'code'} onClick={() => setView('code')}>Code</button>
+          <button aria-pressed={view === 'sheet'} onClick={() => setView('sheet')}>Sheet</button>
         </div>
         {onCanvas && (
           <button className={'btn ai-toggle' + (aiOpen ? ' on' : '')} aria-pressed={aiOpen} onClick={() => setAiOpen(!aiOpen)}
@@ -170,8 +178,15 @@ export default function Editor({ file, update, saveState, onBack, onRename, onDu
               onClick={e => popup(e.currentTarget, Object.entries(TYPES).map(([k, v]) => ({ label: v.name, act: () => addDiagram(k) })))}>+ Diagram</button>
           </div>
           <Canvas key={d.id} file={file} d={d} visible={onCanvas} updateDiagram={updateDiagram} updateFile={update} history={history} onAddDiagram={addDiagram} onGuide={onGuide}
-            aiOpen={aiOpen} onAIOpen={setAiOpen} />
+            aiOpen={aiOpen} onAIOpen={setAiOpen} onOpenSheet={openSheet} placeSheet={placeSheet} onPlaced={() => setPlaceSheet(null)} />
         </div>
+        {view === 'sheet' && (
+          <div className="sheetpane">
+            <Suspense fallback={<div className="cw-loading">Loading…</div>}>
+              <SheetView file={file} update={update} visible onAddToCanvas={sheetToCanvas} />
+            </Suspense>
+          </div>
+        )}
         {codeSeen && (
           <div className="codepane">
             <Suspense fallback={<div className="cw-loading">Loading the code editor…</div>}>
