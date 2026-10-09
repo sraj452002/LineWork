@@ -207,8 +207,9 @@ export default function CodeWorkspace({ file, update, visible }) {
     }
     // Focus the editor when a file is opened or the view shown, not when files change underneath
     // (a program writing files must not pull focus from the terminal).
-    const key = active + '|' + visible;
-    if (visible && focusKey.current !== key) ed.focus();
+    // Nor take it from the Terminal or a side pane when the editor finishes loading after the person moved on.
+    const key = active + '|' + visible, there = document.activeElement?.closest?.('.cw-panel, .cw-viz');
+    if (visible && focusKey.current !== key && !there) ed.focus();
     focusKey.current = key;
     shown.current = active;
   }, [active, monaco, files, visible]);
