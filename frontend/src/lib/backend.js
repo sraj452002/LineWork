@@ -41,7 +41,7 @@ export async function api(path, { method = 'GET', body } = {}) {
 }
 
 // The server's user, in the shape the rest of the app uses.
-export const asUser = u => ({ id: u.id, email: u.email, name: u.name, userMetadata: { full_name: u.name, folders: u.folders || [] } });
+export const asUser = u => ({ id: u.id, email: u.email, name: u.name, storage: u.storage || null, userMetadata: { full_name: u.name, folders: u.folders || [] } });
 
 /* Version history */
 export const listVersions = id => api(`/files/${encodeURIComponent(id)}/versions`).then(r => r.versions);

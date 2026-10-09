@@ -58,6 +58,7 @@ export function accountRoutes(api, { store, mailer, allowSignup, requireVerified
     folders: JSON.parse(s.folders.get(u.id)?.data || '[]'),
     hasPassword: Boolean(u.pass), totp: Boolean(u.totp_secret),
     identities: s.identities.all(u.id).map(i => ({ provider: i.provider, email: i.email })),
+    storage: store.storage(u.id),
   } });
   const newSecretToken = (user, kind, ttl) => {
     const t = newToken();

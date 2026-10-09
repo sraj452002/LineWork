@@ -13,7 +13,7 @@ import { refreshAI } from './lib/ai.js';
 import { clone, rid } from './lib/utils.js';
 import { dg } from './lib/engines.js';
 import { serverInfo, sharedToken } from './lib/backend.js';
-import { AccountDialog, HistoryDialog, ShareDialog, SharedFile } from './components/ServerDialogs.jsx';
+import { AccountDialog, HistoryDialog, ShareDialog, SharedFile, StorageWarning, storageLevel } from './components/ServerDialogs.jsx';
 
 export default function App() {
   return <UIProvider>{sharedToken() ? <Shared /> : <Main />}</UIProvider>;
@@ -67,6 +67,9 @@ function Workspace({ session, onSignOut, onUser }) {
   const [openId, setOpenId] = useState(null);
   const [guide, setGuide] = useState(null); // null | 'app' | 'erd'
   const [saveState, setSaveState] = useState(cloud ? 'Syncing' : 'Saved');
+  // Cloud: the account's storage ({used, limit}), from each save; full once a save was refused for room.
+  const [storage, setStorage] = useState(cloud ? session.user.storage : null);
+  const [full, setFull] = useState(false), [warned, setWarned] = useState(false);
   // With the Linework server: share links and version history (for account files).
   const [server, setServer] = useState(null);
   useEffect(() => { if (cloud) serverInfo().then(setServer); }, [cloud]);
@@ -89,21 +92,24 @@ function Workspace({ session, onSignOut, onUser }) {
     const c = book.current, fs = filesRef.current, ids = new Set(fs.map(f => f.id));
     const puts = fs.filter(f => c.synced[f.id] !== f.updated);
     const dels = [...new Set([...(c.deleted || []), ...Object.keys(c.synced).filter(id => !ids.has(id))])];
-    let failed = false;
+    let failed = false, noRoom = false;
+    const took = r => { if (r && r.storage) { setStorage(r.storage); setFull(false); } };
     if (puts.length || dels.length) setSaveState('Saving');
+    // Deletes first: they make room in the account's storage.
+    for (const id of dels) {
+      try { took(await removeFile(id)); const { [id]: _, ...rest } = c.synced; c.synced = rest; c.deleted = (c.deleted || []).filter(x => x !== id); }
+      catch (e) { failed = true; c.deleted = [...new Set([...(c.deleted || []), id])]; }
+    }
     for (const f of puts) {
-      try { await putFile(f); c.synced = { ...c.synced, [f.id]: f.updated }; }
+      try { took(await putFile(f)); c.synced = { ...c.synced, [f.id]: f.updated }; }
       catch (e) {
         failed = true;
         if (e.code === 'signed_out') { toast('You’ve been signed out. Sign in again to keep saving to your account.'); break; }
+        if (e.code === 'storage_full') { noRoom = true; if (e.storage) setStorage(e.storage); setFull(true); break; }
         if (e.code === 'too_large') toast(`“${f.title}” is too large to save to your account. Remove some images from it.`);
       }
     }
-    for (const id of dels) {
-      try { await removeFile(id); const { [id]: _, ...rest } = c.synced; c.synced = rest; c.deleted = (c.deleted || []).filter(x => x !== id); }
-      catch (e) { failed = true; c.deleted = [...new Set([...(c.deleted || []), id])]; }
-    }
-    setSaveState(failed ? 'Offline' : 'Saved');
+    setSaveState(noRoom ? 'Storage full' : failed ? 'Offline' : 'Saved');
     syncing.current = false;
     if (again.current) { again.current = false; sync(); }
     else if (failed) retry.current = setTimeout(sync, 15000);
@@ -248,6 +254,9 @@ function Workspace({ session, onSignOut, onUser }) {
         </div>
       : <div className="boot" aria-busy="true" />;
   }
+  // Nearly full: a notice that can be put away; full: one that stays until there's room again.
+  const level = full ? 'full' : storageLevel(storage);
+  const warning = cloud && (level === 'full' || (level && !warned)) && <StorageWarning storage={storage} full={full} onClose={() => setWarned(true)} />;
   if (guide) {
     return (
       <Guide which={guide} onWhich={setGuide} onClose={() => setGuide(null)}
@@ -267,6 +276,7 @@ function Workspace({ session, onSignOut, onUser }) {
         onDelete={() => remove(file)}
         onGuide={setGuide} />
       {dialogs}
+      {warning}
     </>);
   }
   return (<>
@@ -275,5 +285,6 @@ function Workspace({ session, onSignOut, onUser }) {
       onDuplicate={duplicate} onDelete={remove} onSignOut={onSignOut} onGuide={setGuide} serverProps={serverProps}
       onAccount={server && cloud ? () => setDialog({ type: 'account' }) : null} />
     {dialogs}
+    {warning}
   </>);
 }

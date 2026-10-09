@@ -8,6 +8,35 @@ import Editor from './Editor.jsx';
 /* What the Linework API (backend/) adds: share links, version history, the page a share link opens,
    and account settings (name, password, two-step verification, Google/GitHub). */
 
+/* ---- storage: how much of the account's allowance its files, versions and pictures use ---- */
+const size = b => (b >= 2 ** 30 ? `${(b / 2 ** 30).toFixed(2).replace(/\.?0+$/, '')} GB` : `${(b / 2 ** 20).toFixed(1).replace(/\.0$/, '')} MB`);
+// {used, limit} in bytes; limit 0 means no limit. Nearly full from 90%.
+export const storageLevel = s => (!s || !s.limit ? null : s.used >= s.limit ? 'full' : s.used >= s.limit * 0.9 ? 'nearly' : null);
+export function StorageMeter({ storage }) {
+  const pct = Math.min(100, (storage.used / storage.limit) * 100);
+  return (
+    <div className="storage">
+      <div className="storage-bar" role="meter" aria-label="Storage used" aria-valuemin={0} aria-valuemax={storage.limit} aria-valuenow={storage.used}>
+        <span className={storageLevel(storage) ? 'warn' : ''} style={{ width: `${pct}%` }} />
+      </div>
+      <p>{size(storage.used)} of {size(storage.limit)} used</p>
+    </div>
+  );
+}
+// The notice across the bottom when the account's storage is nearly or completely full.
+export function StorageWarning({ storage, full, onClose }) {
+  const level = full ? 'full' : storageLevel(storage);
+  if (!level) return null;
+  return (
+    <div className={'storage-warn ' + level} role="alert">
+      <span>{level === 'full'
+        ? `Your storage is full (${size(storage.limit)}). Changes aren’t being saved: delete some files or pictures to save again.`
+        : `You’ve used ${size(storage.used)} of your ${size(storage.limit)}. Delete files or pictures you don’t need, so saving doesn’t stop.`}</span>
+      {level !== 'full' && <button className="btn" onClick={onClose}>OK</button>}
+    </div>
+  );
+}
+
 function Modal({ title, onClose, children, wide }) {
   const ref = useRef(null);
   useEffect(() => { ref.current?.querySelector('button, input, select')?.focus(); }, []);
@@ -225,6 +254,12 @@ export function AccountDialog({ onUser, onClose }) {
             <button className="btn" disabled={busy || name === (me.name || '')} onClick={saveName}>Save name</button>
           </div>
         </section>
+
+        {me.storage && me.storage.limit > 0 && <section aria-labelledby="acct-storage">
+          <h4 id="acct-storage">Storage</h4>
+          <StorageMeter storage={me.storage} />
+          <p>Your files, their earlier versions and pictures. When it’s nearly full, the oldest versions are removed to make room; when it’s full, saving stops until you delete something.</p>
+        </section>}
 
         <section aria-labelledby="acct-pw">
           <h4 id="acct-pw">{me.hasPassword ? 'Password' : 'Set a password'}</h4>

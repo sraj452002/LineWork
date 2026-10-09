@@ -29,6 +29,9 @@ services:
         sync: false
       - key: ANTHROPIC_API_KEY
         sync: false
+      # Each account's storage in Google Drive, in MB (2 GB).
+      - key: STORAGE_LIMIT_MB
+        value: "2048"
       # Only the accounts in DEFAULT_USERS (and ones made before): nobody new can sign up.
       - key: ALLOW_SIGNUP
         value: "false"

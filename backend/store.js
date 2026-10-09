@@ -5,20 +5,24 @@ import { createHash } from 'node:crypto';
    meta.json            accounts, sessions, sign-in links, Google/GitHub identities, folders, share links,
                         AI usage, and the index of everyone's files and versions. Small: it's held in memory
                         and written back after every change (changes close together go in one write).
-   file.<user>.<id>.json      a saved file, as the app sends it.
-   version.<n>.json           one version of a file.
-   image.<user>.<key>.json    a picture on a canvas ({data: a data: URL}); files keep only its key.
+   <email>/             each account's own folder (named by its email), with:
+     file.<id>.json       a saved file, as the app sends it.
+     version.<n>.json     one version of a file.
+     image.<key>.json     a picture on a canvas ({data: a data: URL}); files keep only its key.
    meta.json also keeps each account's own settings (`userdata`: saved database connections, query history).
+
+   Each account may keep up to `storageLimit` bytes (files, their versions and pictures, counted from the
+   sizes in meta.json). To make room the oldest versions go first; past that, saving throws StorageFull.
 
    One server process owns the folder: run one instance, and stop it before `npm run admin`.
    `s` has the same calls the SQLite version had (get / run / all), so the account code reads the same;
    reading and writing files themselves is async, since that goes to the backend. */
 
 const META = 'meta.json';
-const fileName = (uid, id) => `file.${uid}.${id}.json`;
-const versionName = vid => `version.${vid}.json`;
-const imageName = (uid, key) => `image.${uid}.${key}.json`;
 const sha = t => createHash('sha256').update(t).digest('base64url');
+export class StorageFull extends Error {
+  constructor(used, limit) { super('storage full'); this.code = 'storage_full'; this.used = used; this.limit = limit; }
+}
 const empty = () => ({ v: 1, nextVid: 1, users: {}, sessions: {}, tokens: {}, identities: {}, folders: {}, shares: {}, ai: {}, files: {}, versions: {}, images: {}, userdata: {} });
 const USER_DEFAULTS = { verified: 1, totp_secret: null, totp_pending: null, totp_last: 0, recovery: '[]' };
 
@@ -33,11 +37,25 @@ function textCache(maxChars = 64_000_000) {
   };
 }
 
-export async function openStore(backend, { versionEvery = 10 * 60_000, keepVersions = 100 } = {}) {
-  await backend.open();
+export async function openStore(backend, { versionEvery = 10 * 60_000, keepVersions = 100, storageLimit = 0 } = {}) {
+  const names = new Set(await backend.open());
   const raw = await backend.read(META);
   const m = Object.assign(empty(), raw ? JSON.parse(raw) : {});
   const cache = textCache();
+
+  // Each account's blobs are in its own folder, named by its email (or its id, without one).
+  const dirOf = uid => String(m.users[uid]?.email || uid).replace(/[\\/]/g, '_');
+  const fileName = (uid, id) => `${dirOf(uid)}/file.${id}.json`;
+  const versionName = (uid, vid) => `${dirOf(uid)}/version.${vid}.json`;
+  const imageName = (uid, key) => `${dirOf(uid)}/image.${key}.json`;
+  // Earlier versions kept everyone's blobs side by side in the main folder: move each to its account's folder.
+  const moves = [
+    ...Object.entries(m.files).flatMap(([uid, fs]) => Object.keys(fs).map(id => [`file.${uid}.${id}.json`, fileName(uid, id)])),
+    ...Object.entries(m.versions).flatMap(([uid, byFile]) => Object.values(byFile).flat().map(v => [`version.${v.vid}.json`, versionName(uid, v.vid)])),
+    ...Object.entries(m.images).flatMap(([uid, ims]) => Object.keys(ims).map(key => [`image.${uid}.${key}.json`, imageName(uid, key)])),
+  ].filter(([from]) => names.has(from));
+  for (let i = 0; i < moves.length; i += 8) await Promise.all(moves.slice(i, i + 8).map(([from, to]) => backend.move(from, to)));
+  if (moves.length) console.log(`Moved ${moves.length} saved files into each account's own folder.`);
 
   /* ---- writing back ---- */
   // Writes to one name happen in the order they were asked for.
@@ -73,7 +91,7 @@ export async function openStore(backend, { versionEvery = 10 * 60_000, keepVersi
   const dropFileNow = (uid, id) => {
     if (!m.files[uid]?.[id]) return { changes: 0 };
     delete m.files[uid][id];
-    for (const v of m.versions[uid]?.[id] || []) removeLater(versionName(v.vid));
+    for (const v of m.versions[uid]?.[id] || []) removeLater(versionName(uid, v.vid));
     if (m.versions[uid]) delete m.versions[uid][id];
     dropWhere('shares', sh => sh.user_id === uid && sh.file_id === id);
     removeLater(fileName(uid, id));
@@ -137,7 +155,7 @@ export async function openStore(backend, { versionEvery = 10 * 60_000, keepVersi
     share: { get: token => { const x = m.shares[token], u = x && m.users[x.user_id]; return u ? { ...x, owner_name: u.name, owner_email: u.email } : undefined; } },
     dropShare: { run: (token, uid) => dropWhere('shares', (x, k) => k === token && x.user_id === uid) },
 
-    listUsers: { all: () => Object.values(m.users).sort((a, b) => a.created - b.created).map(u => ({ email: u.email, name: u.name, created: u.created, verified: u.verified ?? 1, totp: u.totp_secret ? 1 : 0, files: Object.keys(m.files[u.id] || {}).length })) },
+    listUsers: { all: () => Object.values(m.users).sort((a, b) => a.created - b.created).map(u => ({ email: u.email, name: u.name, created: u.created, verified: u.verified ?? 1, totp: u.totp_secret ? 1 : 0, files: Object.keys(m.files[u.id] || {}).length, used: used(u.id) })) },
     // An account and everything it owns.
     dropUser: { run(id) {
       if (!m.users[id]) return { changes: 0 };
@@ -166,6 +184,33 @@ export async function openStore(backend, { versionEvery = 10 * 60_000, keepVersi
     return texts.filter(Boolean).map(t => JSON.parse(t));
   };
 
+  /* ---- storage: what an account keeps in the backend (files, their versions, pictures), and its limit ---- */
+  const used = uid => {
+    let n = 0;
+    for (const f of Object.values(m.files[uid] || {})) n += f.size || 0;
+    for (const list of Object.values(m.versions[uid] || {})) for (const v of list) n += v.size || 0;
+    for (const im of Object.values(m.images[uid] || {})) n += im.size || 0;
+    return n;
+  };
+  const storage = uid => ({ used: used(uid), limit: storageLimit });
+  // Room for `extra` more bytes, making it by dropping the oldest versions (never `keep`, the one about
+  // to be written). Throws StorageFull, dropping nothing, when even that isn't enough.
+  const makeRoom = (uid, extra, keep = null) => {
+    if (!storageLimit) return;
+    let over = used(uid) + extra - storageLimit;
+    if (over <= 0) return;
+    const old = Object.values(m.versions[uid] || {}).flatMap(list => list.map(v => ({ list, v })))
+      .filter(x => x.v.vid !== keep).sort((a, b) => a.v.saved - b.v.saved);
+    if (old.reduce((n, x) => n + (x.v.size || 0), 0) < over) throw new StorageFull(used(uid), storageLimit);
+    for (const { list, v } of old) {
+      if (over <= 0) break;
+      list.splice(list.indexOf(v), 1);
+      removeLater(versionName(uid, v.vid));
+      over -= v.size || 0;
+    }
+    saveMeta();
+  };
+
   // Save a file and keep its history: edits within `versionEvery` of the latest version update that
   // version in place, later ones start a new one. So each version is how the file stood at the end of
   // a stretch of editing. Resolves once the file and meta.json are in the backend; false if unchanged.
@@ -175,15 +220,17 @@ export async function openStore(backend, { versionEvery = 10 * 60_000, keepVersi
     let title = '';
     try { title = String(JSON.parse(text).title || ''); } catch (e) { /* the caller checked it */ }
     const list = versionList(uid, id), last = list[0];
+    const inPlace = last && now - last.saved < versionEvery;
+    makeRoom(uid, text.length - (before?.size || 0) + text.length - (inPlace ? last.size || 0 : 0), inPlace ? last.vid : null);
     let vid;
-    if (last && now - last.saved < versionEvery) { vid = last.vid; Object.assign(last, { saved: now, size: text.length, title }); }
+    if (inPlace) { vid = last.vid; Object.assign(last, { saved: now, size: text.length, title }); }
     else { vid = m.nextVid++; list.unshift({ vid, saved: now, size: text.length, title }); }
-    for (const old of list.splice(keepVersions)) removeLater(versionName(old.vid));
+    for (const old of list.splice(keepVersions)) removeLater(versionName(uid, old.vid));
     fileIndex(uid)[id] = { updated, hash, size: text.length };
     cache.set(fileName(uid, id), text);
     await Promise.all([
       queue(fileName(uid, id), () => backend.write(fileName(uid, id), text)),
-      queue(versionName(vid), () => backend.write(versionName(vid), text)),
+      queue(versionName(uid, vid), () => backend.write(versionName(uid, vid), text)),
       saveMeta(),
     ]);
     return true;
@@ -192,13 +239,14 @@ export async function openStore(backend, { versionEvery = 10 * 60_000, keepVersi
   const versions = (uid, id) => (m.versions[uid]?.[id] || []).map(v => ({ ...v }));
   const readVersion = async (uid, id, vid) => {
     const v = (m.versions[uid]?.[id] || []).find(x => x.vid === vid);
-    const data = v && await readText(versionName(vid));
+    const data = v && await readText(versionName(uid, vid));
     return data ? { data, saved: v.saved } : null;
   };
 
   /* ---- pictures on canvases: one blob each, read straight from the backend (not kept in memory) ---- */
   const hasImage = (uid, key) => Boolean(m.images[uid]?.[key]);
   const saveImage = async (uid, key, dataUrl, now = Date.now()) => {
+    makeRoom(uid, dataUrl.length - (m.images[uid]?.[key]?.size || 0));
     (m.images[uid] ||= {})[key] = { size: dataUrl.length, saved: now };
     await Promise.all([queue(imageName(uid, key), () => backend.write(imageName(uid, key), JSON.stringify({ data: dataUrl }))), saveMeta()]);
   };
@@ -231,7 +279,7 @@ export async function openStore(backend, { versionEvery = 10 * 60_000, keepVersi
   return {
     s, backend, meta: m,
     hasFile, readFile, listFiles, saveFile, dropFile, versions, readVersion,
-    hasImage, saveImage, readImage,
+    hasImage, saveImage, readImage, storage,
     useAi, aiUsed, flush, close: flush,
   };
 }

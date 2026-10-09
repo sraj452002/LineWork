@@ -681,6 +681,13 @@ kbd{font-family:var(--ui);font-size:12px;font-weight:500;color:var(--ink2);min-w
 
 /* sign-in and account */
 .boot{height:100%;background:var(--paper)}
+.storage{display:flex;flex-direction:column;gap:6px}
+.storage-bar{height:8px;border-radius:999px;background:var(--panel);border:1px solid var(--line);overflow:hidden}
+.storage-bar span{display:block;height:100%;background:var(--ink2)}
+.storage-bar span.warn{background:var(--err)}
+.storage-warn{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:55;display:flex;align-items:center;gap:12px;max-width:calc(100% - 32px);width:max-content;padding:10px 14px;border-radius:10px;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-left:4px solid var(--hi);font-size:13px;box-shadow:0 6px 24px rgba(0,0,0,.18)}
+.storage-warn.full{border-left-color:var(--err)}
+@media (max-width:560px){.storage-warn{width:auto;flex-direction:column;align-items:stretch}}
 .boot-error{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:16px;text-align:center;color:var(--ink)}
 .login .ok{color:var(--ink);background:color-mix(in srgb,var(--hi) 22%,transparent);border-radius:8px;padding:8px 10px;margin:0 0 14px}
 .login-alt{display:flex;flex-direction:column;gap:8px;margin-top:16px}

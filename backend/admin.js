@@ -20,7 +20,7 @@ const user = email && s.userByEmail.get(email.trim().toLowerCase());
 const fail = m => { console.error(m); process.exitCode = 1; };
 
 if (cmd === 'users') {
-  for (const u of s.listUsers.all()) console.log(`${u.email}\t${u.name || '-'}\t${new Date(u.created).toISOString().slice(0, 10)}\t${u.files} files${u.verified ? '' : '\tunconfirmed'}${u.totp ? '\t2-step' : ''}`);
+  for (const u of s.listUsers.all()) console.log(`${u.email}\t${u.name || '-'}\t${new Date(u.created).toISOString().slice(0, 10)}\t${u.files} files, ${(u.used / 2 ** 20).toFixed(1)} MB${u.verified ? '' : '\tunconfirmed'}${u.totp ? '\t2-step' : ''}`);
 } else if (cmd === 'reset-password') {
   if (!user) fail('No account with that email.');
   else if (!pw || pw.length < 8) fail('Give a new password of at least 8 characters.');

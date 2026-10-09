@@ -83,6 +83,19 @@ export function createApp(store, opts = {}) {
     return { file, text };
   };
   const idOk = (req, res, next) => (ID.test(req.params.id) ? next() : res.status(400).json({ error: 'bad_id' }));
+  // A save that counts against the account's storage: answered with how much it uses now, or 507 when
+  // it's full. Through a share link (owner: false) the answer doesn't show the owner's storage.
+  const GB = b => `${(b / 2 ** 30).toFixed(1).replace(/\.0$/, '')} GB`;
+  const storing = async (res, uid, save, owner = true) => {
+    try { await save(); }
+    catch (e) {
+      if (e.code !== 'storage_full') throw e;
+      return res.status(507).json(owner
+        ? { error: 'storage_full', storage: store.storage(uid), message: `Your storage is full (${GB(e.limit)}). Delete some files or pictures to save again.` }
+        : { error: 'storage_full', message: 'The owner’s storage is full, so this can’t be saved.' });
+    }
+    res.json(owner ? { ok: true, storage: store.storage(uid) } : { ok: true });
+  };
 
   api.get('/files', signedIn, async (req, res) => {
     res.json({ files: await store.listFiles(req.user.id) });
@@ -94,12 +107,11 @@ export function createApp(store, opts = {}) {
   api.put('/files/:id', signedIn, idOk, async (req, res) => {
     const p = parseFile(req.body, req.params.id);
     if (p.error) return res.status(p.status).json({ error: p.error });
-    await store.saveFile(req.user.id, req.params.id, p.text, Number(p.file.updated) || Date.now());
-    res.json({ ok: true });
+    await storing(res, req.user.id, () => store.saveFile(req.user.id, req.params.id, p.text, Number(p.file.updated) || Date.now()));
   });
   api.delete('/files/:id', signedIn, idOk, async (req, res) => {
     await store.dropFile(req.user.id, req.params.id);
-    res.json({ ok: true });
+    res.json({ ok: true, storage: store.storage(req.user.id) });
   });
 
   /* ---- version history ---- */
@@ -135,8 +147,7 @@ export function createApp(store, opts = {}) {
     const data = req.body?.data;
     if (typeof data !== 'string' || !/^data:image\/[\w.+-]+;base64,/.test(data)) return res.status(400).json({ error: 'bad_image' });
     if (data.length > MAX_IMAGE) return res.status(413).json({ error: 'too_large' });
-    await store.saveImage(req.user.id, req.params.key, data);
-    res.json({ ok: true });
+    await storing(res, req.user.id, () => store.saveImage(req.user.id, req.params.key, data));
   });
 
   /* ---- the account's own settings: saved database connections, query history ---- */
@@ -182,8 +193,7 @@ export function createApp(store, opts = {}) {
     if (sh.mode !== 'edit') return res.status(403).json({ error: 'view_only' });
     const p = parseFile(req.body, sh.file_id);
     if (p.error) return res.status(p.status).json({ error: p.error });
-    await store.saveFile(sh.user_id, sh.file_id, p.text, Number(p.file.updated) || Date.now());
-    res.json({ ok: true });
+    await storing(res, sh.user_id, () => store.saveFile(sh.user_id, sh.file_id, p.text, Number(p.file.updated) || Date.now()), false);
   });
 
   /* ---- AI, with a daily allowance per account ---- */

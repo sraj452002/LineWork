@@ -1,9 +1,11 @@
 import { createSign } from 'node:crypto';
 import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync, existsSync, renameSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 
 /* Where the server keeps its data: named JSON blobs in one Google Drive folder. Every backend has the
-   same four calls (list, read, write, remove), all by name; the store (store.js) decides the names.
+   same calls (open, read, write, remove, move), all by name; the store (store.js) decides the names.
+   A name may have one folder in front ("ada@example.com/file.x.json"): that's a folder inside the
+   main one, made when it's first needed. open() returns every name, in the main folder and one level down.
 
    driveBackend   Google Drive, signed in either way:
                   - an OAuth refresh token for your own Drive (`npm run drive-auth` gets one), or
@@ -45,7 +47,20 @@ function tokenSource({ refreshToken, clientId, clientSecret, serviceAccount, tok
 export function driveBackend({ folderId = '', folderName = 'Linework data', ...auth }) {
   const token = tokenSource(auth);
   const ids = new Map(); // name → Drive file id
+  const dirs = new Map(); // folder name inside the main one → a promise of its Drive id
   let folder = folderId;
+  const split = name => { const i = name.lastIndexOf('/'); return i < 0 ? [null, name] : [name.slice(0, i), name.slice(i + 1)]; };
+  // The Drive folder a name goes in, made if it isn't there yet (once, even when asked for twice at once).
+  const parentOf = dir => {
+    if (!dir) return Promise.resolve(folder);
+    if (!dirs.has(dir)) {
+      const made = call(`${API}/files?${ALL}&fields=id`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: dir, mimeType: FOLDER, parents: [folder] }) })
+        .then(r => r.json()).then(j => j.id);
+      made.catch(() => dirs.delete(dir));
+      dirs.set(dir, made);
+    }
+    return dirs.get(dir);
+  };
 
   // A Drive request, retried on rate limits and server errors, with a new token once if it was refused.
   const call = async (url, init = {}, { okMissing = false } = {}) => {
@@ -66,7 +81,7 @@ export function driveBackend({ folderId = '', folderName = 'Linework data', ...a
     const out = [];
     let page = '';
     do {
-      const url = `${API}/files?${ALL}&includeItemsFromAllDrives=true&pageSize=1000&fields=nextPageToken,files(id,name)&q=${encodeURIComponent(query)}${page ? `&pageToken=${page}` : ''}`;
+      const url = `${API}/files?${ALL}&includeItemsFromAllDrives=true&pageSize=1000&fields=nextPageToken,files(id,name,mimeType)&q=${encodeURIComponent(query)}${page ? `&pageToken=${page}` : ''}`;
       const j = await (await call(url)).json();
       out.push(...j.files);
       page = j.nextPageToken || '';
@@ -87,8 +102,16 @@ export function driveBackend({ folderId = '', folderName = 'Linework data', ...a
           console.log(`Made the Google Drive folder "${folderName}" (${folder}). Set GOOGLE_DRIVE_FOLDER_ID=${folder} to keep using it.`);
         }
       }
-      ids.clear();
-      for (const f of await search(`${q(folder)} in parents and trashed = false`)) if (!ids.has(f.name)) ids.set(f.name, f.id);
+      ids.clear(); dirs.clear();
+      for (const f of await search(`${q(folder)} in parents and trashed = false`)) {
+        if (f.mimeType === FOLDER) { if (!dirs.has(f.name)) dirs.set(f.name, Promise.resolve(f.id)); }
+        else if (!ids.has(f.name)) ids.set(f.name, f.id);
+      }
+      for (const [dir, id] of dirs) {
+        for (const f of await search(`${q(await id)} in parents and trashed = false and mimeType != '${FOLDER}'`)) {
+          if (!ids.has(`${dir}/${f.name}`)) ids.set(`${dir}/${f.name}`, f.id);
+        }
+      }
       return [...ids.keys()];
     },
     async read(name) {
@@ -104,8 +127,9 @@ export function driveBackend({ folderId = '', folderName = 'Linework data', ...a
         if (r) return;
         ids.delete(name); // removed in Drive by hand: make it again
       }
+      const [dir, base] = split(name);
       const boundary = `lw${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
-      const body = `--${boundary}\r\ncontent-type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({ name, parents: [folder], mimeType: 'application/json' })}\r\n--${boundary}\r\ncontent-type: application/json\r\n\r\n${text}\r\n--${boundary}--`;
+      const body = `--${boundary}\r\ncontent-type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({ name: base, parents: [await parentOf(dir)], mimeType: 'application/json' })}\r\n--${boundary}\r\ncontent-type: application/json\r\n\r\n${text}\r\n--${boundary}--`;
       const r = await call(`${UPLOAD}/files?uploadType=multipart&${ALL}&fields=id`, { method: 'POST', headers: { 'content-type': `multipart/related; boundary=${boundary}` }, body });
       ids.set(name, (await r.json()).id);
     },
@@ -115,17 +139,33 @@ export function driveBackend({ folderId = '', folderName = 'Linework data', ...a
       ids.delete(name);
       await call(`${API}/files/${id}?${ALL}`, { method: 'DELETE' }, { okMissing: true });
     },
+    // Give a blob a new name, maybe in another folder, without copying it.
+    async move(from, to) {
+      const id = ids.get(from);
+      if (!id || from === to) return;
+      const [fromDir] = split(from), [toDir, base] = split(to);
+      const [oldParent, newParent] = await Promise.all([parentOf(fromDir), parentOf(toDir)]);
+      const parents = oldParent === newParent ? '' : `&addParents=${newParent}&removeParents=${oldParent}`;
+      await call(`${API}/files/${id}?${ALL}${parents}&fields=id`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: base }) });
+      ids.delete(from); ids.set(to, id);
+    },
   };
 }
 
 export function folderBackend(dir) {
-  const path = name => join(dir, name);
+  const path = name => join(dir, ...name.split('/'));
   return {
     describe: () => `the folder ${dir}`,
-    async open() { mkdirSync(dir, { recursive: true }); return readdirSync(dir).filter(n => n.endsWith('.json')); },
+    async open() {
+      mkdirSync(dir, { recursive: true });
+      return readdirSync(dir, { withFileTypes: true }).flatMap(e => (e.isDirectory()
+        ? readdirSync(join(dir, e.name)).filter(n => n.endsWith('.json')).map(n => `${e.name}/${n}`)
+        : e.name.endsWith('.json') ? [e.name] : []));
+    },
     async read(name) { return existsSync(path(name)) ? readFileSync(path(name), 'utf8') : null; },
-    async write(name, text) { writeFileSync(path(name) + '.tmp', text); renameSync(path(name) + '.tmp', path(name)); },
+    async write(name, text) { mkdirSync(dirname(path(name)), { recursive: true }); writeFileSync(path(name) + '.tmp', text); renameSync(path(name) + '.tmp', path(name)); },
     async remove(name) { rmSync(path(name), { force: true }); },
+    async move(from, to) { if (!existsSync(path(from))) return; mkdirSync(dirname(path(to)), { recursive: true }); renameSync(path(from), path(to)); },
   };
 }
 
@@ -137,6 +177,7 @@ export function memoryBackend(blobs = new Map()) {
     async read(name) { return blobs.get(name) ?? null; },
     async write(name, text) { blobs.set(name, text); },
     async remove(name) { blobs.delete(name); },
+    async move(from, to) { if (blobs.has(from)) { blobs.set(to, blobs.get(from)); blobs.delete(from); } },
   };
 }
 

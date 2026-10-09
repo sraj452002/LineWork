@@ -4,6 +4,8 @@ const req = async (path, opts = {}) => {
   const res = await fetch('/api/files' + path, { ...opts, headers: { 'content-type': 'application/json', ...(opts.headers || {}) } });
   if (res.status === 401) throw { code: 'signed_out' };
   if (res.status === 413) throw { code: 'too_large' };
+  // The account's storage is full: {storage: {used, limit}} says how much.
+  if (res.status === 507) throw { code: 'storage_full', ...(await res.json().catch(() => ({}))) };
   if (!res.ok) throw { code: 'unavailable', status: res.status };
   return res.json();
 };

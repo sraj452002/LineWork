@@ -173,7 +173,7 @@ test('pictures and the account\'s own settings are kept on the account', async (
   expect((await a.call('PUT', '/images/img_abc', { data: 'not a picture' })).json.error).toBe('bad_image');
   expect((await client().call('PUT', '/images/img_abc', { data: png })).status).toBe(401);
   expect((await a.call('PUT', '/images/img_abc', { data: png })).status).toBe(200);
-  expect(store.backend.blobs.has(`image.${uid}.img_abc.json`)).toBe(true);
+  expect(store.backend.blobs.has("pics@example.com/image.img_abc.json")).toBe(true); // in the account's own folder
   expect((await a.call('GET', '/images/img_abc')).json.data).toBe(png);
   expect((await b.call('GET', '/images/img_abc')).status).toBe(404);
   expect((await client().call('GET', '/images/img_abc')).status).toBe(401);

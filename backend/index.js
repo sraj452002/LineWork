@@ -17,7 +17,8 @@ if (!backend) {
   console.error('No storage set up. Set GOOGLE_DRIVE_REFRESH_TOKEN (run `npm run drive-auth`) or GOOGLE_SERVICE_ACCOUNT_KEY for Google Drive, or DATA_DIR for a local folder. See .env.example.');
   process.exit(1);
 }
-const store = await openStore(backend);
+// Each account's storage in Google Drive (files, versions and pictures): STORAGE_LIMIT_MB, 0 for no limit.
+const store = await openStore(backend, { storageLimit: num(env.STORAGE_LIMIT_MB, 2048) * 2 ** 20 });
 console.log(`Data is kept in ${backend.describe()}.`);
 // Accounts to have from the start (DEFAULT_USERS), made once.
 for (const email of await ensureUsers(store, env.DEFAULT_USERS)) console.log(`Made the account ${email} (DEFAULT_USERS).`);
