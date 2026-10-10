@@ -7,7 +7,8 @@ import vm from 'node:vm';
    order: a node runs once the nodes before it have, on the items that reached its input. A node that no
    items reach is skipped (an IF's unused branch). A node's params may hold expressions, {{ … }}, which
    read the item ($json), earlier nodes ($node["Name"].json), and $now; a param that is only an
-   expression keeps its value's type. The first error stops the run. */
+   expression keeps its value's type. The first error stops the run, unless the node says otherwise
+   (node.onError: 'continue' passes its items on with the error, 'output' sends them out of its error port). */
 
 export class FlowError extends Error {
   constructor(message, code = 'flow_error') { super(message); this.code = code; }
@@ -122,7 +123,18 @@ export async function runFlow(flow, { startId, input = [{ json: {} }], types, ct
       results[id] = { status: 'success', ms: Date.now() - started, items: main.length, output: Object.fromEntries(Object.entries(out).map(([p, list]) => [p, list.map(x => x.json)])) };
       onStep(id, results[id]);
     } catch (e) {
-      results[id] = { status: 'error', ms: Date.now() - started, items: 0, error: e.message || String(e) };
+      const message = e.message || String(e);
+      // Try/catch, per node: “continue” passes its items on with the error; “output” sends them out of an error port.
+      if (node.onError === 'continue' || node.onError === 'output') {
+        const failed = (inputs.main || all).map(x => ({ json: { ...x.json, error: message } }));
+        const out = node.onError === 'output' ? { main: [], error: failed } : { main: failed };
+        outputs.set(id, out);
+        byName[node.name] = { json: failed[0]?.json || {}, items: failed.map(x => x.json) };
+        results[id] = { status: 'success', handled: true, error: message, ms: Date.now() - started, items: failed.length, output: Object.fromEntries(Object.entries(out).map(([p, list]) => [p, list.map(x => x.json)])) };
+        onStep(id, results[id]);
+        continue;
+      }
+      results[id] = { status: 'error', ms: Date.now() - started, items: 0, error: message };
       onStep(id, results[id]);
       return { status: 'error', nodes: results, error: `${node.name}: ${results[id].error}`, failed: id };
     }

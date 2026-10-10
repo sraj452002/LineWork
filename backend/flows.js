@@ -6,8 +6,9 @@ import { APP_NODES } from './flow-apps.js';
 import { WORKLINE_NODES } from './flow-workline.js';
 import { POLL_EVERY, TRIGGER_TYPES } from './flow-triggers.js';
 import { WEB_NODES } from './flow-web.js';
+import { EXTRA_NODES } from './flow-extra.js';
 
-const TYPES = { ...NODE_TYPES, ...APP_NODES, ...WORKLINE_NODES, ...TRIGGER_TYPES, ...WEB_NODES };
+const TYPES = { ...NODE_TYPES, ...APP_NODES, ...WORKLINE_NODES, ...TRIGGER_TYPES, ...WEB_NODES, ...EXTRA_NODES };
 import { limiter, newToken } from './auth.js';
 
 /* Workflows on the server: credentials, runs, webhooks and schedules. A workflow lives in a file
@@ -64,6 +65,8 @@ export const CRED_FIELDS = {
   deepl: ['apiKey'],
   bitly: ['token'],
   browserless: ['token', 'baseUrl'],
+  imap: ['host', 'port', 'user', 'password', 'secure'],
+  redis: ['url'],
 };
 const KEEP_RUNS = 20, SAMPLE = 20, MAX_DETAIL = 1_000_000, RUNNING_PER_USER = 5;
 const UNIT = { minutes: 60_000, hours: 3_600_000, days: 86_400_000 };
@@ -123,6 +126,18 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
       try { return unseal(c.data); } catch (e) { throw new FlowError(`The credential “${c.name}” can't be read (did FLOW_SECRET change?). Enter it again.`, 'credential'); }
     },
     ai: { key: ai.key, base: ai.base, model: ai.model, allow: () => store.useAi(uid, ai.dailyLimit ?? 50) },
+    // The Key-value store node's values: per account, kept between runs (at most 1,000 keys of 100 KB).
+    kv: {
+      get: k => (m.userdata[uid]?.kv || {})[k],
+      set(k, v) {
+        const kv = ((m.userdata[uid] ||= {}).kv ||= {});
+        if (JSON.stringify(v ?? null).length > 100_000) throw new FlowError('That value is over 100 KB.', 'too_large');
+        if (!(k in kv) && Object.keys(kv).length >= 1000) throw new FlowError('The key-value store is full (1,000 keys). Delete some first.', 'too_many');
+        kv[k] = v ?? null; store.touch();
+      },
+      del(k) { const kv = m.userdata[uid]?.kv; if (kv && k in kv) { delete kv[k]; store.touch(); } },
+      list: prefix => Object.fromEntries(Object.entries(m.userdata[uid]?.kv || {}).filter(([k]) => k.startsWith(prefix))),
+    },
   });
 
   /* ---- runs ---- */
@@ -143,20 +158,43 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
     if (size) await store.blob.write(uid, `run.${run.id}.json`, text);
   };
   const running = uid => [...live.values()].filter(x => x.uid === uid && x.run.status === 'running').length;
+  // Start a run in the background. `run.done` (not saved) settles when it ends; `run.reply` when a Respond
+  // node answers (or the run ends without one).
   const start = (uid, fileId, flow, startId, input, trigger) => {
     if (running(uid) >= RUNNING_PER_USER) throw new FlowError(`${RUNNING_PER_USER} workflows are already running. Wait for one to finish.`, 'busy');
     const run = { id: newToken().slice(0, 16), fileId, trigger, startId, status: 'running', started: Date.now(), nodes: {} };
+    let answered, answer = null;
+    Object.defineProperty(run, 'reply', { value: new Promise(r => { answered = r; }) });
     live.set(run.id, { uid, run });
-    (async () => {
+    const ctx = ctxFor(uid);
+    ctx.respond = r => { if (!answer) { answer = r; answered(r); } };
+    Object.defineProperty(run, 'done', { value: (async () => {
+      let r = null;
       try {
-        const r = await runFlow(flow, { startId, input, types: TYPES, ctx: ctxFor(uid), onStep: (id, res) => { run.nodes[id] = trim(res); } });
+        r = await runFlow(flow, { startId, input, types: TYPES, ctx, onStep: (id, res) => { run.nodes[id] = trim(res); } });
         Object.assign(run, { status: r.status, error: r.error, failed: r.failed });
       } catch (e) { Object.assign(run, { status: 'error', error: e.message }); }
       run.finished = Date.now();
+      if (!answer) answered(null);
       await save(uid, run).catch(e => console.error('Saving a workflow run failed:', e.message));
       setTimeout(() => live.delete(run.id), 10 * 60_000).unref?.();
-    })();
+      if (run.status === 'error' && trigger !== 'error') onFailure(uid, fileId, flow, run).catch(e => console.error('An On error workflow could not start:', e.message));
+      return { run, result: r };
+    })() });
     return run;
+  };
+  // A run failed: start the account's active workflows that begin with “On error” (for this one, or any).
+  const onFailure = async (uid, fileId, flow, run) => {
+    for (const t of Object.values(m.errorTriggers || {})) {
+      if (t.uid !== uid || t.fileId === fileId || (t.only && t.only !== fileId)) continue;
+      const other = await savedFlow(uid, t.fileId).catch(() => null);
+      if (!other || !other.active) continue;
+      const file = await store.readFile(uid, fileId).then(x => (x ? JSON.parse(x) : null)).catch(() => null);
+      const failed = flow.nodes.find(n => n.id === run.failed);
+      try {
+        start(uid, t.fileId, other, t.nodeId, [{ json: { workflowId: fileId, workflow: file?.title || null, runId: run.id, trigger: run.trigger, error: run.error, failedNode: failed?.name || null, failedAt: new Date(run.finished).toISOString() } }], 'error');
+      } catch (e) { console.error('An On error workflow could not start:', e.message); }
+    }
   };
   const savedFlow = async (uid, fileId) => {
     const text = await store.readFile(uid, fileId);
@@ -168,7 +206,8 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
   const reindex = (uid, fileId, file) => {
     const before = {};
     m.polls ||= {};
-    for (const table of ['hooks', 'schedules', 'polls']) for (const [k, v] of Object.entries(m[table])) if (v.uid === uid && v.fileId === fileId) { before[k] = v; delete m[table][k]; }
+    m.errorTriggers ||= {};
+    for (const table of ['hooks', 'schedules', 'polls', 'errorTriggers']) for (const [k, v] of Object.entries(m[table])) if (v.uid === uid && v.fileId === fileId) { before[k] = v; delete m[table][k]; }
     const flow = file && file.flow;
     if (flow && flow.active) for (const n of Array.isArray(flow.nodes) ? flow.nodes : []) {
       const p = n.params || {};
@@ -178,9 +217,10 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
       if (TYPES[n.type]?.poll) {
         const k = `${uid}:${fileId}:${n.id}`, was = before[k];
         // The same thing watched keeps what was seen; something else starts afresh.
-        const what = JSON.stringify([n.type, p.url, p.fileId, p.sheet, n.credential]);
+        const what = JSON.stringify([n.type, p.url, p.fileId, p.sheet, p.table, p.column, p.mailbox, p.calendarId, n.credential]);
         m.polls[k] = { uid, fileId, nodeId: n.id, type: n.type, every: POLL_EVERY(p), last: was?.what === what ? was.last : 0, what, state: was?.what === what ? was.state : {}, error: null };
       }
+      if (n.type === 'trigger.error') m.errorTriggers[`${uid}:${fileId}:${n.id}`] = { uid, fileId, nodeId: n.id, only: p.fileId ? String(p.fileId) : '' };
       if (n.type === 'trigger.schedule') {
         const k = `${uid}:${fileId}:${n.id}`;
         m.schedules[k] = { uid, fileId, nodeId: n.id, mode: p.mode === 'daily' ? 'daily' : 'interval', every: Math.max(1, Number(p.every) || 15), unit: UNIT[p.unit] ? p.unit : 'minutes', at: /^\d\d:\d\d$/.test(p.at || '') ? p.at : '09:00', last: before[k]?.last || Date.now() };
@@ -253,7 +293,18 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
       }
       const headers = Object.fromEntries(Object.entries(req.headers).filter(([k]) => !/^(cookie|authorization|x-forwarded-|x-real-ip|cf-)/i.test(k)));
       const run = start(h.uid, h.fileId, flow, h.nodeId, [{ json: { method: req.method, query: req.query, headers, body: req.body ?? null } }], 'webhook');
-      res.status(202).json({ ok: true, runId: run.id });
+      if ((node.params || {}).respond !== 'end') return res.status(202).json({ ok: true, runId: run.id });
+      // Wait (up to 25 s) for a Respond node's answer, or the end of the run: its last step's items.
+      const answer = await Promise.race([run.reply, new Promise(r => setTimeout(() => r('late'), 25_000))]);
+      if (answer === 'late') return res.status(202).json({ ok: true, runId: run.id, pending: true });
+      if (answer) {
+        for (const [k, v] of Object.entries(answer.headers || {})) if (/^[\w-]+$/.test(k) && !/^(set-cookie|content-length|transfer-encoding|connection)$/i.test(k)) res.set(k, String(v));
+        return answer.type === 'json' ? res.status(answer.status).json(answer.body) : res.status(answer.status).type(answer.type).send(String(answer.body));
+      }
+      if (run.status === 'error') return res.status(500).json({ error: 'flow_error', message: run.error, runId: run.id });
+      const ends = flow.nodes.filter(n => run.nodes[n.id]?.status === 'success' && !flow.edges.some(e => e.from === n.id && run.nodes[e.to]?.status === 'success'));
+      const items = ends.flatMap(n => run.nodes[n.id].output?.main || []);
+      res.status(200).json(items.length === 1 ? items[0] : items);
     } catch (e) { res.status(e.code === 'busy' ? 429 : 500).json({ error: e.code || 'flow_error', message: e.message }); }
   });
 

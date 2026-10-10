@@ -2244,3 +2244,7 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .fv-pub-in .fv-check{display:flex;align-items:center;gap:5px;font-size:12.5px;white-space:nowrap}
 @media (max-width:560px){.fv-pub-look{grid-template-columns:1fr}.fv-pub-in{grid-template-columns:1fr 1fr}}
 .app-run-page .fv-note{margin:0 0 16px;border-radius:12px}
+
+/* A sticky note on the workflow canvas */
+.fv-node.fv-note{align-items:flex-start;padding:10px 12px;background:color-mix(in srgb,#facc15 22%,var(--surface));border-color:color-mix(in srgb,#eab308 45%,var(--line));border-radius:6px;box-shadow:0 6px 16px -10px rgba(0,0,0,.35);height:auto}
+.fv-node.fv-note p{margin:0;font-size:12.5px;line-height:1.45;white-space:pre-wrap;word-break:break-word;color:var(--ink)}

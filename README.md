@@ -122,17 +122,20 @@ The **Workflow** view (View menu → Automate, or **Tools → Automation**; its 
 - **Triggers:** Run by hand, **Webhook** (a secret URL, `<APP_URL>/api/hook/<token>`, that any app can call), **Schedule** (every N minutes, hours or days, or daily at a UTC time), and (`backend/flow-triggers.js`):
   - **Form:** a page of its own at its URL; each answer starts the workflow with the fields filled in.
   - **App events** at a URL of their own, checked against the app's signing secret when one is filled in, and filtered to the events asked for: **GitHub**, **Stripe**, **Shopify**, **Slack** (Events API, URL check included), **Typeform**, **Calendly**.
-  - **Something new**, looked for every few minutes: **New in a feed** (RSS/Atom), **Telegram message** (to your bot), **Page changed** (a page or API), **New sheet row** (a Workline sheet). The first look only notes what's there.
+  - **Something new**, looked for every few minutes: **New in a feed** (RSS/Atom), **Telegram message** (to your bot), **Page changed** (a page or API), **New sheet row** (a Workline sheet), **New database row** (a table's rows past the largest id or time seen), **New email** (IMAP), **New calendar event** (Google). The first look only notes what's there.
+  - **On error:** starts when another of the account's active workflows fails, with the workflow, the step and the error.
+- **Webhook replies:** a Webhook trigger set to respond "when the workflow ends" waits (up to 25 seconds) and answers with a **Respond to webhook** node's status, headers and body, or else the last step's items.
+- **If it fails** (every node): stop the run, carry on with the error on each item, or send the items out of an **error** output (try/catch).
 - **Workline:** the account's own files. **Sheet** reads a sheet's rows (the first row names the fields) or adds each item as a row; **Doc** reads, adds to or replaces a file's doc, or makes a new file; **Diagram** draws a diagram from code into a file (a tab with that name is replaced, else one is added), or reads them; **Database** runs a query on a connection saved in the Database view (its password must be remembered). A file a workflow changes is saved like any other, with its version history; the app fetches it again when its tab comes back into view or a run ends, unless it has unsaved changes of its own. Sheet cells are read as written: a formula cell gives its formula.
-- **Flow:** IF, Switch (up to four ways), Filter, Merge, Split out, Batch, Limit, Sort, Remove duplicates, Wait, Run another workflow, Stop and error, No operation, Code (JavaScript over the items; `await` and `fetch` work).
-- **Data:** Bitly short links, QR codes, Set fields, Rename fields, Aggregate, Summarize (count, sum, average, min, max, by group), Date & time, Text, JSON, Extract (regex), CSV (read and write), Crypto (hashes, HMAC, base64, UUIDs).
+- **Flow:** IF, Switch (up to four ways), Filter, Merge, Split out, Batch, Limit, Sort, Remove duplicates, Wait, Run another workflow, Respond to webhook, Stop and error, No operation, Sticky note, Code (JavaScript over the items; `await` and `fetch` work).
+- **Data:** Pivot (rows × columns, counts or sums), Text splitter (chunks for AI), Key-value store (per account, kept between runs), Bitly short links, QR codes, Set fields, Rename fields, Aggregate, Summarize (count, sum, average, min, max, by group), Date & time, Text, JSON, Extract (regex), CSV (read and write), Crypto (hashes, HMAC, base64, UUIDs).
 - **Web:** **Web page** reads a page as sent (text, links, tables, CSS selectors, named fields; `backend/flow-web.js`, with node-html-parser); **Browser** uses a real Chrome through Browserless (its API token in a credential) for pages built by JavaScript, steps (click, type, wait), screenshots and PDFs.
-- **AI:** Claude (the server's key), OpenAI (or any OpenAI-style API), Gemini, DeepL translate.
+- **AI:** Claude (the server's key), and on it **Summarize**, **Extract** (named fields, as JSON), **Classify**, **Rewrite**, **Translate**, **Read an image** (describe it or read its text), **Decide** (one of your options, with reasons), **Score & rank**; **MCP tool** (call or list the tools of an MCP server over Streamable HTTP); OpenAI (or any OpenAI-style API), Gemini, DeepL translate. These are in `backend/flow-extra.js`.
 - **Communication:** Slack, Discord, Telegram, WhatsApp (Cloud API), Microsoft Teams, Google Chat, Mattermost, Email (SMTP or the server's own), SendGrid, Resend, Mailgun, Postmark, Brevo, Twilio SMS, Mailchimp, ntfy and Pushover push.
 - **Productivity:** Notion, Google Sheets and Google Calendar (a service account the sheet or calendar is shared with), Airtable, Trello, Asana, ClickUp, Todoist, WordPress.
-- **Developer:** HTTP request (any API), GitHub, GitLab, Jira, Linear, Zendesk, PagerDuty.
+- **Developer:** HTTP request (any API), GraphQL, GitHub, GitLab, Jira, Linear, Zendesk, PagerDuty.
 - **Sales & payments:** HubSpot, Pipedrive, Stripe, Shopify.
-- **Storage & feeds:** Database (PostgreSQL, MySQL, SQL Server, MongoDB, through `backend/dbconnect.js`), Supabase, Dropbox, RSS feeds, Hacker News, Weather (Open-Meteo), Currency (today's rates, Frankfurter).
+- **Storage & feeds:** Database (PostgreSQL, MySQL, SQL Server, MongoDB, through `backend/dbconnect.js`), Redis, Spreadsheet file (an .xlsx or .csv at a URL), Supabase, Dropbox, RSS feeds, Hacker News, Weather (Open-Meteo), Currency (today's rates, Frankfurter).
 
 **Apps.** **Publish** turns a workflow into an app in **Apps** (home page): a form with the questions you choose and a Run button, for people who don't build workflows. It runs the saved workflow on the server (`POST /api/flows/:fileId/app`, only the declared answers are passed, as one item) with the owner's credentials, and shows the chosen node's output as text, a table or cards. The settings live in `file.flow.app` (`frontend/src/lib/apps.js`).
 
@@ -248,6 +251,7 @@ backend/                the API (Render)
   flows.js              workflows: credentials, runs, webhooks and schedules
   flow-engine.js        runs a workflow: order, items, {{ expressions }}
   flow-nodes.js         what each workflow node does (HTTP, Code, Slack, GitHub…)
+  flow-extra.js         AI helpers, MCP, GraphQL, Redis, spreadsheet files, pivot, key-value store, more triggers
   auth.js               passwords, sessions, sign-in limits
   mail.js               sending email (Resend or SMTP)
   oauth.js              Google and GitHub sign-in (OAuth 2 with PKCE)

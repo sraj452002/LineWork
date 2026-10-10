@@ -4,7 +4,7 @@ import { serverInfo } from '../lib/backend.js';
 import { clone, rid } from '../lib/utils.js';
 import {
   CRED_TYPES, GROUPS, ICON, NODES, createCredential, deleteCredential, emptyFlow, getRun, inputsOf, listCredentials,
-  listRuns, newNode, nodeDef, outputsOf, startRun, updateCredential,
+  listRuns, newNode, nodeDef, outputsOf, outsOf, startRun, updateCredential,
 } from '../lib/flows.js';
 import { LOGOS } from '../lib/flowlogos.js';
 import { listFiles } from '../lib/cloud.js';
@@ -23,7 +23,7 @@ import { APP_ICONS, INPUT_KINDS, SHOW, emptyApp, keyOf } from '../lib/apps.js';
 
 const W = 64, H = 64;
 // Nodes with many ports (Switch) grow taller, 24 px a port.
-const heightOf = type => Math.max(H, Math.max(inputsOf(type).length, outputsOf(type).length) * 22 + 10);
+const heightOf = n => (n.type === 'core.note' ? Math.max(H, 24 + Math.ceil(String(n.params?.text || '').length / 34) * 18) : Math.max(H, Math.max(inputsOf(n.type).length, outsOf(n).length) * 22 + 10));
 const portY = (ports, i, h = H) => (ports.length === 1 ? h / 2 : (h / (ports.length + 1)) * (i + 1));
 const Ico = ({ d, size = 18 }) => <svg className="fv-ico" width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"><path d={d} /></svg>;
 // A node's mark: the app's own logo in its colour (very dark ones take the text colour, to show on dark
@@ -90,7 +90,7 @@ export default function FlowView({ file, update, visible, saveState = 'Saved', o
     const src = from && byId.get(from.id);
     const p = src ? { x: src.x + W + 130, y: src.y } : { x: at.x, y: at.y };
     const h = H + 60; // a node and the name under it
-    while (nodes.some(n => Math.abs(n.x - p.x) < 150 && p.y < n.y + heightOf(n.type) + 60 && n.y < p.y + h)) p.y += 30;
+    while (nodes.some(n => Math.abs(n.x - p.x) < 150 && p.y < n.y + heightOf(n) + 60 && n.y < p.y + h)) p.y += 30;
     return p;
   };
   const addNode = (type, at, from) => {
@@ -291,8 +291,8 @@ export default function FlowView({ file, update, visible, saveState = 'Saved', o
                 const a = byId.get(e.from), b = byId.get(e.to);
                 if (!a || !b) return null;
                 const pa = pos(a), pb = pos(b);
-                const outs = outputsOf(a.type), ins = inputsOf(b.type);
-                const d = curve(pa.x + W, pa.y + portY(outs, Math.max(0, outs.indexOf(e.fromPort)), heightOf(a.type)), pb.x, pb.y + portY(ins, Math.max(0, ins.indexOf(e.toPort)), heightOf(b.type)));
+                const outs = outsOf(a), ins = inputsOf(b.type);
+                const d = curve(pa.x + W, pa.y + portY(outs, Math.max(0, outs.indexOf(e.fromPort)), heightOf(a)), pb.x, pb.y + portY(ins, Math.max(0, ins.indexOf(e.toPort)), heightOf(b)));
                 const on = sel && sel.kind === 'edge' && sel.id === e.id;
                 const lit = status(e.from)?.status === 'success' && (status(e.from).output?.[e.fromPort]?.length ?? 1) > 0 && status(e.to)?.status === 'success';
                 return (
@@ -304,7 +304,14 @@ export default function FlowView({ file, update, visible, saveState = 'Saved', o
               {wire && <path className="fv-wire" d={curve(wire.x1, wire.y1, wire.x2, wire.y2)} />}
             </svg>
             {nodes.map(n => {
-              const d = nodeDef(n.type), p = pos(n), st = status(n.id), ins = inputsOf(n.type), outs = outputsOf(n.type), h = heightOf(n.type);
+              const d = nodeDef(n.type), p = pos(n), st = status(n.id), ins = inputsOf(n.type), outs = outsOf(n), h = heightOf(n);
+              if (n.type === 'core.note') return (
+                <div key={n.id} className={'fv-node fv-note' + (sel?.id === n.id ? ' on' : '')} style={{ left: p.x, top: p.y, width: 220, minHeight: h }}
+                  onPointerDown={e => { if (e.button !== 0) return; e.stopPropagation(); const c = toCanvas(e.clientX, e.clientY); setSel({ kind: 'node', id: n.id }); setSideOpen(true); setDrag({ id: n.id, x: n.x, y: n.y, ox: c.x - n.x, oy: c.y - n.y }); }}
+                  onDoubleClick={() => { setSel({ kind: 'node', id: n.id }); setTab('settings'); }}>
+                  <p>{n.params?.text || 'Note'}</p>
+                </div>
+              );
               const waiting = run && run.status === 'running' && !st;
               return (
                 <div key={n.id} className={['fv-node', 't-' + d.tone, sel?.id === n.id && 'on', st && 's-' + st.status, waiting && 'waiting', d.trigger && 'trigger'].filter(Boolean).join(' ')}
@@ -318,7 +325,7 @@ export default function FlowView({ file, update, visible, saveState = 'Saved', o
                   {st && <em className="fv-st" title={st.error || ''}>{st.status === 'success' ? `✓ ${st.items}` : st.status === 'error' ? '!' : '–'}</em>}
                   {ins.map((pt, i) => <span key={pt} className="fv-port in" data-in={pt} data-node={n.id} style={{ top: portY(ins, i, h) }} title={ins.length > 1 ? `Input ${pt}` : 'Input'}>{ins.length > 1 && <small>{pt}</small>}</span>)}
                   {outs.map((pt, i) => (
-                    <span key={pt} className={'fv-port out' + (pt === 'false' ? ' no' : pt === 'true' ? ' yes' : '')} style={{ top: portY(outs, i, h) }} title={outs.length > 1 ? pt : 'Drag to connect'}
+                    <span key={pt} className={'fv-port out' + (pt === 'false' || pt === 'error' ? ' no' : pt === 'true' ? ' yes' : '')} style={{ top: portY(outs, i, h) }} title={outs.length > 1 ? pt : 'Drag to connect'}
                       onPointerDown={e => { e.stopPropagation(); const y = p.y + portY(outs, i, h); setWire({ from: n.id, port: pt, x1: p.x + W, y1: y, x2: p.x + W, y2: y }); }}>
                       {outs.length > 1 && <small>{d.portLabels?.[pt] ?? pt}</small>}
                     </span>
@@ -496,6 +503,19 @@ function NodePanel({ node, flow, change, creds, tab, setTab, result, active, onC
           {node.type === 'trigger.schedule' && <small className={active ? 'ok' : 'muted'}>{active ? 'Scheduled. Runs while the server is awake.' : 'Turn the workflow Active to run on schedule.'}</small>}
           {node.type === 'trigger.manual' && <small className="muted">Press Run workflow to start here.</small>}
           {d.fields.filter(shown).map(f => <Field key={f.k} f={f} value={p[f.k]} onChange={v => set(f.k, v)} />)}
+          {!d.trigger && node.type !== 'core.note' && (
+            <label className="fv-f"><span>If it fails</span>
+              <select aria-label="If it fails" value={node.onError || 'stop'} onChange={e => { const v = e.target.value; change(f => {
+                const x = f.nodes.find(y => y.id === node.id);
+                if (v === 'stop') delete x.onError; else x.onError = v;
+                if (v !== 'output') f.edges = f.edges.filter(ed => !(ed.from === node.id && ed.fromPort === 'error'));
+              }); }}>
+                <option value="stop">Stop the workflow</option>
+                <option value="continue">Carry on, with the error on each item</option>
+                <option value="output">Send the items out of an “error” output (try / catch)</option>
+              </select>
+            </label>
+          )}
           <div className="fv-np-act">
             <button className="btn" disabled={!canRun} onClick={onRun} title="Run the workflow starting at this node">Run from here</button>
             <button className="btn danger-text" onClick={onDelete}>Delete node</button>
@@ -531,7 +551,7 @@ function FilePick({ value, onChange, has }) {
 }
 
 function Field({ f, value, onChange }) {
-  if (f.kind === 'workflow') return <label className="fv-f"><span>{f.label}</span><FilePick value={value} onChange={onChange} has="flow" /><small className="muted">It runs from its trigger with these items; what its last steps give comes back.</small></label>;
+  if (f.kind === 'workflow') return <label className="fv-f"><span>{f.label}</span><FilePick value={value} onChange={onChange} has="flow" /><small className="muted">{f.help || 'It runs from its trigger with these items; what its last steps give comes back.'}</small></label>;
   if (f.kind === 'file') return <label className="fv-f"><span>{f.label}</span><FilePick value={value} onChange={onChange} has={f.has} /></label>;
   if (f.kind === 'dbconn') {
     const conns = loadConnections().filter(c => c.type !== 'sqlite');

@@ -47,6 +47,8 @@ test('a node’s ? explains it in a popup, which opens the full guide at that no
   await expect(card).toBeInViewport();
   // Search narrows the node cards.
   await page.getByRole('searchbox', { name: 'Find a node' }).fill('translate');
+  await expect(page.locator('.gn')).toHaveCount(2); // DeepL, and Translate (AI)
+  await page.getByRole('searchbox', { name: 'Find a node' }).fill('deepl');
   await expect(page.locator('.gn')).toHaveCount(1);
   await expect(page.locator('.gn h3')).toHaveText('DeepL translate');
   // Back to the workflow.
