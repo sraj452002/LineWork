@@ -4,6 +4,7 @@ import { COOKIE, newToken, readCookie, tokenHash } from './auth.js';
 import { accountRoutes } from './accounts.js';
 import { createMailer } from './mail.js';
 import { DbError, handle as dbHandle } from './dbconnect.js';
+import { createFlows } from './flows.js';
 
 /* The Workline API: accounts, files with version history, folders, share links, live databases and the
    AI proxy with a daily allowance, all under /api. The frontend (../frontend) is hosted on its own and
@@ -29,6 +30,10 @@ export function createApp(store, opts = {}) {
   app.use((req, res, next) => { res.set('X-Content-Type-Options', 'nosniff'); next(); });
 
   const api = express.Router();
+  // Workflows (flows.js). Their webhooks are called by other services, from anywhere, so they come
+  // before the checks below that changes come from this site as JSON.
+  const flows = createFlows({ store, ai: { key: aiKey, base: aiBase, model: aiModel, dailyLimit: aiDailyLimit }, mailer, allowPrivate: dbAllowPrivate, secret: opts.flowSecret || '' });
+  api.use('/hook', flows.hooks);
   api.use((req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
   // Changes must come from the app's own site, sending JSON. Cross-site forms can do neither.
   // Through the frontend's proxy a request arrives addressed to this host, from a page at APP_URL.
@@ -65,12 +70,13 @@ export function createApp(store, opts = {}) {
     next();
   });
   const signedIn = (req, res, next) => (req.user ? next() : res.status(401).json({ error: 'unauthorized' }));
+  flows.routes(api, signedIn);
   const accounts = accountRoutes(api, { store, mailer, allowSignup, requireVerified, oauthConfig: oauth, appUrl, signedIn });
 
   // What this server offers. allowLocal: whether the app may be used without an account.
   api.get('/server', (req, res) => res.json({
     name: 'linework-server', ...accounts.info(), allowLocal,
-    features: ['versions', 'share', 'folders', 'ai-limits', '2fa', 'db'],
+    features: ['versions', 'share', 'folders', 'ai-limits', '2fa', 'db', 'flows'],
     ai: { configured: Boolean(aiKey), dailyLimit: aiDailyLimit },
   }));
 
@@ -107,9 +113,10 @@ export function createApp(store, opts = {}) {
   api.put('/files/:id', signedIn, idOk, async (req, res) => {
     const p = parseFile(req.body, req.params.id);
     if (p.error) return res.status(p.status).json({ error: p.error });
-    await storing(res, req.user.id, () => store.saveFile(req.user.id, req.params.id, p.text, Number(p.file.updated) || Date.now()));
+    await storing(res, req.user.id, async () => { await store.saveFile(req.user.id, req.params.id, p.text, Number(p.file.updated) || Date.now()); flows.reindex(req.user.id, req.params.id, p.file); });
   });
   api.delete('/files/:id', signedIn, idOk, async (req, res) => {
+    flows.reindex(req.user.id, req.params.id, null);
     await store.dropFile(req.user.id, req.params.id);
     res.json({ ok: true, storage: store.storage(req.user.id) });
   });
@@ -193,7 +200,7 @@ export function createApp(store, opts = {}) {
     if (sh.mode !== 'edit') return res.status(403).json({ error: 'view_only' });
     const p = parseFile(req.body, sh.file_id);
     if (p.error) return res.status(p.status).json({ error: p.error });
-    await storing(res, sh.user_id, () => store.saveFile(sh.user_id, sh.file_id, p.text, Number(p.file.updated) || Date.now()), false);
+    await storing(res, sh.user_id, async () => { await store.saveFile(sh.user_id, sh.file_id, p.text, Number(p.file.updated) || Date.now()); flows.reindex(sh.user_id, sh.file_id, p.file); }, false);
   });
 
   /* ---- AI, with a daily allowance per account ---- */
@@ -260,5 +267,6 @@ export function createApp(store, opts = {}) {
   // Expired sessions and links, hourly.
   const sweep = setInterval(() => { s.oldSessions.run(Date.now()); accounts.sweep(); }, 3600_000);
   sweep.unref();
+  app.flows = flows; // for the tests
   return app;
 }

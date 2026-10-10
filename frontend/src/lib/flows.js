@@ -1,0 +1,403 @@
+import { api } from './backend.js';
+import { rid } from './utils.js';
+
+/* Workflows in the app: what each kind of node looks like and asks for (the server runs them: see
+   backend/flow-nodes.js and flow-apps.js, which read the same param names), the kinds of credentials,
+   and the API.
+
+   A node: {id, type, name, x, y, params, credential?}; an edge: {id, from, fromPort, to, toPort}.
+   Field kinds: text (may hold {{ expressions }}), textarea, code, number, select, pairs (name/value
+   rows), bool. `when: [field, ...values]` shows a field only for those values of another (`also`: a
+   second such condition).
+   `logo` names a brand mark in flowlogos.js; without one, `icon` (a line icon) is drawn. */
+
+const I = {
+  play: 'M7 4l13 8-13 8z',
+  hook: 'M9 7a3 3 0 1 1 4.5 2.6L16 14M7.5 15.5A3 3 0 1 0 12 18h6M15 17a3 3 0 1 0 3-3',
+  clock: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7v5l3 2',
+  branch: 'M6 3v6a6 6 0 0 0 6 6h6M6 9v12M15 12l3 3-3 3',
+  switch: 'M4 12h5l3-7h8M12 12h8M9 12l3 7h8',
+  filter: 'M4 5h16l-6 8v6l-4-2v-4z',
+  edit: 'M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4',
+  merge: 'M6 3v4a5 5 0 0 0 5 5h2a5 5 0 0 1 5 5v4M6 21v-4a5 5 0 0 1 5-5',
+  pause: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM10 9v6M14 9v6',
+  split: 'M12 3v6M12 9l-6 6M12 9l6 6M6 15v6M18 15v6M12 9v12',
+  code: 'M8 7l-5 5 5 5M16 7l5 5-5 5M14 4l-4 16',
+  globe: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c2.5 2.5 3.5 5.5 3.5 9s-1 6.5-3.5 9c-2.5-2.5-3.5-5.5-3.5-9s1-6.5 3.5-9z',
+  ai: 'M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z',
+  slack: 'M9 3a2 2 0 0 0 0 4h2V5a2 2 0 0 0-2-2zM3 9a2 2 0 0 0 2 2h4V9a2 2 0 0 0-4 0zM15 21a2 2 0 0 0 0-4h-2v2a2 2 0 0 0 2 2zM21 15a2 2 0 0 0-2-2h-4v2a2 2 0 0 0 4 0zM13 3v8h2a2 2 0 0 0 2-2V5a2 2 0 0 0-4-2zM11 21v-8H9a2 2 0 0 0-2 2v4a2 2 0 0 0 4 2z',
+  chat: 'M4 5h16v11H9l-5 4z',
+  sms: 'M4 5h16v11H9l-5 4zM8 10h.01M12 10h.01M16 10h.01',
+  send: 'M3 11l18-8-8 18-2-8z',
+  mail: 'M4 6h16v12H4zM4 7l8 6 8-6',
+  db: 'M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zM4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3',
+  sort: 'M8 5v14M5 16l3 3 3-3M14 7h6M14 12h4M14 17h2',
+  cut: 'M4 6h16M4 12h10M4 18h6',
+  copy: 'M8 8h12v12H8zM4 16V4h12',
+  sum: 'M18 4H6l6 8-6 8h12',
+  group: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
+  rename: 'M4 7h10M4 12h7M4 17h10M17 6l3 3-6 6h-3v-3z',
+  cal: 'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4',
+  lock: 'M6 11h12v9H6zM8.5 11V8a3.5 3.5 0 0 1 7 0v3',
+  text: 'M4 6h16M12 6v14M8 20h8',
+  braces: 'M8 4H7a2 2 0 0 0-2 2v4l-2 2 2 2v4a2 2 0 0 0 2 2h1M16 4h1a2 2 0 0 1 2 2v4l2 2-2 2v4a2 2 0 0 1-2 2h-1',
+  regex: 'M17 3v10M13 5l8 6M13 11l8-6M5 17h4v4H5z',
+  table: 'M4 4h16v16H4zM4 9h16M4 14h16M9 4v16',
+  stack: 'M4 6h16M4 12h16M4 18h16',
+  stop: 'M8 3h8l5 5v8l-5 5H8l-5-5V8zM12 8v5M12 16h.01',
+  dot: 'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z',
+  flow: 'M3 9h6v6H3zM15 3.5h6v6h-6zM15 14.5h6v6h-6zM9 12h3l1.5-5.5H15M12 12l1.5 5.5H15',
+  sun: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4',
+  bell: 'M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 20a2 2 0 0 0 4 0',
+  pay: 'M3 6h18v12H3zM3 10h18M7 15h4',
+  user: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM5 20c1-3.5 4-5 7-5s6 1.5 7 5',
+  form: 'M5 3h14v18H5zM8 8h8M8 12h8M8 16h5',
+  eye: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z',
+  rows: 'M4 4h16v16H4zM4 9h16M4 14h16M12 17v6M9 20h6',
+  link: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1',
+  qr: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 14h2v2h-2zM14 18h2v2h-2zM18 18h2v2h-2z',
+  coin: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM15 9h-4a2 2 0 0 0 0 4h2a2 2 0 0 1 0 4H9M12 6v2M12 16v2',
+  translate: 'M4 5h9M8.5 3v2M6 5c0 4 3 7 6 8M11 5c0 4-3 7-6 8M13 21l4-10 4 10M14.5 17.5h5',
+  browser: 'M3 5h18v14H3zM3 9h18M6 7h.01M8.5 7h.01M11 7h.01',
+  siren: 'M7 18v-6a5 5 0 0 1 10 0v6M5 18h14v3H5zM12 3v2M4 7l1.5 1.5M20 7l-1.5 1.5',
+};
+export const ICON = I;
+
+// A webhook's URL is its secret: 24 random characters.
+export const secretPath = () => Array.from(crypto.getRandomValues(new Uint8Array(24)), b => 'abcdefghijklmnopqrstuvwxyz0123456789'[b % 36]).join('');
+
+const OPS = [['equals', 'is equal to'], ['notEquals', 'is not equal to'], ['contains', 'contains'], ['notContains', 'does not contain'], ['gt', 'is greater than'], ['gte', 'is at least'], ['lt', 'is less than'], ['lte', 'is at most'], ['isEmpty', 'is empty'], ['isNotEmpty', 'is not empty'], ['isTrue', 'is true'], ['isFalse', 'is false']];
+const CONDITION = [{ k: 'left', label: 'Value', kind: 'text', hint: 'e.g. {{ $json.status }}' }, { k: 'op', label: 'Check', kind: 'select', options: OPS }, { k: 'right', label: 'Against', kind: 'text' }];
+const OUT = hint => ({ k: 'output', label: 'Put the result in', kind: 'text', hint });
+const opSel = (...options) => ({ k: 'operation', label: 'Do', kind: 'select', options });
+const only = (field, ...values) => ({ when: [field, ...values] });
+const EVERY = { k: 'every', label: 'Check every (minutes)', kind: 'number' };
+// An app that calls a URL of ours with its events, signed with a secret.
+const appHook = (type, label, note, logo, tone, events, hookHelp, icon = null, filter = true) => ({ [type]: {
+  group: 'Triggers', label, note, ...(logo ? { logo } : {}), icon: icon || I.hook, tone, trigger: true, hook: `${label} webhook URL`, hookHelp,
+  fields: [...(filter ? [{ k: 'events', label: 'Only these events (blank: all)', kind: 'text', hint: events }] : []), { k: 'secret', label: 'Signing secret (recommended)', kind: 'text', secret: true }],
+  defaults: () => ({ path: secretPath() }) } });
+
+// What to take from a page (Web page and Browser).
+const EXTRACT = [
+  { k: 'extract', label: 'Take', kind: 'select', options: [['text', 'The text (title, description, words)'], ['links', 'Every link'], ['tables', 'Tables (one item per row)'], ['selector', 'What a CSS selector finds'], ['fields', 'Named fields (one item, or one per block)'], ['html', 'The HTML as it is']] },
+  { k: 'selector', label: 'CSS selector', kind: 'text', hint: '.product h2  (add @href to read an attribute)', when: ['extract', 'selector', 'links', 'tables', 'text'] },
+  { k: 'each', label: 'Repeat for each (CSS selector, optional)', kind: 'text', hint: '.product', when: ['extract', 'fields'] },
+  { k: 'fields', label: 'Fields: name and CSS selector', kind: 'pairs', hint: 'name → h2 · price → .price · link → a @href', when: ['extract', 'fields'] },
+  { k: 'limit', label: 'At most', kind: 'number', when: ['extract', 'links', 'tables', 'selector', 'fields'] },
+];
+const EMAIL = [{ k: 'to', label: 'To', kind: 'text' }, { k: 'subject', label: 'Subject', kind: 'text' }, { k: 'text', label: 'Text', kind: 'textarea' }, { k: 'html', label: 'HTML (optional)', kind: 'textarea' }, { k: 'from', label: 'From (blank: the credential’s)', kind: 'text' }];
+const LANGS = [['EN-US', 'English (US)'], ['EN-GB', 'English (UK)'], ['HI', 'Hindi'], ['DE', 'German'], ['FR', 'French'], ['ES', 'Spanish'], ['IT', 'Italian'], ['PT-BR', 'Portuguese (Brazil)'], ['NL', 'Dutch'], ['PL', 'Polish'], ['RU', 'Russian'], ['JA', 'Japanese'], ['KO', 'Korean'], ['ZH', 'Chinese'], ['AR', 'Arabic'], ['TR', 'Turkish'], ['ID', 'Indonesian'], ['UK', 'Ukrainian']];
+
+export const GROUPS = ['Triggers', 'Workline', 'Flow', 'Data', 'Web', 'AI', 'Communication', 'Productivity', 'Developer', 'Sales & payments', 'Storage & feeds'];
+export const NODES = {
+  /* ---- triggers ---- */
+  'trigger.manual': { group: 'Triggers', label: 'Run by hand', note: 'Starts when you press Run', icon: I.play, tone: 'green', trigger: true, fields: [] },
+  'trigger.webhook': { group: 'Triggers', label: 'Webhook', note: 'Starts when another app calls its URL', icon: I.hook, tone: 'green', trigger: true,
+    fields: [{ k: 'method', label: 'Method', kind: 'select', options: [['ANY', 'Any'], ['POST', 'POST'], ['GET', 'GET'], ['PUT', 'PUT'], ['DELETE', 'DELETE']] }],
+    defaults: () => ({ method: 'POST', path: secretPath() }) },
+  'trigger.schedule': { group: 'Triggers', label: 'Schedule', note: 'Starts every few minutes, hours or days', icon: I.clock, tone: 'green', trigger: true,
+    fields: [
+      { k: 'mode', label: 'When', kind: 'select', options: [['interval', 'Every…'], ['daily', 'Every day at (UTC)']] },
+      { k: 'every', label: 'Every', kind: 'number', ...only('mode', 'interval') },
+      { k: 'unit', label: 'Unit', kind: 'select', options: [['minutes', 'minutes'], ['hours', 'hours'], ['days', 'days']], ...only('mode', 'interval') },
+      { k: 'at', label: 'Time (HH:MM, UTC)', kind: 'text', ...only('mode', 'daily') },
+    ], defaults: () => ({ mode: 'interval', every: 15, unit: 'minutes', at: '09:00' }) },
+  'trigger.form': { group: 'Triggers', label: 'Form', note: 'Starts when someone fills in a form', icon: I.form, tone: 'green', trigger: true, hook: 'Form link',
+    hookHelp: 'Share this link. Each answer starts the workflow with the fields filled in.',
+    fields: [{ k: 'title', label: 'Title', kind: 'text' }, { k: 'description', label: 'Description', kind: 'textarea' }, { k: 'fields', label: 'Fields, one a line', kind: 'textarea', hint: 'Name\nEmail* (email)\nMessage (long)' }, { k: 'button', label: 'Button', kind: 'text', hint: 'Send' }, { k: 'thanks', label: 'Thank-you message', kind: 'text' }],
+    help: 'A * makes a field required; (long), (email), (number), (date), (tel) or (url) set its kind.',
+    defaults: () => ({ path: secretPath(), title: 'Contact us', fields: 'Name*\nEmail* (email)\nMessage (long)', button: 'Send', thanks: 'Thanks! We got it.' }) },
+  ...appHook('trigger.github', 'GitHub', 'Pushes, issues, pull requests, releases', 'github', 'slate', 'push, issues.opened, pull_request', 'Repository → Settings → Webhooks → Add webhook: this URL as the Payload URL, content type application/json, and the same secret.'),
+  ...appHook('trigger.stripe', 'Stripe', 'Payments, checkouts, subscriptions', 'stripe', 'violet', 'checkout.session.completed, invoice.paid', 'Developers → Webhooks → Add endpoint with this URL; paste its signing secret (whsec_…).'),
+  ...appHook('trigger.shopify', 'Shopify', 'New orders, customers, products', 'shopify', 'green', 'orders/create, customers/create', 'Settings → Notifications → Webhooks → Create webhook (JSON) with this URL; the secret is shown below the list.'),
+  ...appHook('trigger.slack', 'Slack', 'Messages and mentions in Slack', null, 'pink', 'message, app_mention', 'api.slack.com/apps → your app → Event Subscriptions: this URL as the Request URL; the signing secret is under Basic Information.', I.slack),
+  ...appHook('trigger.typeform', 'Typeform', 'Each new form response', null, 'slate', '', 'Form → Connect → Webhooks → Add a webhook with this URL, and a secret if you like.', I.form, false),
+  ...appHook('trigger.calendly', 'Calendly', 'Bookings made or cancelled', 'calendly', 'blue', 'invitee.created, invitee.canceled', 'Create a webhook subscription (Calendly API) to this URL; paste its signing key.'),
+  'trigger.rss': { group: 'Triggers', label: 'New in a feed', note: 'Starts for each new post in an RSS feed', logo: 'rss', icon: I.globe, tone: 'orange', trigger: true, poll: true,
+    fields: [{ k: 'url', label: 'Feed URL', kind: 'text', hint: 'https://example.com/feed.xml' }, EVERY], defaults: () => ({ every: 15 }) },
+  'trigger.telegram': { group: 'Triggers', label: 'Telegram message', note: 'Starts when someone messages your bot', logo: 'telegram', icon: I.send, tone: 'sky', trigger: true, poll: true, credential: ['telegram'],
+    fields: [EVERY], help: 'Messages to the bot are fetched every few minutes (the bot must have no webhook set).', defaults: () => ({ every: 1 }) },
+  'trigger.urlchange': { group: 'Triggers', label: 'Page changed', note: 'Starts when a web page or API changes', icon: I.eye, tone: 'teal', trigger: true, poll: true,
+    fields: [{ k: 'url', label: 'URL', kind: 'text' }, { k: 'text', label: 'Compare the text only (ignore markup)', kind: 'bool' }, EVERY], defaults: () => ({ every: 60, text: true }) },
+  'trigger.sheetrow': { group: 'Triggers', label: 'New sheet row', note: 'Starts for each row added to a Workline sheet', icon: I.rows, tone: 'green', trigger: true, poll: true,
+    fields: [{ k: 'fileId', label: 'File', kind: 'file', has: 'sheets' }, { k: 'sheet', label: 'Sheet (blank: the first)', kind: 'text' }, EVERY], defaults: () => ({ every: 5 }) },
+
+  /* ---- Workline's own tools, on this account's files ---- */
+  'workline.sheet': { group: 'Workline', label: 'Workline Sheet', note: 'Reads rows from a sheet, or adds each item as a row', icon: I.table, tone: 'brand',
+    fields: [opSel(['read', 'Read rows'], ['append', 'Add rows']), { k: 'fileId', label: 'File', kind: 'file', has: 'sheets' }, { k: 'sheet', label: 'Sheet', kind: 'text', hint: 'empty: the first sheet' },
+      { k: 'values', label: 'Row (optional)', kind: 'textarea', hint: '{{ { "Name": $json.name, "Total": $json.total } }}  (empty: the item’s own fields)', ...only('operation', 'append') }],
+    defaults: () => ({ operation: 'read' }) },
+  'workline.doc': { group: 'Workline', label: 'Workline Doc', note: 'Reads, adds to or replaces a file’s doc, or starts a new file', icon: I.text, tone: 'brand',
+    fields: [opSel(['read', 'Read the doc'], ['append', 'Add to the end'], ['replace', 'Replace the doc'], ['create', 'Make a new file']),
+      { k: 'fileId', label: 'File', kind: 'file', ...only('operation', 'read', 'append', 'replace') },
+      { k: 'title', label: 'Title', kind: 'text', ...only('operation', 'create') },
+      { k: 'text', label: 'Text (markdown)', kind: 'textarea', hint: '## {{ $json.title }} … {{ $json.summary }}', ...only('operation', 'append', 'replace', 'create') }],
+    defaults: () => ({ operation: 'append' }) },
+  'workline.diagram': { group: 'Workline', label: 'Workline Diagram', note: 'Draws a diagram from code in a file, or reads one', icon: I.flow, tone: 'brand',
+    fields: [opSel(['write', 'Draw (add or replace)'], ['read', 'Read diagrams']), { k: 'fileId', label: 'File', kind: 'file' },
+      { k: 'name', label: 'Diagram (tab) name', kind: 'text', hint: 'a tab with this name is replaced; else one is added' },
+      { k: 'type', label: 'Type', kind: 'select', options: [['architecture', 'Architecture'], ['flowchart', 'Flowchart'], ['sequence', 'Sequence'], ['erd', 'Database schema']], ...only('operation', 'write') },
+      { k: 'code', label: 'Diagram code', kind: 'code', hint: 'web > api > db   (or {{ $json.text }} from an AI node)', ...only('operation', 'write') }],
+    defaults: () => ({ operation: 'write', type: 'architecture', name: 'Diagram 1' }) },
+  'workline.database': { group: 'Workline', label: 'Workline Database', note: 'Runs a query on a connection saved in the Database view', icon: I.db, tone: 'brand',
+    fields: [{ k: 'connection', label: 'Connection', kind: 'dbconn' }, { k: 'sql', label: 'Query', kind: 'code', hint: 'SELECT * FROM orders LIMIT 10' }] },
+
+  /* ---- flow ---- */
+  'core.if': { group: 'Flow', label: 'IF', note: 'Sends each item one way or the other', icon: I.branch, tone: 'amber', outputs: ['true', 'false'], fields: CONDITION, defaults: () => ({ left: '', op: 'equals', right: '' }) },
+  'core.switch': { group: 'Flow', label: 'Switch', note: 'Routes items by a value, up to four ways', icon: I.switch, tone: 'amber', outputs: ['0', '1', '2', '3', 'other'], portLabels: { 0: '1', 1: '2', 2: '3', 3: '4' },
+    fields: [{ k: 'value', label: 'Value', kind: 'text', hint: '{{ $json.type }}' }, { k: 'rule1', label: 'Output 1 when it is', kind: 'text' }, { k: 'rule2', label: 'Output 2 when it is', kind: 'text' }, { k: 'rule3', label: 'Output 3 when it is', kind: 'text' }, { k: 'rule4', label: 'Output 4 when it is', kind: 'text' }] },
+  'core.filter': { group: 'Flow', label: 'Filter', note: 'Keeps only the items that pass a check', icon: I.filter, tone: 'amber', fields: CONDITION, defaults: () => ({ left: '', op: 'equals', right: '' }) },
+  'core.merge': { group: 'Flow', label: 'Merge', note: 'Joins two branches into one list', icon: I.merge, tone: 'amber', inputs: ['a', 'b'], fields: [] },
+  'core.split': { group: 'Flow', label: 'Split out', note: 'Turns a list field into one item each', icon: I.split, tone: 'amber', fields: [{ k: 'field', label: 'List field', kind: 'text', hint: 'e.g. orders' }] },
+  'core.chunk': { group: 'Flow', label: 'Batch', note: 'Groups items into batches of N', icon: I.stack, tone: 'amber', fields: [{ k: 'size', label: 'Batch size', kind: 'number' }], defaults: () => ({ size: 10 }) },
+  'core.limit': { group: 'Flow', label: 'Limit', note: 'Keeps the first or last N items', icon: I.cut, tone: 'amber', fields: [{ k: 'max', label: 'How many', kind: 'number' }, { k: 'from', label: 'From', kind: 'select', options: [['start', 'the start'], ['end', 'the end']] }], defaults: () => ({ max: 10, from: 'start' }) },
+  'core.sort': { group: 'Flow', label: 'Sort', note: 'Orders items by a field', icon: I.sort, tone: 'amber', fields: [{ k: 'field', label: 'Field', kind: 'text' }, { k: 'order', label: 'Order', kind: 'select', options: [['asc', 'A → Z, 0 → 9'], ['desc', 'Z → A, 9 → 0']] }] },
+  'core.dedupe': { group: 'Flow', label: 'Remove duplicates', note: 'Drops items seen already', icon: I.copy, tone: 'amber', fields: [{ k: 'field', label: 'Compare by field', kind: 'text', hint: 'empty: the whole item' }] },
+  'core.delay': { group: 'Flow', label: 'Wait', note: 'Pauses up to a minute', icon: I.pause, tone: 'amber', fields: [{ k: 'seconds', label: 'Seconds', kind: 'number' }], defaults: () => ({ seconds: 5 }) },
+  'core.subflow': { group: 'Flow', label: 'Run another workflow', note: 'Hands the items to another workflow file', icon: I.flow, tone: 'amber', fields: [{ k: 'fileId', label: 'Workflow file', kind: 'workflow' }] },
+  'core.stop': { group: 'Flow', label: 'Stop and error', note: 'Ends the run with a message', icon: I.stop, tone: 'amber', fields: [{ k: 'message', label: 'Message', kind: 'text' }] },
+  'core.noop': { group: 'Flow', label: 'No operation', note: 'Passes items through unchanged', icon: I.dot, tone: 'amber', fields: [] },
+  'core.code': { group: 'Flow', label: 'Code', note: 'JavaScript over the items', icon: I.code, tone: 'amber',
+    fields: [{ k: 'code', label: 'JavaScript', kind: 'code', hint: '`items` is the list of item objects; return a list. await and fetch work.' }],
+    defaults: () => ({ code: 'return items.map(item => ({ ...item, checked: true }));' }) },
+
+  /* ---- data ---- */
+  'core.set': { group: 'Data', label: 'Set fields', note: 'Adds or changes fields on each item', icon: I.edit, tone: 'teal',
+    fields: [{ k: 'fields', label: 'Fields', kind: 'pairs', hint: 'name (a.b for nested) and value' }, { k: 'keep', label: 'Keep the other fields', kind: 'bool' }], defaults: () => ({ fields: [{ name: '', value: '' }], keep: true }) },
+  'core.rename': { group: 'Data', label: 'Rename fields', note: 'Moves fields to new names', icon: I.rename, tone: 'teal', fields: [{ k: 'fields', label: 'From → to', kind: 'pairs' }], defaults: () => ({ fields: [{ name: '', value: '' }] }) },
+  'core.aggregate': { group: 'Data', label: 'Aggregate', note: 'Collects all items into one list', icon: I.group, tone: 'teal', fields: [{ k: 'field', label: 'Field to collect', kind: 'text', hint: 'empty: whole items' }, { k: 'into', label: 'Into', kind: 'text', hint: 'items' }] },
+  'core.summarize': { group: 'Data', label: 'Summarize', note: 'Count, sum, average, min or max, by group', icon: I.sum, tone: 'teal',
+    fields: [{ k: 'op', label: 'Work out', kind: 'select', options: [['count', 'Count'], ['sum', 'Sum'], ['avg', 'Average'], ['min', 'Minimum'], ['max', 'Maximum']] }, { k: 'field', label: 'Of the field', kind: 'text' }, { k: 'groupBy', label: 'Grouped by', kind: 'text', hint: 'optional' }], defaults: () => ({ op: 'count' }) },
+  'core.datetime': { group: 'Data', label: 'Date & time', note: 'Formats, adds to and compares dates', icon: I.cal, tone: 'teal',
+    fields: [opSel(['format', 'Format'], ['add', 'Add'], ['subtract', 'Subtract'], ['diff', 'Time between'], ['toUnix', 'To Unix seconds']), { k: 'value', label: 'Date', kind: 'text', hint: 'empty: now' },
+      { k: 'format', label: 'As', kind: 'select', options: [['iso', 'ISO (2026-01-31T09:00:00Z)'], ['date', 'Date only'], ['time', 'Time only'], ['locale', 'Readable']], ...only('operation', 'format') },
+      { k: 'timeZone', label: 'Time zone', kind: 'text', hint: 'Asia/Kolkata', ...only('format', 'locale') },
+      { k: 'amount', label: 'Amount', kind: 'number', ...only('operation', 'add', 'subtract') }, { k: 'other', label: 'Until', kind: 'text', ...only('operation', 'diff') },
+      { k: 'unit', label: 'Unit', kind: 'select', options: ['seconds', 'minutes', 'hours', 'days', 'weeks'].map(u => [u, u]), ...only('operation', 'add', 'subtract', 'diff') }, OUT('date')], defaults: () => ({ operation: 'format', format: 'iso', unit: 'days' }) },
+  'core.text': { group: 'Data', label: 'Text', note: 'Change case, replace, split, slug, trim…', icon: I.text, tone: 'teal',
+    fields: [opSel(['trim', 'Trim'], ['upper', 'UPPER CASE'], ['lower', 'lower case'], ['replace', 'Replace'], ['split', 'Split into a list'], ['slug', 'Slug'], ['truncate', 'Shorten'], ['length', 'Length'], ['words', 'Count words']),
+      { k: 'value', label: 'Text', kind: 'text', hint: '{{ $json.title }}' }, { k: 'find', label: 'Find', kind: 'text', ...only('operation', 'replace') }, { k: 'replaceWith', label: 'Replace with', kind: 'text', ...only('operation', 'replace') },
+      { k: 'separator', label: 'Separator', kind: 'text', hint: ',', ...only('operation', 'split') }, { k: 'max', label: 'Characters', kind: 'number', ...only('operation', 'truncate') }, OUT('text')], defaults: () => ({ operation: 'trim' }) },
+  'core.json': { group: 'Data', label: 'JSON', note: 'Reads JSON text, or writes a value as JSON', icon: I.braces, tone: 'teal',
+    fields: [opSel(['parse', 'Read JSON text'], ['stringify', 'Write as JSON']), { k: 'field', label: 'Field', kind: 'text' }, { k: 'pretty', label: 'Indented', kind: 'bool', ...only('operation', 'stringify') }, OUT('same field')], defaults: () => ({ operation: 'parse', pretty: false }) },
+  'core.regex': { group: 'Data', label: 'Extract (regex)', note: 'Pulls matches out of text', icon: I.regex, tone: 'teal',
+    fields: [{ k: 'value', label: 'Text', kind: 'text' }, { k: 'pattern', label: 'Pattern', kind: 'text', hint: '(\\d+)' }, { k: 'flags', label: 'Flags', kind: 'text', hint: 'g for all matches, i to ignore case' }, OUT('matches')] },
+  'core.csv': { group: 'Data', label: 'CSV', note: 'Reads CSV text into items, or writes items as CSV', icon: I.table, tone: 'teal',
+    fields: [opSel(['parse', 'Read CSV'], ['build', 'Write CSV']), { k: 'text', label: 'CSV text', kind: 'textarea', hint: '{{ $json.body }}', ...only('operation', 'parse') }, { k: 'separator', label: 'Separator', kind: 'text', hint: ',' }, { k: 'output', label: 'Put the CSV in', kind: 'text', hint: 'csv', ...only('operation', 'build') }], defaults: () => ({ operation: 'parse' }) },
+  'core.crypto': { group: 'Data', label: 'Crypto', note: 'Hashes, HMAC, base64, UUIDs', icon: I.lock, tone: 'teal',
+    fields: [opSel(['hash', 'Hash'], ['hmac', 'HMAC'], ['base64Encode', 'Base64 encode'], ['base64Decode', 'Base64 decode'], ['uuid', 'New UUID'], ['random', 'Random hex']),
+      { k: 'value', label: 'Value', kind: 'text', ...only('operation', 'hash', 'hmac', 'base64Encode', 'base64Decode') },
+      { k: 'algorithm', label: 'Algorithm', kind: 'select', options: ['sha256', 'sha512', 'sha1', 'md5'].map(a => [a, a.toUpperCase()]), ...only('operation', 'hash', 'hmac') },
+      { k: 'secret', label: 'Secret', kind: 'text', ...only('operation', 'hmac') }, { k: 'encoding', label: 'As', kind: 'select', options: [['hex', 'hex'], ['base64', 'base64']], ...only('operation', 'hash', 'hmac') },
+      { k: 'length', label: 'Bytes', kind: 'number', ...only('operation', 'random') }, OUT('hash')], defaults: () => ({ operation: 'hash', algorithm: 'sha256', encoding: 'hex' }) },
+
+  /* ---- AI ---- */
+  'ai.claude': { group: 'AI', label: 'Claude', note: 'Writes, sums up or sorts text', logo: 'claude', icon: I.ai, tone: 'violet',
+    fields: [{ k: 'prompt', label: 'Prompt', kind: 'textarea', hint: 'Summarise this: {{ $json.text }}' }, { k: 'system', label: 'Instructions', kind: 'textarea' }], defaults: () => ({ prompt: '' }) },
+  openai: { group: 'AI', label: 'OpenAI', note: 'Chat with GPT models (or any OpenAI-style API)', icon: I.ai, tone: 'violet', credential: ['openai'],
+    fields: [{ k: 'model', label: 'Model', kind: 'text', hint: 'gpt-4o-mini' }, { k: 'prompt', label: 'Prompt', kind: 'textarea' }, { k: 'system', label: 'Instructions', kind: 'textarea' }] },
+  gemini: { group: 'AI', label: 'Gemini', note: 'Google’s models', logo: 'googlegemini', icon: I.ai, tone: 'violet', credential: ['gemini'],
+    fields: [{ k: 'model', label: 'Model', kind: 'text', hint: 'gemini-2.0-flash' }, { k: 'prompt', label: 'Prompt', kind: 'textarea' }, { k: 'system', label: 'Instructions', kind: 'textarea' }] },
+
+  deepl: { group: 'AI', label: 'DeepL translate', note: 'Translates text into another language', logo: 'deepl', icon: I.translate, tone: 'blue', credential: ['deepl'],
+    fields: [{ k: 'text', label: 'Text', kind: 'textarea', hint: '{{ $json.message }}' }, { k: 'target', label: 'Into', kind: 'select', options: LANGS }, { k: 'source', label: 'From (blank: detect)', kind: 'text', hint: 'EN' }, OUT('translation')], defaults: () => ({ target: 'EN-US', output: 'translation' }) },
+
+  /* ---- communication ---- */
+  'app.slack': { group: 'Communication', label: 'Slack', note: 'Sends a message', icon: I.slack, tone: 'pink', credential: ['slack'],
+    fields: [{ k: 'channel', label: 'Channel', kind: 'text', hint: '#general (not needed with a webhook URL)' }, { k: 'text', label: 'Message', kind: 'textarea' }] },
+  'app.discord': { group: 'Communication', label: 'Discord', note: 'Posts to a channel', logo: 'discord', icon: I.chat, tone: 'indigo', credential: ['discord'],
+    fields: [{ k: 'content', label: 'Message', kind: 'textarea' }, { k: 'username', label: 'Shown as', kind: 'text' }] },
+  'app.telegram': { group: 'Communication', label: 'Telegram', note: 'Sends a message from a bot', logo: 'telegram', icon: I.send, tone: 'sky', credential: ['telegram'],
+    fields: [{ k: 'chatId', label: 'Chat id', kind: 'text' }, { k: 'text', label: 'Message', kind: 'textarea' }] },
+  whatsapp: { group: 'Communication', label: 'WhatsApp', note: 'Sends a message (Cloud API)', logo: 'whatsapp', icon: I.chat, tone: 'green', credential: ['whatsapp'],
+    fields: [{ k: 'to', label: 'To (phone number)', kind: 'text', hint: '919876543210' }, { k: 'text', label: 'Message', kind: 'textarea' }] },
+  'app.teams': { group: 'Communication', label: 'Microsoft Teams', note: 'Posts to a channel (incoming webhook)', icon: I.chat, tone: 'indigo', credential: ['chatWebhook'], fields: [{ k: 'text', label: 'Message', kind: 'textarea' }] },
+  'app.googlechat': { group: 'Communication', label: 'Google Chat', note: 'Posts to a space (webhook)', logo: 'googlechat', icon: I.chat, tone: 'green', credential: ['chatWebhook'], fields: [{ k: 'text', label: 'Message', kind: 'textarea' }] },
+  'app.mattermost': { group: 'Communication', label: 'Mattermost', note: 'Posts to a channel (webhook)', logo: 'mattermost', icon: I.chat, tone: 'blue', credential: ['chatWebhook'], fields: [{ k: 'text', label: 'Message', kind: 'textarea' }] },
+  'app.email': { group: 'Communication', label: 'Email (SMTP)', note: 'Sends an email', logo: 'gmail', icon: I.mail, tone: 'blue', credential: ['smtp'], optionalCredential: true,
+    fields: [{ k: 'to', label: 'To', kind: 'text' }, { k: 'subject', label: 'Subject', kind: 'text' }, { k: 'text', label: 'Text', kind: 'textarea' }, { k: 'html', label: 'HTML (optional)', kind: 'textarea' }] },
+  sendgrid: { group: 'Communication', label: 'SendGrid', note: 'Sends an email', icon: I.mail, tone: 'sky', credential: ['sendgrid'],
+    fields: [{ k: 'to', label: 'To', kind: 'text' }, { k: 'subject', label: 'Subject', kind: 'text' }, { k: 'text', label: 'Text', kind: 'textarea' }, { k: 'html', label: 'HTML (optional)', kind: 'textarea' }] },
+  resend: { group: 'Communication', label: 'Resend', note: 'Sends an email', logo: 'resend', icon: I.mail, tone: 'slate', credential: ['resend'],
+    fields: [{ k: 'to', label: 'To', kind: 'text' }, { k: 'subject', label: 'Subject', kind: 'text' }, { k: 'text', label: 'Text', kind: 'textarea' }, { k: 'html', label: 'HTML (optional)', kind: 'textarea' }] },
+  twilio: { group: 'Communication', label: 'Twilio SMS', note: 'Sends a text message', icon: I.sms, tone: 'pink', credential: ['twilio'],
+    fields: [{ k: 'to', label: 'To', kind: 'text', hint: '+919876543210' }, { k: 'body', label: 'Message', kind: 'textarea' }, { k: 'from', label: 'From (optional)', kind: 'text' }] },
+  mailchimp: { group: 'Communication', label: 'Mailchimp', note: 'Adds someone to an audience', logo: 'mailchimp', icon: I.mail, tone: 'amber', credential: ['mailchimp'],
+    fields: [{ k: 'listId', label: 'Audience id', kind: 'text' }, { k: 'email', label: 'Email', kind: 'text' }, { k: 'firstName', label: 'First name', kind: 'text' }, { k: 'status', label: 'Status', kind: 'select', options: [['subscribed', 'Subscribed'], ['pending', 'Pending (double opt-in)']] }] },
+  ntfy: { group: 'Communication', label: 'ntfy push', note: 'Push notification to your phone', logo: 'ntfy', icon: I.bell, tone: 'teal', credential: ['ntfy'], optionalCredential: true,
+    fields: [{ k: 'topic', label: 'Topic', kind: 'text' }, { k: 'title', label: 'Title', kind: 'text' }, { k: 'message', label: 'Message', kind: 'textarea' }, { k: 'priority', label: 'Priority (1-5)', kind: 'number' }, { k: 'click', label: 'Opens (URL)', kind: 'text' }] },
+
+  mailgun: { group: 'Communication', label: 'Mailgun', note: 'Sends an email', logo: 'mailgun', icon: I.mail, tone: 'red', credential: ['mailgun'], fields: EMAIL },
+  postmark: { group: 'Communication', label: 'Postmark', note: 'Sends an email', icon: I.mail, tone: 'amber', credential: ['postmark'], fields: EMAIL },
+  brevo: { group: 'Communication', label: 'Brevo', note: 'Sends an email (Sendinblue)', logo: 'brevo', icon: I.mail, tone: 'teal', credential: ['brevo'], fields: EMAIL },
+  pushover: { group: 'Communication', label: 'Pushover', note: 'Push notification to your phone', icon: I.bell, tone: 'sky', credential: ['pushover'],
+    fields: [{ k: 'title', label: 'Title', kind: 'text' }, { k: 'message', label: 'Message', kind: 'textarea' }, { k: 'url', label: 'Link (optional)', kind: 'text' }, { k: 'priority', label: 'Priority', kind: 'select', options: [['0', 'Normal'], ['1', 'High'], ['-1', 'Quiet']] }] },
+
+  /* ---- productivity ---- */
+  'app.notion': { group: 'Productivity', label: 'Notion', note: 'Adds pages to a database', logo: 'notion', icon: I.text, tone: 'slate', credential: ['notion'],
+    fields: [opSel(['createPage', 'Add a page'], ['query', 'List pages']), { k: 'databaseId', label: 'Database id', kind: 'text' },
+      { k: 'titleProperty', label: 'Title property', kind: 'text', hint: 'Name', ...only('operation', 'createPage') }, { k: 'title', label: 'Title', kind: 'text', ...only('operation', 'createPage') }, { k: 'content', label: 'Text', kind: 'textarea', ...only('operation', 'createPage') }],
+    defaults: () => ({ operation: 'createPage', titleProperty: 'Name' }) },
+  'google.sheets': { group: 'Productivity', label: 'Google Sheets', note: 'Reads rows or adds one', logo: 'googlesheets', icon: I.table, tone: 'green', credential: ['google'],
+    fields: [opSel(['read', 'Read rows'], ['append', 'Add a row']), { k: 'spreadsheetId', label: 'Spreadsheet id', kind: 'text', hint: 'from its URL, between /d/ and /edit' }, { k: 'range', label: 'Sheet or range', kind: 'text', hint: 'Sheet1 or Sheet1!A:D' },
+      { k: 'values', label: 'Row values', kind: 'text', hint: '{{ [$json.name, $json.email] }} or a, b, c', ...only('operation', 'append') }], defaults: () => ({ operation: 'read', range: 'Sheet1' }) },
+  'google.calendar': { group: 'Productivity', label: 'Google Calendar', note: 'Lists or adds events', logo: 'googlecalendar', icon: I.cal, tone: 'blue', credential: ['google'],
+    fields: [opSel(['list', 'Upcoming events'], ['create', 'Add an event']), { k: 'calendarId', label: 'Calendar id', kind: 'text', hint: 'an email address' }, { k: 'limit', label: 'How many', kind: 'number', ...only('operation', 'list') },
+      { k: 'summary', label: 'Title', kind: 'text', ...only('operation', 'create') }, { k: 'description', label: 'Description', kind: 'textarea', ...only('operation', 'create') },
+      { k: 'start', label: 'Starts', kind: 'text', hint: '2026-01-31T10:00:00+05:30', ...only('operation', 'create') }, { k: 'end', label: 'Ends', kind: 'text', ...only('operation', 'create') }], defaults: () => ({ operation: 'list' }) },
+  airtable: { group: 'Productivity', label: 'Airtable', note: 'Lists, adds or updates records', logo: 'airtable', icon: I.table, tone: 'amber', credential: ['airtable'],
+    fields: [opSel(['list', 'List records'], ['create', 'Add a record'], ['update', 'Update a record']), { k: 'baseId', label: 'Base id', kind: 'text', hint: 'appXXXX' }, { k: 'table', label: 'Table', kind: 'text' },
+      { k: 'formula', label: 'Filter formula', kind: 'text', ...only('operation', 'list') }, { k: 'limit', label: 'How many', kind: 'number', ...only('operation', 'list') },
+      { k: 'recordId', label: 'Record id', kind: 'text', ...only('operation', 'update') }, { k: 'fields', label: 'Fields (JSON)', kind: 'textarea', hint: '{ "Name": "{{ $json.name }}" }', ...only('operation', 'create', 'update') }], defaults: () => ({ operation: 'list' }) },
+  trello: { group: 'Productivity', label: 'Trello', note: 'Adds or lists cards', logo: 'trello', icon: I.table, tone: 'blue', credential: ['trello'],
+    fields: [opSel(['createCard', 'Add a card'], ['listCards', 'List cards']), { k: 'listId', label: 'List id', kind: 'text' }, { k: 'name', label: 'Card name', kind: 'text', ...only('operation', 'createCard') }, { k: 'desc', label: 'Description', kind: 'textarea', ...only('operation', 'createCard') }], defaults: () => ({ operation: 'createCard' }) },
+  asana: { group: 'Productivity', label: 'Asana', note: 'Adds or lists tasks', logo: 'asana', icon: I.edit, tone: 'pink', credential: ['asana'],
+    fields: [opSel(['createTask', 'Add a task'], ['listTasks', 'List tasks']), { k: 'projectId', label: 'Project id', kind: 'text' }, { k: 'name', label: 'Task', kind: 'text', ...only('operation', 'createTask') }, { k: 'notes', label: 'Notes', kind: 'textarea', ...only('operation', 'createTask') }, { k: 'dueOn', label: 'Due (YYYY-MM-DD)', kind: 'text', ...only('operation', 'createTask') }], defaults: () => ({ operation: 'createTask' }) },
+  clickup: { group: 'Productivity', label: 'ClickUp', note: 'Adds or lists tasks', logo: 'clickup', icon: I.edit, tone: 'violet', credential: ['clickup'],
+    fields: [opSel(['createTask', 'Add a task'], ['listTasks', 'List tasks']), { k: 'listId', label: 'List id', kind: 'text' }, { k: 'name', label: 'Task', kind: 'text', ...only('operation', 'createTask') }, { k: 'description', label: 'Description', kind: 'textarea', ...only('operation', 'createTask') }], defaults: () => ({ operation: 'createTask' }) },
+  todoist: { group: 'Productivity', label: 'Todoist', note: 'Adds or lists tasks', logo: 'todoist', icon: I.edit, tone: 'orange', credential: ['todoist'],
+    fields: [opSel(['createTask', 'Add a task'], ['listTasks', 'List tasks']), { k: 'content', label: 'Task', kind: 'text', ...only('operation', 'createTask') }, { k: 'due', label: 'Due', kind: 'text', hint: 'tomorrow at 10am', ...only('operation', 'createTask') }, { k: 'description', label: 'Description', kind: 'textarea', ...only('operation', 'createTask') }, { k: 'filter', label: 'Filter', kind: 'text', hint: 'today | overdue', ...only('operation', 'listTasks') }], defaults: () => ({ operation: 'createTask' }) },
+  wordpress: { group: 'Productivity', label: 'WordPress', note: 'Writes or lists posts', logo: 'wordpress', icon: I.text, tone: 'sky', credential: ['wordpress'],
+    fields: [opSel(['createPost', 'Write a post'], ['listPosts', 'List posts']), { k: 'title', label: 'Title', kind: 'text', ...only('operation', 'createPost') }, { k: 'content', label: 'Content (HTML)', kind: 'textarea', ...only('operation', 'createPost') }, { k: 'status', label: 'Status', kind: 'select', options: [['draft', 'Draft'], ['publish', 'Published'], ['private', 'Private']], ...only('operation', 'createPost') }, { k: 'limit', label: 'How many', kind: 'number', ...only('operation', 'listPosts') }], defaults: () => ({ operation: 'createPost', status: 'draft' }) },
+
+  /* ---- developer ---- */
+  pagerduty: { group: 'Developer', label: 'PagerDuty', note: 'Raises or resolves an incident', logo: 'pagerduty', icon: I.siren, tone: 'green', credential: ['pagerduty'],
+    fields: [{ k: 'action', label: 'Do', kind: 'select', options: [['trigger', 'Raise an alert'], ['acknowledge', 'Acknowledge'], ['resolve', 'Resolve']] }, { k: 'summary', label: 'Summary', kind: 'text', ...only('action', 'trigger', '') }, { k: 'severity', label: 'Severity', kind: 'select', options: [['error', 'Error'], ['critical', 'Critical'], ['warning', 'Warning'], ['info', 'Info']], ...only('action', 'trigger', '') }, { k: 'source', label: 'Source', kind: 'text', hint: 'Workline', ...only('action', 'trigger', '') }, { k: 'dedupKey', label: 'Dedup key (to update the same alert)', kind: 'text' }],
+    defaults: () => ({ action: 'trigger', severity: 'error' }) },
+  'core.http': { group: 'Developer', label: 'HTTP request', note: 'Calls any web API', icon: I.globe, tone: 'blue', credential: ['bearer', 'header'], optionalCredential: true,
+    fields: [
+      { k: 'method', label: 'Method', kind: 'select', options: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map(m => [m, m]) },
+      { k: 'url', label: 'URL', kind: 'text', hint: 'https://api.example.com/items/{{ $json.id }}' },
+      { k: 'query', label: 'Query', kind: 'pairs' },
+      { k: 'headers', label: 'Headers', kind: 'pairs' },
+      { k: 'bodyType', label: 'Body type', kind: 'select', options: [['json', 'JSON'], ['text', 'Text'], ['none', 'None']] },
+      { k: 'body', label: 'Body', kind: 'textarea', hint: '{ "name": "{{ $json.name }}" } or {{ $json }}', ...only('bodyType', 'json', 'text') },
+      { k: 'failOnError', label: 'Stop on an error status', kind: 'bool' },
+    ], defaults: () => ({ method: 'GET', url: '', query: [], headers: [], bodyType: 'json', body: '', failOnError: true }) },
+  'app.github': { group: 'Developer', label: 'GitHub', note: 'Issues and repositories', logo: 'github', icon: I.code, tone: 'slate', credential: ['github'],
+    fields: [opSel(['createIssue', 'Create an issue'], ['listIssues', 'List issues'], ['getRepo', 'Get the repository']), { k: 'owner', label: 'Owner', kind: 'text' }, { k: 'repo', label: 'Repository', kind: 'text' },
+      { k: 'title', label: 'Title', kind: 'text', ...only('operation', 'createIssue') }, { k: 'body', label: 'Body', kind: 'textarea', ...only('operation', 'createIssue') },
+      { k: 'state', label: 'State', kind: 'select', options: [['open', 'Open'], ['closed', 'Closed'], ['all', 'All']], ...only('operation', 'listIssues') }], defaults: () => ({ operation: 'createIssue' }) },
+  gitlab: { group: 'Developer', label: 'GitLab', note: 'Adds or lists issues', logo: 'gitlab', icon: I.code, tone: 'orange', credential: ['gitlab'],
+    fields: [opSel(['createIssue', 'Create an issue'], ['listIssues', 'List issues']), { k: 'projectId', label: 'Project', kind: 'text', hint: 'id or group/name' }, { k: 'title', label: 'Title', kind: 'text', ...only('operation', 'createIssue') }, { k: 'description', label: 'Description', kind: 'textarea', ...only('operation', 'createIssue') }, { k: 'state', label: 'State', kind: 'select', options: [['opened', 'Open'], ['closed', 'Closed'], ['all', 'All']], ...only('operation', 'listIssues') }], defaults: () => ({ operation: 'createIssue' }) },
+  jira: { group: 'Developer', label: 'Jira', note: 'Creates, reads or searches issues', logo: 'jira', icon: I.edit, tone: 'blue', credential: ['jira'],
+    fields: [opSel(['createIssue', 'Create an issue'], ['getIssue', 'Get an issue'], ['search', 'Search (JQL)']), { k: 'projectKey', label: 'Project key', kind: 'text', ...only('operation', 'createIssue') }, { k: 'summary', label: 'Summary', kind: 'text', ...only('operation', 'createIssue') }, { k: 'description', label: 'Description', kind: 'textarea', ...only('operation', 'createIssue') }, { k: 'issueType', label: 'Type', kind: 'text', hint: 'Task', ...only('operation', 'createIssue') }, { k: 'issueKey', label: 'Issue key', kind: 'text', ...only('operation', 'getIssue') }, { k: 'jql', label: 'JQL', kind: 'text', hint: 'project = APP AND status = "To Do"', ...only('operation', 'search') }], defaults: () => ({ operation: 'createIssue', issueType: 'Task' }) },
+  linear: { group: 'Developer', label: 'Linear', note: 'Creates or lists issues', logo: 'linear', icon: I.edit, tone: 'indigo', credential: ['linear'],
+    fields: [opSel(['createIssue', 'Create an issue'], ['listIssues', 'List issues']), { k: 'teamId', label: 'Team id', kind: 'text', ...only('operation', 'createIssue') }, { k: 'title', label: 'Title', kind: 'text', ...only('operation', 'createIssue') }, { k: 'description', label: 'Description', kind: 'textarea', ...only('operation', 'createIssue') }], defaults: () => ({ operation: 'createIssue' }) },
+  zendesk: { group: 'Developer', label: 'Zendesk', note: 'Creates or lists tickets', logo: 'zendesk', icon: I.chat, tone: 'teal', credential: ['zendesk'],
+    fields: [opSel(['createTicket', 'Create a ticket'], ['listTickets', 'List tickets']), { k: 'subject', label: 'Subject', kind: 'text', ...only('operation', 'createTicket') }, { k: 'body', label: 'Message', kind: 'textarea', ...only('operation', 'createTicket') }, { k: 'requesterEmail', label: 'From (email)', kind: 'text', ...only('operation', 'createTicket') }], defaults: () => ({ operation: 'createTicket' }) },
+
+  /* ---- sales & payments ---- */
+  hubspot: { group: 'Sales & payments', label: 'HubSpot', note: 'Adds or lists contacts', logo: 'hubspot', icon: I.user, tone: 'orange', credential: ['hubspot'],
+    fields: [opSel(['createContact', 'Add a contact'], ['listContacts', 'List contacts']), { k: 'email', label: 'Email', kind: 'text', ...only('operation', 'createContact') }, { k: 'firstName', label: 'First name', kind: 'text', ...only('operation', 'createContact') }, { k: 'lastName', label: 'Last name', kind: 'text', ...only('operation', 'createContact') }, { k: 'company', label: 'Company', kind: 'text', ...only('operation', 'createContact') }], defaults: () => ({ operation: 'createContact' }) },
+  pipedrive: { group: 'Sales & payments', label: 'Pipedrive', note: 'People and deals', icon: I.user, tone: 'green', credential: ['pipedrive'],
+    fields: [opSel(['createPerson', 'Add a person'], ['createDeal', 'Add a deal'], ['listDeals', 'List deals']), { k: 'name', label: 'Name', kind: 'text', ...only('operation', 'createPerson') }, { k: 'email', label: 'Email', kind: 'text', ...only('operation', 'createPerson') }, { k: 'title', label: 'Deal title', kind: 'text', ...only('operation', 'createDeal') }, { k: 'value', label: 'Value', kind: 'number', ...only('operation', 'createDeal') }], defaults: () => ({ operation: 'createPerson' }) },
+  stripe: { group: 'Sales & payments', label: 'Stripe', note: 'Customers, payments and balance', logo: 'stripe', icon: I.pay, tone: 'indigo', credential: ['stripe'],
+    fields: [opSel(['listCustomers', 'List customers'], ['createCustomer', 'Add a customer'], ['listPayments', 'List payments'], ['balance', 'Balance']), { k: 'email', label: 'Email', kind: 'text', ...only('operation', 'listCustomers', 'createCustomer') }, { k: 'name', label: 'Name', kind: 'text', ...only('operation', 'createCustomer') }, { k: 'limit', label: 'How many', kind: 'number', ...only('operation', 'listCustomers', 'listPayments') }], defaults: () => ({ operation: 'listCustomers' }) },
+  shopify: { group: 'Sales & payments', label: 'Shopify', note: 'Orders and products', logo: 'shopify', icon: I.pay, tone: 'green', credential: ['shopify'],
+    fields: [opSel(['listOrders', 'List orders'], ['listProducts', 'List products']), { k: 'status', label: 'Orders', kind: 'select', options: [['any', 'All'], ['open', 'Open'], ['closed', 'Closed']], ...only('operation', 'listOrders') }, { k: 'limit', label: 'How many', kind: 'number' }], defaults: () => ({ operation: 'listOrders', status: 'any' }) },
+
+  bitly: { group: 'Data', label: 'Bitly', note: 'Shortens a link', logo: 'bitly', icon: I.link, tone: 'orange', credential: ['bitly'], fields: [{ k: 'url', label: 'Link', kind: 'text' }, { k: 'domain', label: 'Domain (optional)', kind: 'text', hint: 'bit.ly' }, OUT('shortUrl')], defaults: () => ({ output: 'shortUrl' }) },
+  'util.qrcode': { group: 'Data', label: 'QR code', note: 'A QR code image link for any text', icon: I.qr, tone: 'slate', fields: [{ k: 'text', label: 'What it holds', kind: 'text', hint: '{{ $json.url }}' }, { k: 'size', label: 'Size (px)', kind: 'number' }, OUT('qrCode')], defaults: () => ({ size: 300, output: 'qrCode' }) },
+  'data.currency': { group: 'Storage & feeds', label: 'Currency', note: 'Converts money at today’s rate', icon: I.coin, tone: 'amber',
+    fields: [{ k: 'amount', label: 'Amount', kind: 'text', hint: '{{ $json.price }}' }, { k: 'from', label: 'From', kind: 'text', hint: 'USD' }, { k: 'to', label: 'To', kind: 'text', hint: 'INR' }, OUT('converted')], defaults: () => ({ amount: '1', from: 'USD', to: 'INR', output: 'converted' }) },
+
+  /* ---- web pages ---- */
+  'web.page': { group: 'Web', label: 'Web page', note: 'Reads a page: its text, links, tables or any part', icon: I.globe, tone: 'sky',
+    fields: [{ k: 'url', label: 'Page address', kind: 'text', hint: 'https://example.com/products' }, ...EXTRACT] },
+  'web.browser': { group: 'Web', label: 'Browser', note: 'A real browser: JavaScript pages, clicks, screenshots, PDFs', icon: I.browser, tone: 'indigo', credential: ['browserless'],
+    fields: [
+      opSel(['read', 'Read the page'], ['steps', 'Do steps, then read'], ['screenshot', 'Take a screenshot'], ['pdf', 'Save as PDF']),
+      { k: 'url', label: 'Page address', kind: 'text' },
+      { k: 'steps', label: 'Steps, one a line', kind: 'textarea', hint: 'type #search | running shoes\npress Enter\nwait .results', ...only('operation', 'steps') },
+      { k: 'waitFor', label: 'Wait for (CSS selector, optional)', kind: 'text', hint: '.price', ...only('operation', 'read', 'steps', '') },
+      ...EXTRACT.map(f => (f.k === 'extract' ? { ...f, ...only('operation', 'read', 'steps', '') } : { ...f, also: ['operation', 'read', 'steps', ''] })),
+      { k: 'screenshot', label: 'Also take a screenshot', kind: 'bool', ...only('operation', 'read', 'steps', '') },
+      { k: 'fullPage', label: 'The whole page (not just the screen)', kind: 'bool', ...only('operation', 'screenshot') },
+    ], defaults: () => ({ operation: 'read', extract: 'text', screenshot: false }) },
+
+  /* ---- storage & feeds ---- */
+  'app.database': { group: 'Storage & feeds', label: 'Database', note: 'Runs a query (Postgres, MySQL, SQL Server, MongoDB)', logo: 'postgresql', icon: I.db, tone: 'orange', credential: ['database'],
+    fields: [{ k: 'sql', label: 'Query', kind: 'code', hint: 'SELECT * FROM orders WHERE id = {{ $json.id }}' }] },
+  supabase: { group: 'Storage & feeds', label: 'Supabase', note: 'Selects, inserts, updates, deletes rows', logo: 'supabase', icon: I.db, tone: 'green', credential: ['supabase'],
+    fields: [opSel(['select', 'Get rows'], ['insert', 'Insert a row'], ['update', 'Update rows'], ['delete', 'Delete rows']), { k: 'table', label: 'Table', kind: 'text' }, { k: 'filter', label: 'Filter', kind: 'text', hint: 'id=eq.1&status=eq.open' }, { k: 'row', label: 'Row (JSON)', kind: 'textarea', ...only('operation', 'insert', 'update') }, { k: 'limit', label: 'How many', kind: 'number', ...only('operation', 'select') }], defaults: () => ({ operation: 'select' }) },
+  dropbox: { group: 'Storage & feeds', label: 'Dropbox', note: 'Lists a folder or saves a text file', logo: 'dropbox', icon: I.copy, tone: 'blue', credential: ['dropbox'],
+    fields: [opSel(['list', 'List a folder'], ['upload', 'Save a text file']), { k: 'path', label: 'Path', kind: 'text', hint: '/reports/today.txt' }, { k: 'content', label: 'Content', kind: 'textarea', ...only('operation', 'upload') }], defaults: () => ({ operation: 'list', path: '/' }) },
+  'data.rss': { group: 'Storage & feeds', label: 'RSS feed', note: 'Reads a feed’s latest posts', logo: 'rss', icon: I.globe, tone: 'orange', fields: [{ k: 'url', label: 'Feed URL', kind: 'text' }, { k: 'limit', label: 'How many', kind: 'number' }], defaults: () => ({ limit: 20 }) },
+  'data.hackernews': { group: 'Storage & feeds', label: 'Hacker News', note: 'Top, new or best stories', logo: 'ycombinator', icon: I.globe, tone: 'orange',
+    fields: [{ k: 'list', label: 'Stories', kind: 'select', options: [['top', 'Top'], ['new', 'New'], ['best', 'Best'], ['ask', 'Ask HN'], ['show', 'Show HN']] }, { k: 'limit', label: 'How many', kind: 'number' }], defaults: () => ({ list: 'top', limit: 10 }) },
+  'data.weather': { group: 'Storage & feeds', label: 'Weather', note: 'Current weather anywhere (Open-Meteo)', icon: I.sun, tone: 'sky', fields: [{ k: 'latitude', label: 'Latitude', kind: 'text', hint: '28.61' }, { k: 'longitude', label: 'Longitude', kind: 'text', hint: '77.21' }] },
+};
+export const nodeDef = type => NODES[type] || { label: type, icon: I.code, tone: 'slate', group: 'Flow', fields: [] };
+export const inputsOf = type => (nodeDef(type).trigger ? [] : nodeDef(type).inputs || ['main']);
+export const outputsOf = type => nodeDef(type).outputs || ['main'];
+
+const key = (k, label, hint) => ({ k, label, secret: true, ...(hint ? { hint } : {}) });
+const plain = (k, label, hint) => ({ k, label, ...(hint ? { hint } : {}) });
+export const CRED_TYPES = {
+  slack: { label: 'Slack', help: 'An incoming webhook URL (simplest), or a bot token (xoxb-…) to post to any channel.', fields: [key('webhookUrl', 'Webhook URL'), key('token', 'Bot token')] },
+  discord: { label: 'Discord', help: 'Channel settings → Integrations → Webhooks → copy the URL.', fields: [key('webhookUrl', 'Webhook URL')] },
+  telegram: { label: 'Telegram', help: 'Make a bot with @BotFather and paste its token.', fields: [key('botToken', 'Bot token')] },
+  whatsapp: { label: 'WhatsApp', help: 'From Meta for Developers → WhatsApp → API setup: a token and the phone number id.', fields: [key('token', 'Access token'), plain('phoneNumberId', 'Phone number id')] },
+  chatWebhook: { label: 'Chat webhook', help: 'An incoming webhook URL from Microsoft Teams, Google Chat or Mattermost.', fields: [key('webhookUrl', 'Webhook URL')] },
+  smtp: { label: 'Email (SMTP)', help: 'smtps://user:password@smtp.example.com:465 (Gmail: an app password).', fields: [key('smtpUrl', 'SMTP URL'), plain('from', 'From', 'Workline <me@example.com>')] },
+  sendgrid: { label: 'SendGrid', help: 'Settings → API keys.', fields: [key('apiKey', 'API key'), plain('from', 'From (a verified sender)')] },
+  resend: { label: 'Resend', help: 'resend.com → API keys.', fields: [key('apiKey', 'API key'), plain('from', 'From', 'you@your-domain.com')] },
+  twilio: { label: 'Twilio', help: 'Console → Account info.', fields: [plain('accountSid', 'Account SID'), key('authToken', 'Auth token'), plain('from', 'From number', '+15550001234')] },
+  mailchimp: { label: 'Mailchimp', help: 'Profile → Extras → API keys (the whole key, ending -us1 or similar).', fields: [key('apiKey', 'API key')] },
+  ntfy: { label: 'ntfy', help: 'Only for your own ntfy server or a protected topic.', fields: [plain('server', 'Server', 'https://ntfy.sh'), key('token', 'Access token')] },
+  notion: { label: 'Notion', help: 'An internal integration secret; share the database with the integration.', fields: [key('token', 'Integration secret')] },
+  google: { label: 'Google (service account)', help: 'Google Cloud → IAM → Service accounts → Keys → JSON. Share the sheet or calendar with its email.', fields: [{ k: 'serviceAccountJson', label: 'Key (JSON)', secret: true, area: true }] },
+  airtable: { label: 'Airtable', help: 'airtable.com/create/tokens: a personal access token.', fields: [key('token', 'Token')] },
+  trello: { label: 'Trello', help: 'trello.com/power-ups/admin → an API key, then generate a token.', fields: [plain('apiKey', 'API key'), key('token', 'Token')] },
+  asana: { label: 'Asana', help: 'My settings → Apps → Developer apps → a personal access token.', fields: [key('token', 'Token')] },
+  clickup: { label: 'ClickUp', help: 'Settings → Apps → API token.', fields: [key('token', 'API token')] },
+  todoist: { label: 'Todoist', help: 'Settings → Integrations → Developer → API token.', fields: [key('token', 'API token')] },
+  wordpress: { label: 'WordPress', help: 'Users → Profile → Application passwords.', fields: [plain('url', 'Site', 'https://example.com'), plain('username', 'Username'), key('appPassword', 'Application password')] },
+  github: { label: 'GitHub', help: 'A personal access token (Settings → Developer settings) with access to the repositories.', fields: [key('token', 'Token')] },
+  gitlab: { label: 'GitLab', help: 'Preferences → Access tokens (api scope).', fields: [key('token', 'Token'), plain('baseUrl', 'Server', 'https://gitlab.com')] },
+  jira: { label: 'Jira', help: 'id.atlassian.com → Security → API tokens.', fields: [plain('site', 'Site', 'your-team.atlassian.net'), plain('email', 'Email'), key('apiToken', 'API token')] },
+  linear: { label: 'Linear', help: 'Settings → API → Personal API keys.', fields: [key('apiKey', 'API key')] },
+  zendesk: { label: 'Zendesk', help: 'Admin → Apps and integrations → Zendesk API → token.', fields: [plain('subdomain', 'Subdomain', 'your-team'), plain('email', 'Email'), key('apiToken', 'API token')] },
+  hubspot: { label: 'HubSpot', help: 'Settings → Integrations → Private apps → access token.', fields: [key('token', 'Access token')] },
+  pipedrive: { label: 'Pipedrive', help: 'Personal preferences → API.', fields: [key('apiToken', 'API token'), plain('domain', 'Company domain (optional)', 'your-company.pipedrive.com')] },
+  stripe: { label: 'Stripe', help: 'Developers → API keys → secret key (a restricted key works too).', fields: [key('secretKey', 'Secret key')] },
+  shopify: { label: 'Shopify', help: 'Settings → Apps → Develop apps → Admin API access token.', fields: [plain('shop', 'Shop', 'your-shop.myshopify.com'), key('token', 'Admin API token')] },
+  openai: { label: 'OpenAI', help: 'platform.openai.com → API keys. Any OpenAI-style API works with its base URL.', fields: [key('apiKey', 'API key'), plain('baseUrl', 'Base URL (optional)', 'https://api.openai.com/v1')] },
+  gemini: { label: 'Gemini', help: 'aistudio.google.com → Get API key.', fields: [key('apiKey', 'API key')] },
+  database: { label: 'Database', help: 'A connection string, as in the Database view.', fields: [
+    { k: 'type', label: 'Kind', options: [['postgres', 'PostgreSQL'], ['mysql', 'MySQL / MariaDB'], ['mssql', 'SQL Server'], ['mongodb', 'MongoDB']] },
+    key('url', 'Connection string', 'postgres://user:password@host:5432/db'),
+  ] },
+  supabase: { label: 'Supabase', help: 'Project settings → API: the URL and the service role key.', fields: [plain('url', 'Project URL', 'https://xyz.supabase.co'), key('serviceKey', 'Service role key')] },
+  dropbox: { label: 'Dropbox', help: 'dropbox.com/developers → an app → Generate access token.', fields: [key('token', 'Access token')] },
+  mailgun: { label: 'Mailgun', help: 'Sending → Domain settings → API keys.', fields: [key('apiKey', 'API key'), plain('domain', 'Domain', 'mg.example.com'), { k: 'region', label: 'Region', options: [['us', 'US'], ['eu', 'EU']] }, plain('from', 'From', 'Workline <hi@mg.example.com>')] },
+  postmark: { label: 'Postmark', help: 'Servers → your server → API tokens.', fields: [key('serverToken', 'Server token'), plain('from', 'From (a confirmed sender)')] },
+  brevo: { label: 'Brevo', help: 'SMTP & API → API keys.', fields: [key('apiKey', 'API key'), plain('from', 'From', 'Workline <you@example.com>')] },
+  pushover: { label: 'Pushover', help: 'pushover.net: your user key, and an application’s API token.', fields: [key('appToken', 'Application token'), key('userKey', 'User key')] },
+  pagerduty: { label: 'PagerDuty', help: 'Service → Integrations → Events API v2 → integration (routing) key.', fields: [key('routingKey', 'Routing key')] },
+  deepl: { label: 'DeepL', help: 'deepl.com → Account → API keys (free keys end in :fx).', fields: [key('apiKey', 'API key')] },
+  browserless: { label: 'Browserless', help: 'browserless.io → sign up (a free plan) → copy your API token.', fields: [key('token', 'API token'), plain('baseUrl', 'Server (optional)', 'https://production-sfo.browserless.io')] },
+  bitly: { label: 'Bitly', help: 'Settings → Developer settings → API → Generate token.', fields: [key('token', 'Access token')] },
+  bearer: { label: 'Bearer token', help: 'Sent as Authorization: Bearer <token>.', fields: [key('token', 'Token')] },
+  header: { label: 'Header', help: 'Any header, e.g. X-API-Key.', fields: [plain('headerName', 'Header name'), key('headerValue', 'Value')] },
+};
+
+// A new node of this type, named so it's unique in the flow.
+export function newNode(type, flow, at) {
+  const d = nodeDef(type);
+  const taken = new Set((flow.nodes || []).map(n => n.name));
+  let name = d.label, i = 2;
+  while (taken.has(name)) name = `${d.label} ${i++}`;
+  return { id: rid('n'), type, name, x: Math.round(at.x), y: Math.round(at.y), params: d.defaults ? d.defaults() : {} };
+}
+export const emptyFlow = () => ({ active: false, nodes: [{ id: rid('n'), type: 'trigger.manual', name: 'Run by hand', x: 80, y: 160, params: {} }], edges: [] });
+
+export const listCredentials = () => api('/credentials').then(r => r.credentials);
+export const createCredential = (type, name, data) => api('/credentials', { method: 'POST', body: { type, name, data } }).then(r => r.credential);
+export const updateCredential = (id, name, data) => api(`/credentials/${encodeURIComponent(id)}`, { method: 'PUT', body: { name, data } }).then(r => r.credential);
+export const deleteCredential = id => api(`/credentials/${encodeURIComponent(id)}`, { method: 'DELETE' });
+export const startRun = (fileId, flow, startId) => api(`/flows/${encodeURIComponent(fileId)}/run`, { method: 'POST', body: { flow, startId } }).then(r => r.runId);
+export const getRun = id => api(`/runs/${encodeURIComponent(id)}`).then(r => r.run);
+export const listRuns = fileId => api(`/flows/${encodeURIComponent(fileId)}/runs`).then(r => r.runs);

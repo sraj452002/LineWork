@@ -4,6 +4,8 @@ import { SAMPLES } from '../lib/samples.js';
 import { SAMPLE, fromCSV, newSheet } from '../lib/sheet.js';
 import { readSql } from '../lib/sql.js';
 import { rid } from '../lib/utils.js';
+import { emptyFlow, newNode } from '../lib/flows.js';
+import { importFlow } from '../lib/flowio.js';
 import { useUI } from './ui.jsx';
 
 /* The Tools page: every tool in Workline in one place. Each one makes a new file that opens in that tool. */
@@ -25,11 +27,20 @@ const ICON = {
   viz: 'M3 4h7v6H3zM14 14h7v6h-7zM6.5 10v4a2 2 0 0 0 2 2H14M14 4h7v6h-7zM10 7h4',
   node: 'M12 3l8 4.5v9L12 21l-8-4.5v-9zM9 10v4l3 2 3-2',
   live: 'M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zM4 6v6c0 1.7 3.6 3 8 3M20 6v4M4 12v6c0 1.7 3.6 3 8 3M17 14l-3 4h4l-3 4',
+  auto: 'M3 9h6v6H3zM15 3.5h6v6h-6zM15 14.5h6v6h-6zM9 12h3l1.5-5.5H15M12 12l1.5 5.5H15',
 };
 
 export default function Tools({ q = '', onCreate, onGenerate, busy }) {
   const { ask, toast } = useUI();
-  const csvRef = useRef(null), sqlRef = useRef(null);
+  const csvRef = useRef(null), sqlRef = useRef(null), flowRef = useRef(null);
+  const importWorkflow = async f => {
+    if (!f) return;
+    try {
+      const got = importFlow(await f.text());
+      onCreate(blank(got.name || f.name.replace(/(\.workflow)?\.json$/i, '') || 'Workflow', { view: 'flow', flow: got.flow }));
+      if (got.skipped.length) toast(`${got.skipped.length} kind${got.skipped.length === 1 ? '' : 's'} of n8n node became placeholders.`);
+    } catch (e) { toast(e.message || 'Couldn’t read that file.'); }
+  };
   const [cat, setCat] = useState('all');
   // A search shows matches in every category.
   useEffect(() => { if (q.trim()) setCat('all'); }, [q]);
@@ -45,6 +56,17 @@ export default function Tools({ q = '', onCreate, onGenerate, busy }) {
     return blank(title, { view: 'code', code: { files, folders: [], open: first ? [first.id] : [], active: first ? first.id : null, ...(launch ? { launch } : {}) } });
   };
   const sheetFile = (title, sh) => blank(title, { view: 'sheet', sheets: [sh], activeSheet: sh.id });
+  // A workflow file: nodes in a row from (80, 160), each joined to the next.
+  const flowFile = (title, types) => {
+    const flow = { active: false, nodes: [], edges: [] };
+    for (const [i, [type, params]] of types.entries()) {
+      const n = newNode(type, flow, { x: 80 + i * 260, y: 160 });
+      Object.assign(n.params, params || {});
+      if (flow.nodes.length) flow.edges.push({ id: rid('e'), from: flow.nodes[flow.nodes.length - 1].id, fromPort: type === 'app.discord' ? 'true' : 'main', to: n.id, toPort: 'main' });
+      flow.nodes.push(n);
+    }
+    return blank(title, { view: 'flow', flow });
+  };
 
   const importCSV = async f => {
     if (!f) return;
@@ -106,6 +128,15 @@ export default function Tools({ q = '', onCreate, onGenerate, busy }) {
       { k: 'sheet', view: 'Sheet', name: 'Budget sheet', note: 'An example spreadsheet with totals', act: () => onCreate(sheetFile('Budget', SAMPLE())) },
       { k: 'csv', view: 'Sheet', name: 'Open an Excel or CSV file', note: 'Open a .xlsx, CSV or TSV as a spreadsheet', act: () => csvRef.current?.click() },
     ] },
+    { id: 'automation', name: 'Automation', k: 'auto', note: 'Workflows that run on the server: start them by hand, from another app (webhook) or on a schedule, and connect apps like Slack, GitHub and Notion.', list: [
+      { k: 'auto', view: 'Workflow', name: 'Workflow', note: 'A blank workflow, like n8n', act: () => onCreate(blank('Workflow', { view: 'flow', flow: emptyFlow() })) },
+      { k: 'auto', view: 'Workflow', name: 'Webhook to Slack', note: 'When another app calls a URL, post to Slack', act: () => onCreate(flowFile('Webhook to Slack', [['trigger.webhook'], ['app.slack', { text: 'New event: {{ JSON.stringify($json.body) }}' }]])) },
+      { k: 'auto', view: 'Workflow', name: 'Check a site every hour', note: 'Call a URL on a schedule, tell Discord when it fails', act: () => onCreate(flowFile('Site check', [['trigger.schedule', { every: 1, unit: 'hours' }], ['core.http', { url: 'https://example.com', failOnError: false }], ['core.if', { left: '{{ $json.status || 200 }}', op: 'gte', right: '400' }], ['app.discord', { content: 'The site answered {{ $json.status }}' }]])) },
+      { k: 'auto', view: 'Workflow', name: 'Form to a sheet', note: 'A shareable form; each answer becomes a row', act: () => onCreate(flowFile('Form to sheet', [['trigger.form'], ['workline.sheet', { operation: 'append' }]])) },
+      { k: 'auto', view: 'Workflow', name: 'New GitHub issues to Slack', note: 'Post each new issue in a channel', act: () => onCreate(flowFile('GitHub issues to Slack', [['trigger.github', { events: 'issues.opened' }], ['app.slack', { text: 'New issue in {{ $json.repository }}: {{ $json.payload.issue.title }} {{ $json.payload.issue.html_url }}' }]])) },
+      { k: 'auto', view: 'Workflow', name: 'Feed to Telegram', note: 'Send each new blog post to a Telegram chat', act: () => onCreate(flowFile('Feed to Telegram', [['trigger.rss'], ['app.telegram', { text: '{{ $json.title }}\n{{ $json.link }}' }]])) },
+      { k: 'auto', view: 'Workflow', name: 'Import a workflow', note: 'Open a .json workflow: Workline’s or n8n’s', act: () => flowRef.current?.click() },
+    ] },
     { id: 'code', name: 'Code', k: 'code', note: 'Write, run and understand code, all in the browser.', list: [
       { k: 'code', view: 'Code', name: 'Code editor', note: 'VS Code’s editor, with files and folders', act: () => onCreate(code('Code', null)) },
       { k: 'term', view: 'Code', name: 'Terminal', note: 'node, npm, git, grep and more', act: () => onCreate(code('Terminal', null, 'terminal')) },
@@ -146,6 +177,7 @@ export default function Tools({ q = '', onCreate, onGenerate, busy }) {
         </section>
       ))}
       {!matching.length && <div className="nofiles">No tools match “{q.trim()}”.</div>}
+      <input ref={flowRef} type="file" accept=".json,application/json" hidden onChange={e => { importWorkflow(e.target.files[0]); e.target.value = ''; }} />
       <input ref={sqlRef} type="file" accept=".sql,.ddl,.txt,.psql,.mysql,application/sql" hidden onChange={e => openSQL(e.target.files[0])} />
       <input ref={csvRef} type="file" accept=".xlsx,.xlsm,.csv,.tsv,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden onChange={e => importCSV(e.target.files[0])} />
     </div>

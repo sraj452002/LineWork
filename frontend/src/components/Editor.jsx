@@ -13,6 +13,7 @@ import { ThemeButton, useUI } from './ui.jsx';
 const CodeWorkspace = lazy(() => import('./CodeWorkspace.jsx'));
 const SheetView = lazy(() => import('./SheetView.jsx'));
 const DatabaseView = lazy(() => import('./DatabaseView.jsx'));
+const FlowView = lazy(() => import('./FlowView.jsx'));
 
 const narrow = () => innerWidth <= 760;
 const AI_KEY = 'linework:ai-open';
@@ -21,7 +22,7 @@ const aiPref = () => { try { return localStorage.getItem(AI_KEY) === '1'; } catc
 
 // onShare and onHistory appear with the Workline API (backend/); a shared file has no onDelete.
 // The views a file can be shown in (the View menu at the top). `wide` ones need a wide screen.
-const VIEW_GROUPS = ['Draw', 'Write', 'Data', 'Build'];
+const VIEW_GROUPS = ['Draw', 'Write', 'Data', 'Build', 'Automate'];
 const VIEWS = [
   { k: 'canvas', group: 'Draw', label: 'Canvas', note: 'Diagrams, database schemas and the whiteboard', icon: '<rect x="3" y="3.5" width="7" height="5" rx="1"/><rect x="14" y="15.5" width="7" height="5" rx="1"/><path d="M6.5 8.5v4.5h11v2.5"/>' },
   { k: 'doc', group: 'Write', label: 'Doc', note: 'The design doc', icon: '<path d="M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6"/>' },
@@ -29,6 +30,7 @@ const VIEWS = [
   { k: 'sheet', group: 'Data', label: 'Sheet', note: 'Spreadsheets with formulas and charts, like Excel', icon: '<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17M3.5 14.5h17M9 4.5v15"/>' },
   { k: 'db', group: 'Data', label: 'Database', note: 'Connect to a live database: its schema and data', icon: '<ellipse cx="12" cy="5.5" rx="7.5" ry="2.5"/><path d="M4.5 5.5v13c0 1.4 3.4 2.5 7.5 2.5s7.5-1.1 7.5-2.5v-13M4.5 12c0 1.4 3.4 2.5 7.5 2.5s7.5-1.1 7.5-2.5"/>' },
   { k: 'code', group: 'Build', label: 'Code', note: 'Editor, terminal, Python and the code visualizer', icon: '<path d="m8 7-5 5 5 5M16 7l5 5-5 5M14 4l-4 16"/>' },
+  { k: 'flow', group: 'Automate', label: 'Workflow', note: 'Triggers, steps and apps, run on the server (like n8n)', icon: '<rect x="2.5" y="9" width="6" height="6" rx="1.5"/><rect x="15.5" y="3.5" width="6" height="6" rx="1.5"/><rect x="15.5" y="14.5" width="6" height="6" rx="1.5"/><path d="M8.5 12h3l1.5-5.5h2.5M11.5 12l1.5 5.5h2.5"/>' },
 ];
 
 export default function Editor({ file, update, saveState, onBack, onRename, onDuplicate, onDelete, onGuide, onShare, onHistory, duplicateLabel = 'Duplicate file' }) {
@@ -183,6 +185,7 @@ export default function Editor({ file, update, saveState, onBack, onRename, onDu
           '-',
           ...(onDelete ? [{ label: 'Delete file', danger: true, act: onDelete }, '-'] : []),
           { label: 'How to use Workline', note: 'Guide to the whole app', act: () => onGuide('app') },
+          { label: 'Workflows guide', note: 'Triggers, expressions and every node', act: () => onGuide('flow') },
           { label: 'Database schema guide', note: 'Tables, columns, relationships', act: () => onGuide('erd') },
         ])}>⋯</button>
       </div>
@@ -219,6 +222,13 @@ export default function Editor({ file, update, saveState, onBack, onRename, onDu
           <div className="dbpane">
             <Suspense fallback={<div className="cw-loading">Loading…</div>}>
               <DatabaseView file={file} update={update} visible onDiagram={drawLiveSchema} />
+            </Suspense>
+          </div>
+        )}
+        {view === 'flow' && (
+          <div className="flowpane">
+            <Suspense fallback={<div className="cw-loading">Loading…</div>}>
+              <FlowView file={file} update={update} visible saveState={saveState} onGuide={onGuide} />
             </Suspense>
           </div>
         )}

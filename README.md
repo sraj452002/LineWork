@@ -115,6 +115,37 @@ What's in the folder: `meta.json` (accounts with scrypt password hashes, session
 
 The backend loads `meta.json` when it starts and answers a change only after it's written to Drive. Stop the backend before `npm run admin`, which edits the same `meta.json`.
 
+## Workflows
+
+The **Workflow** view (View menu → Automate, or **Tools → Automation**; its guide, with every node explained, is under Help → Workflows guide or the **Guide** button) builds n8n-style automations: nodes on a canvas, joined by dragging from a node's output dot to another's input. Data moves between nodes as a list of items; fields can read them with expressions, `{{ $json.name }}` for the item coming in and `{{ $node["Name"].json.x }}` for an earlier node's output.
+
+- **Triggers:** Run by hand, **Webhook** (a secret URL, `<APP_URL>/api/hook/<token>`, that any app can call), **Schedule** (every N minutes, hours or days, or daily at a UTC time), and (`backend/flow-triggers.js`):
+  - **Form:** a page of its own at its URL; each answer starts the workflow with the fields filled in.
+  - **App events** at a URL of their own, checked against the app's signing secret when one is filled in, and filtered to the events asked for: **GitHub**, **Stripe**, **Shopify**, **Slack** (Events API, URL check included), **Typeform**, **Calendly**.
+  - **Something new**, looked for every few minutes: **New in a feed** (RSS/Atom), **Telegram message** (to your bot), **Page changed** (a page or API), **New sheet row** (a Workline sheet). The first look only notes what's there.
+- **Workline:** the account's own files. **Sheet** reads a sheet's rows (the first row names the fields) or adds each item as a row; **Doc** reads, adds to or replaces a file's doc, or makes a new file; **Diagram** draws a diagram from code into a file (a tab with that name is replaced, else one is added), or reads them; **Database** runs a query on a connection saved in the Database view (its password must be remembered). A file a workflow changes is saved like any other, with its version history; the app fetches it again when its tab comes back into view or a run ends, unless it has unsaved changes of its own. Sheet cells are read as written: a formula cell gives its formula.
+- **Flow:** IF, Switch (up to four ways), Filter, Merge, Split out, Batch, Limit, Sort, Remove duplicates, Wait, Run another workflow, Stop and error, No operation, Code (JavaScript over the items; `await` and `fetch` work).
+- **Data:** Bitly short links, QR codes, Set fields, Rename fields, Aggregate, Summarize (count, sum, average, min, max, by group), Date & time, Text, JSON, Extract (regex), CSV (read and write), Crypto (hashes, HMAC, base64, UUIDs).
+- **Web:** **Web page** reads a page as sent (text, links, tables, CSS selectors, named fields; `backend/flow-web.js`, with node-html-parser); **Browser** uses a real Chrome through Browserless (its API token in a credential) for pages built by JavaScript, steps (click, type, wait), screenshots and PDFs.
+- **AI:** Claude (the server's key), OpenAI (or any OpenAI-style API), Gemini, DeepL translate.
+- **Communication:** Slack, Discord, Telegram, WhatsApp (Cloud API), Microsoft Teams, Google Chat, Mattermost, Email (SMTP or the server's own), SendGrid, Resend, Mailgun, Postmark, Brevo, Twilio SMS, Mailchimp, ntfy and Pushover push.
+- **Productivity:** Notion, Google Sheets and Google Calendar (a service account the sheet or calendar is shared with), Airtable, Trello, Asana, ClickUp, Todoist, WordPress.
+- **Developer:** HTTP request (any API), GitHub, GitLab, Jira, Linear, Zendesk, PagerDuty.
+- **Sales & payments:** HubSpot, Pipedrive, Stripe, Shopify.
+- **Storage & feeds:** Database (PostgreSQL, MySQL, SQL Server, MongoDB, through `backend/dbconnect.js`), Supabase, Dropbox, RSS feeds, Hacker News, Weather (Open-Meteo), Currency (today's rates, Frankfurter).
+
+**Apps.** **Publish** turns a workflow into an app in **Apps** (home page): a form with the questions you choose and a Run button, for people who don't build workflows. It runs the saved workflow on the server (`POST /api/flows/:fileId/app`, only the declared answers are passed, as one item) with the owner's credentials, and shows the chosen node's output as text, a table or cards. The settings live in `file.flow.app` (`frontend/src/lib/apps.js`).
+
+**Save, export and import.** Changes save by themselves; **Save** (or Ctrl+S) saves at once. **Export** downloads the workflow as a `.json` file without credentials, signing secrets or webhook URLs (each node notes which kind of credential it needs). **Import** opens such a file, or a workflow exported from **n8n**: its common nodes become ours (expressions `={{ … }}` carry over; a Code node gets an n8n-style `$input`), others become placeholders named after them. **Template** keeps the workflow in **Templates** (home page sidebar), to start new ones from. After a run, **Download results** (beside Runs) saves what each node gave.
+
+Each app node asks for a credential of its kind (an API key or token; the dialog says where to find it). Node types are described in `frontend/src/lib/flows.js` (fields, ports, credentials) and run by `backend/flow-nodes.js` (flow and data) and `backend/flow-apps.js` (apps); `tests/flow-nodes.spec.js` checks the two agree. App logos come from simple-icons (`npm run icons`-style script: `node scripts/build-flow-logos.mjs` in `frontend/`).
+
+Workflows run on the backend (`backend/flows.js`, `flow-engine.js`, `flow-nodes.js`): **Run workflow** runs what's in the editor and shows each node's output; a workflow switched **Active** (and saved) listens on its webhooks and runs on its schedules. Each workflow keeps its last 20 runs in the account's Drive folder, counted in its storage.
+
+- **Credentials** (API keys, tokens, connection strings) are encrypted with AES-256-GCM under `FLOW_SECRET` and never sent back to the browser. Set `FLOW_SECRET` to a long random value and keep it: changing it makes saved credentials unreadable. (`render.yaml` generates one.)
+- **Schedules run while the server is awake.** A free Render service sleeps after 15 idle minutes, so a schedule then waits until something wakes it: a webhook, a visit, or a pinger such as cron-job.org calling the site every 10 minutes. Webhooks wake it themselves (the first call takes about a minute).
+- HTTP and app nodes refuse private and local addresses unless `DB_ALLOW_PRIVATE=1`. The Code node runs JavaScript on the server with time limits but no real sandbox: it's for the server's own, trusted accounts.
+
 ## Running code
 
 The Code view's **Run** button, **Terminal** and **Python** prompt run code in the visitor's browser; nothing runs on the server.
@@ -181,6 +212,7 @@ frontend/               the app (Netlify)
       Visualizer.jsx    Visualize pane: code diagrams and step-through
       SheetView.jsx     Sheet view: an Excel-like workbook (ribbon, grid, charts)
       DatabaseView.jsx  Database view: live connections, schema, data and queries
+      FlowView.jsx      Workflow view: the n8n-style editor, credentials and runs
       ui.jsx            menus, dialogs, toasts, theme button
     lib/
       backend.js        talking to the API (and waiting for it to wake)
@@ -195,6 +227,7 @@ frontend/               the app (Netlify)
       sheet.js          spreadsheet formulas, formats, dates, CSV
       xlsx.js           .xlsx open and save (ExcelJS)
       dbclient.js       live database connections, SQLite in the browser, schema → diagram
+      flows.js          workflow node types, credential kinds, and the workflow API
       charts.js         charts from cells, as SVG
       theme.js          light, dark or system theme, remembered
       python.worker.js  Pyodide in a web worker
@@ -212,6 +245,9 @@ backend/                the API (Render)
   drive.js              the backends: Google Drive, a local folder, memory (tests)
   drive-auth.js         gets a Drive refresh token (npm run drive-auth)
   dbconnect.js          live database connections (PostgreSQL, MySQL, SQL Server, MongoDB)
+  flows.js              workflows: credentials, runs, webhooks and schedules
+  flow-engine.js        runs a workflow: order, items, {{ expressions }}
+  flow-nodes.js         what each workflow node does (HTTP, Code, Slack, GitHub…)
   auth.js               passwords, sessions, sign-in limits
   mail.js               sending email (Resend or SMTP)
   oauth.js              Google and GitHub sign-in (OAuth 2 with PKCE)

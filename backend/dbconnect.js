@@ -82,7 +82,7 @@ export function isPrivateIp(ip) {
   return s === '::' || s === '::1' || /^f[cd]/.test(s) || /^fe[89ab]/.test(s) || /^ff/.test(s);
 }
 // The addresses a host name stands for, refusing private ones. Returns the first address to connect to.
-async function checkHost(host, allowPrivate) {
+export async function checkHost(host, allowPrivate) {
   if (!host) throw new DbError('bad_host', 'Enter the database’s host name.');
   let addrs;
   try { addrs = isIP(host) ? [{ address: host }] : await lookup(host, { all: true }); }

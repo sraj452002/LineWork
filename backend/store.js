@@ -23,7 +23,9 @@ const sha = t => createHash('sha256').update(t).digest('base64url');
 export class StorageFull extends Error {
   constructor(used, limit) { super('storage full'); this.code = 'storage_full'; this.used = used; this.limit = limit; }
 }
-const empty = () => ({ v: 1, nextVid: 1, users: {}, sessions: {}, tokens: {}, identities: {}, folders: {}, shares: {}, ai: {}, files: {}, versions: {}, images: {}, userdata: {} });
+const empty = () => ({ v: 1, nextVid: 1, users: {}, sessions: {}, tokens: {}, identities: {}, folders: {}, shares: {}, ai: {}, files: {}, versions: {}, images: {}, userdata: {},
+  // Workflows (flows.js): credentials, active triggers, and each flow's recent runs.
+  creds: {}, hooks: {}, schedules: {}, polls: {}, runs: {} });
 const USER_DEFAULTS = { verified: 1, totp_secret: null, totp_pending: null, totp_last: 0, recovery: '[]' };
 
 // Recently used file texts, so listing files doesn't download them all each time.
@@ -161,8 +163,10 @@ export async function openStore(backend, { versionEvery = 10 * 60_000, keepVersi
       if (!m.users[id]) return { changes: 0 };
       for (const fid of Object.keys(m.files[id] || {})) dropFileNow(id, fid);
       for (const key of Object.keys(m.images[id] || {})) removeLater(imageName(id, key));
+      for (const list of Object.values(m.runs[id] || {})) for (const r of list) removeLater(`${dirOf(id)}/run.${r.id}.json`);
       delete m.users[id]; delete m.files[id]; delete m.versions[id]; delete m.folders[id]; delete m.ai[id];
-      delete m.images[id]; delete m.userdata[id];
+      delete m.images[id]; delete m.userdata[id]; delete m.runs[id]; delete m.creds[id];
+      for (const table of ['hooks', 'schedules', 'polls']) for (const [k, v] of Object.entries(m[table] || {})) if (v.uid === id) delete m[table][k];
       for (const table of ['sessions', 'tokens', 'identities', 'shares']) dropWhere(table, x => x.user_id === id);
       return changed();
     } },
@@ -190,6 +194,7 @@ export async function openStore(backend, { versionEvery = 10 * 60_000, keepVersi
     for (const f of Object.values(m.files[uid] || {})) n += f.size || 0;
     for (const list of Object.values(m.versions[uid] || {})) for (const v of list) n += v.size || 0;
     for (const im of Object.values(m.images[uid] || {})) n += im.size || 0;
+    for (const list of Object.values(m.runs[uid] || {})) for (const r of list) n += r.size || 0;
     return n;
   };
   const storage = uid => ({ used: used(uid), limit: storageLimit });
@@ -280,6 +285,14 @@ export async function openStore(backend, { versionEvery = 10 * 60_000, keepVersi
     s, backend, meta: m,
     hasFile, readFile, listFiles, saveFile, dropFile, versions, readVersion,
     hasImage, saveImage, readImage, storage,
+    // For flows.js: meta.json changed; blobs in an account's folder; room for more (or StorageFull).
+    touch: () => saveMeta(),
+    blob: {
+      write: (uid, name, text) => queue(`${dirOf(uid)}/${name}`, () => backend.write(`${dirOf(uid)}/${name}`, text)),
+      read: (uid, name) => backend.read(`${dirOf(uid)}/${name}`),
+      remove: (uid, name) => removeLater(`${dirOf(uid)}/${name}`),
+    },
+    room: makeRoom,
     useAi, aiUsed, flush, close: flush,
   };
 }

@@ -34,6 +34,8 @@ const app = createApp(store, {
   allowLocal: env.ALLOW_LOCAL_MODE === 'true',
   // Let the Database view reach databases on private networks (this machine, a LAN, a VPC). Off by default.
   dbAllowPrivate: env.DB_ALLOW_PRIVATE === '1' || env.DB_ALLOW_PRIVATE === 'true',
+  // Workflows: the key their saved credentials are encrypted with (without it, one kept in meta.json).
+  flowSecret: env.FLOW_SECRET || '',
   mailer: createMailer({ resendKey: env.RESEND_API_KEY, smtpUrl: env.SMTP_URL, from: env.MAIL_FROM }),
   requireVerified: env.REQUIRE_EMAIL_VERIFICATION === undefined || env.REQUIRE_EMAIL_VERIFICATION === '' ? undefined : env.REQUIRE_EMAIL_VERIFICATION !== 'false',
   oauth: {

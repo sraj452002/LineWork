@@ -15,6 +15,7 @@
     "mongodb": "^6.21.0",
     "mssql": "^11.0.2",
     "mysql2": "^3.24.5",
+    "node-html-parser": "^7.1.0",
     "nodemailer": "^7.0.6",
     "pg": "^8.23.1",
     "qrcode": "^1.5.4"

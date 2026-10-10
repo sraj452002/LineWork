@@ -1,6 +1,9 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { dg, prep, svgDoc } from '../lib/engines.js';
 import { HELP } from '../lib/help.js';
+import { GROUPS, NODES } from '../lib/flows.js';
+import { NODE_GUIDE } from '../lib/flowguide.js';
+import { NodeCard } from './NodeGuide.jsx';
 import { Brand, useUI } from './ui.jsx';
 
 /* ---- examples, kept small so each one teaches one idea ---- */
@@ -399,12 +402,145 @@ function erdGuide(onTry, theme) {
   ];
 }
 
+/* ---- the Workflows guide: how they work, then every node, from NODES and NODE_GUIDE ---- */
+function NodeGroup({ group, q, lit }) {
+  const needle = q.trim().toLowerCase();
+  const list = Object.entries(NODES).filter(([k, d]) => d.group === group && (!needle || `${d.label} ${d.note} ${k} ${NODE_GUIDE[k]?.what || ''}`.toLowerCase().includes(needle)));
+  if (!list.length) return <p className="muted">{needle ? 'No node here matches.' : ''}</p>;
+  return <div className="gn-list">{list.map(([k, d]) => <NodeCard key={k} type={k} d={d} lit={lit === k} />)}</div>;
+}
+const GROUP_NOTE = {
+  Triggers: 'Every workflow starts with one. A workflow may have several (a webhook and a schedule, say); each starts it on its own. Apart from Run by hand, triggers only work while the workflow is Active.',
+  Workline: 'Your own Workline files: sheets, docs, diagrams and saved database connections. A file a workflow changes keeps its version history.',
+  Flow: 'Steer the items: branch, filter, join, sort, wait, or run code.',
+  Data: 'Change the items’ fields and values without calling anything outside.',
+  Web: 'Read web pages: fast without a browser, or with a real one for pages that need JavaScript, clicks or screenshots.',
+  AI: 'Ask a model for text: summaries, replies, classifications, translations.',
+  Communication: 'Send messages, emails and notifications.',
+  Productivity: 'Tasks, pages, sheets and calendars in other apps.',
+  Developer: 'Any API, code hosts, issue trackers and on-call.',
+  'Sales & payments': 'CRM records, payments and orders.',
+  'Storage & feeds': 'Databases, files, feeds and public data.',
+};
+
+function flowGuide(q, setQ, lit) {
+  const count = Object.keys(NODES).length;
+  return [
+    { id: 'first', title: 'Your first workflow', body: <>
+      <p>A <b>workflow</b> is a chain of <b>nodes</b>: a <b>trigger</b> that starts it, then steps that each do one thing — read data, change it, decide, or send it to an app. Data flows along the lines between them.</p>
+      <ol>
+        <li>Make one: <b>Tools → Automation → Workflow</b> (or pick a ready-made one, such as <i>Form to a sheet</i>). A new workflow starts with a <b>Run by hand</b> trigger.</li>
+        <li>Add a step: click a node in the <b>Nodes</b> list on the left (it’s added after the selected node and joined to it), drag it onto the canvas, or drag from a node’s right-hand dot and let go on empty space.</li>
+        <li>Set it up: click the node. The panel on the right shows its settings. Fields can use what came in, e.g. <code>{'{{ $json.name }}'}</code>.</li>
+        <li>If it’s an app (Slack, Gmail…), choose a <b>credential</b>, or press <b>New</b> to add one: the dialog says where to find the key.</li>
+        <li>Press <b>Run workflow</b>. Each node shows a tick or an error; click one and open <b>Output</b> to see exactly what it gave.</li>
+        <li>To make it run by itself, use a trigger like Webhook, Schedule or Form and switch the workflow <b>Active</b>.</li>
+      </ol>
+      <p>Try this: <b>Run by hand → Hacker News → Limit</b> (3) <b>→ Slack</b> with the text <code>{'{{ $json.title }} {{ $json.url }}'}</code>. It posts the three top stories.</p>
+    </> },
+    { id: 'canvas', title: 'The canvas', body: <>
+      <ul>
+        <li><b>Connect</b> two nodes by dragging from an output dot (right) to an input dot (left). Let go on empty canvas to pick a new node there.</li>
+        <li><b>Move</b> a node by dragging it; <b>pan</b> by dragging the background or scrolling; <b>zoom</b> with <K>Ctrl</K> + scroll or the buttons at the bottom left (the last one fits everything in view).</li>
+        <li><b>Delete</b> the selected node or line with <K>Delete</K> or <K>Backspace</K>; <K>Esc</K> clears the selection.</li>
+        <li>Nodes with several outputs (<b>IF</b>: true/false, <b>Switch</b>: 1–4/other) have a dot for each; connect each to its own next step.</li>
+        <li><b>Nodes</b> (top left) and the panel button (top right) hide the side panels for more room. The list has a search box.</li>
+      </ul>
+    </> },
+    { id: 'items', title: 'Items and expressions', body: <>
+      <p>Nodes pass <b>items</b> to each other: a list of small JSON objects, like rows. Most nodes run once <b>for each item</b>: if an RSS feed gives 10 posts, the Slack node after it sends 10 messages. To get one message for everything, put <b>Aggregate</b> (or Code) in between.</p>
+      <p>Any field can hold <b>expressions</b> in double braces. They are JavaScript, run for each item:</p>
+      <table className="gtable"><tbody>
+        <tr><td><code>{'{{ $json.email }}'}</code></td><td>A field of the item coming in. Paths work: <code>{'{{ $json.customer.address.city }}'}</code>, <code>{'{{ $json.items[0].name }}'}</code>.</td></tr>
+        <tr><td><code>{'{{ $node["Webhook"].json.body.id }}'}</code></td><td>The first item an earlier node (by its name) gave. <code>.items</code> is all of them. Useful after an app node, whose output replaces the item.</td></tr>
+        <tr><td><code>{'{{ $now }}'}</code></td><td>The time the run started (ISO text). <code>{'{{ $now.slice(0, 10) }}'}</code> is today’s date.</td></tr>
+        <tr><td><code>{'{{ $index }}'}</code></td><td>The item’s position, from 0.</td></tr>
+        <tr><td><code>{'{{ $json.price * 1.18 }}'}</code></td><td>Any JavaScript expression: maths, <code>.toUpperCase()</code>, <code>? :</code>, <code>JSON.stringify(…)</code>, <code>Math.round(…)</code>.</td></tr>
+      </tbody></table>
+      <p>A field that is <i>only</i> an expression keeps its type (a number, a list, an object); text around it makes it text: <code>{'Total: {{ $json.total }}'}</code>.</p>
+      <p>Not sure what a field is called? Run the workflow, click the node before, and look at its <b>Output</b>.</p>
+    </> },
+    { id: 'triggers', title: 'Triggers and Active', body: <>
+      <ul>
+        <li><b>Run by hand</b> only runs when you press Run. Good for building and testing.</li>
+        <li><b>Webhook, Form and app triggers</b> (GitHub, Stripe, Shopify, Slack, Typeform, Calendly) each have their <b>own secret URL</b>, shown in the node’s settings. Paste it into the other app. Anyone with the URL can start the workflow, so keep it private; app triggers can also check a <b>signing secret</b>.</li>
+        <li><b>Schedule</b> runs every few minutes, hours or days, or daily at a time in <b>UTC</b> (India is UTC+5:30).</li>
+        <li><b>New in a feed, Telegram message, Page changed, New sheet row</b> look for something new every few minutes. The first look only remembers what’s there, so you don’t get old things.</li>
+      </ul>
+      <p>These only work while the workflow is <b>Active</b> (the switch in the toolbar) <i>and saved</i>. Switching it off stops them at once. <b>Run workflow</b> always works, Active or not, so you can test a webhook workflow by hand.</p>
+      <p><b>On the free server</b> (Render) the backend sleeps after 15 quiet minutes. Webhooks and forms wake it (the first call can take about a minute); schedules and the “look every few minutes” triggers wait until it is awake. A free pinger such as cron-job.org calling the site every 10 minutes keeps it awake.</p>
+    </> },
+    { id: 'creds', title: 'Credentials', body: <>
+      <p>App nodes need a <b>credential</b>: an API key, token or webhook URL from that app. Add them in the node (<b>New</b>) or with <b>Credentials</b> in the toolbar. Each kind says where to find its key.</p>
+      <ul>
+        <li>They are stored <b>encrypted</b> on the server and never sent back to the browser: when you edit one, empty fields keep their saved value.</li>
+        <li>One credential can be used by many nodes and workflows. Deleting it breaks the nodes that use it.</li>
+        <li>Exports and templates <b>never</b> contain credentials; after an import, pick them again.</li>
+      </ul>
+    </> },
+    { id: 'save', title: 'Save, export, import, templates', body: <>
+      <ul>
+        <li><b>Save</b>: workflows save by themselves a moment after each change, like every Workline file. <b>Save</b> in the toolbar (or <K>Ctrl</K> + <K>S</K>) saves at once; it reads <b>Saved ✓</b> when everything is stored.</li>
+        <li><b>Export</b> downloads the workflow as a <code>.workflow.json</code> file, to keep, share or move to another account. Credentials, signing secrets and webhook URLs are left out.</li>
+        <li><b>Import</b> opens a Workline workflow file or one exported from <b>n8n</b>. Into an empty workflow it replaces it; otherwise it’s added beside what’s there. n8n nodes Workline has become the same node; others become <i>No operation</i> placeholders named after them, to rebuild by hand. Imported webhooks get new URLs. You can also import from <b>Tools → Automation → Import a workflow</b>.</li>
+        <li><b>Template</b> keeps the workflow (without credentials) in <b>Templates</b> on the home page (sidebar, or press <K>P</K>), to start new workflows from. Saving a template with the same name replaces it; each can be renamed or removed there.</li>
+      </ul>
+    </> },
+    { id: 'apps', title: 'Apps: workflows for everyone', body: <>
+      <p>Build a workflow once, then <b>publish</b> it as an <b>app</b>: people who don’t build workflows run it from <b>Apps</b> on the home page (sidebar, or <K>R</K>) — a simple form and a <b>Run</b> button, no nodes, no credentials.</p>
+      <ol>
+        <li>Build and test the workflow as usual, starting from <b>Run by hand</b>.</li>
+        <li>Press <b>Publish</b> in the toolbar. Switch it to <b>Published</b>, give it a name, a line about what it does, an icon and a colour.</li>
+        <li>Add the <b>questions</b> it asks (short or long text, number, email, date, a choice, yes/no). Each answer reaches the workflow as <code>{'{{ $json.<name> }}'}</code> — the dialog shows the exact name under each question — so use those in the nodes.</li>
+        <li>Choose which trigger it <b>starts from</b>, which node’s output to <b>show</b> (or the last steps), and <b>how</b>: best fit, text, table, cards or raw data. Pictures (screenshots, QR codes) and links show as such.</li>
+      </ol>
+      <ul>
+        <li>An app is <b>live</b>: it always runs the workflow as last <b>saved</b>. Change the workflow and the app changes with it; unpublish it to take it away.</li>
+        <li>It runs with <b>your</b> credentials; people using the app never see them.</li>
+        <li>Results can be copied, or downloaded as CSV or JSON. Earlier runs are listed under the result.</li>
+        <li>Templates are different: a template is a <i>copy</i> of a workflow, for building new ones; an app is the workflow itself, for using.</li>
+      </ul>
+    </> },
+    { id: 'runs', title: 'Runs and results', body: <>
+      <ul>
+        <li>While a run goes, nodes light up as they finish: green worked, red failed, grey skipped (no items reached it, like the unused side of an IF).</li>
+        <li>Click a node, then <b>Output</b>, to see its items (the first 20). A failed node shows its error; the run stops there.</li>
+        <li><b>Run from here</b> (in a node’s settings) starts at that node, handy to test the end of a long workflow.</li>
+        <li>With no node selected, the side panel lists the last <b>20 runs</b> and what started them; click one to see it on the canvas. <b>Download results</b> saves what each node gave in that run as JSON.</li>
+      </ul>
+    </> },
+    { id: 'limits', title: 'Limits and tips', body: <>
+      <ul>
+        <li>A run may take up to 2 minutes and 200 steps; up to 5,000 items may reach a node; 5 runs at once per account.</li>
+        <li>HTTP and app nodes can’t call private or local addresses (like <code>localhost</code>) unless the server allows it.</li>
+        <li>Use <b>IF</b> + <b>Stop and error</b> to fail loudly on bad data, and <b>Remove duplicates</b> before sending messages.</li>
+        <li>Rename nodes (click the name in the settings panel) so <code>{'$node["…"]'}</code> expressions read well.</li>
+        <li>Missing an app? <b>HTTP request</b> calls any API; add a <b>Bearer token</b> or <b>Header</b> credential for its key.</li>
+      </ul>
+    </> },
+    { id: 'nodes', title: `All ${count} nodes`, body: <>
+      <p>Every node, by group, with its settings, an example and what it gives. In the editor, the <b>?</b> on a node’s settings opens its entry here.</p>
+      <label className="gn-search"><input type="search" placeholder="Find a node (e.g. email, sheet, translate)" aria-label="Find a node" value={q} onChange={e => setQ(e.target.value)} /></label>
+    </> },
+    ...GROUPS.map(gname => ({ id: 'grp-' + gname.replace(/\W+/g, '-').toLowerCase(), title: gname, body: <>
+      <p className="muted">{GROUP_NOTE[gname]}</p>
+      <NodeGroup group={gname} q={q} lit={lit} />
+    </> })),
+  ];
+}
+
 export default function Guide({ which, onWhich, onClose, onTry }) {
   const { theme } = useUI();
   const bodyRef = useRef(null);
-  const sections = which === 'erd' ? erdGuide(onTry, theme) : appGuide();
+  const [q, setQ] = useState('');
+  const flow = String(which).startsWith('flow');
+  const lit = flow && String(which).includes(':') ? String(which).split(':')[1] : null;
+  const sections = which === 'erd' ? erdGuide(onTry, theme) : flow ? flowGuide(q, setQ, lit) : appGuide();
 
-  useEffect(() => { bodyRef.current?.scrollTo(0, 0); }, [which]);
+  useEffect(() => {
+    if (lit) { setQ(''); setTimeout(() => document.getElementById('g-node-' + lit)?.scrollIntoView({ block: 'start' }), 30); }
+    else bodyRef.current?.scrollTo(0, 0);
+  }, [which, lit]);
   useEffect(() => {
     const key = e => { if (e.key === 'Escape' && !document.querySelector('.modal,.menu')) onClose(); };
     document.addEventListener('keydown', key);
@@ -420,7 +556,8 @@ export default function Guide({ which, onWhich, onClose, onTry }) {
         <Brand />
         <span className="grow" />
         <div className="seg" role="group" aria-label="Choose a guide">
-          <button aria-pressed={which !== 'erd'} onClick={() => onWhich('app')}>Using Workline</button>
+          <button aria-pressed={which !== 'erd' && !flow} onClick={() => onWhich('app')}>Using Workline</button>
+          <button aria-pressed={flow} onClick={() => onWhich('flow')}>Workflows</button>
           <button aria-pressed={which === 'erd'} onClick={() => onWhich('erd')}>Database schemas</button>
         </div>
       </div>
@@ -433,9 +570,10 @@ export default function Guide({ which, onWhich, onClose, onTry }) {
           </nav>
           <article className="g-doc">
             <header>
-              <h1>{which === 'erd' ? 'Database schemas (ERD)' : 'How to use Workline'}</h1>
+              <h1>{which === 'erd' ? 'Database schemas (ERD)' : flow ? 'Workflows' : 'How to use Workline'}</h1>
               <p>{which === 'erd'
                 ? 'Describe tables, columns and relationships as text, and Workline draws the entity relationship diagram.'
+                : flow ? 'Automations like n8n: a trigger starts them, nodes do the steps, and they run on the Workline server.'
                 : 'Everything you need to go from an idea to a design doc with diagrams.'}</p>
             </header>
             {sections.map((s, i) => (

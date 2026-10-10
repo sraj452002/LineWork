@@ -7,9 +7,13 @@ import { THEMES, setTheme, themePref } from '../lib/theme.js';
 import { BrandMark, useUI } from './ui.jsx';
 import { StorageMeter } from './ServerDialogs.jsx';
 import Tools from './Tools.jsx';
+import Templates from './Templates.jsx';
+import Apps from './Apps.jsx';
 
 const IC = {
   grid: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',
+  apps: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
+  bookmark: 'M6 3h12v18l-6-4-6 4z',
   tools: 'M14.7 6.3a4 4 0 0 0-5.4 5.2L3 17.8V21h3.2l6.3-6.3a4 4 0 0 0 5.2-5.4l-2.6 2.6-2.4-.6-.6-2.4z',
   archive: 'M4 5h16v4H4zM5 9v10h14V9M10 13h4',
   folder: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z',
@@ -224,6 +228,8 @@ Reply with ONLY a JSON object: {"title": "...", "doc": "...", "diagrams": [...]}
       else if (e.key === 'a' || e.key === 'A') setView('all');
       else if (e.key === 'e' || e.key === 'E') setView('archive');
       else if (e.key === 't' || e.key === 'T') setView('tools');
+      else if (e.key === 'p' || e.key === 'P') setView('templates');
+      else if (e.key === 'r' || e.key === 'R') setView('apps');
       else if (e.key === 'g' || e.key === 'G') onGuide('app');
     };
     document.addEventListener('keydown', key);
@@ -247,8 +253,15 @@ Reply with ONLY a JSON object: {"title": "...", "doc": "...", "diagrams": [...]}
   const count = k => files.filter(f => !f.archived && f.folder === k).length;
   const who = account ? (account.name || account.userMetadata?.full_name || account.email || 'You') : 'This browser';
   const initial = (who[0] || '?').toUpperCase();
+  // The welcome line: the time of day, the first name, and what's here.
+  const hour = new Date().getHours();
+  const hello = hour < 5 ? 'Up late' : hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const live = files.filter(f => !f.archived);
+  const flows = live.filter(f => f.flow && (f.flow.nodes || []).length).length;
   // "Shubham's workspace": the account's first name, or its email's.
   const first = account ? String(account.name || account.userMetadata?.full_name || (account.email || '').split('@')[0]).split(/[\s._-]/)[0] : '';
+  // The greeting uses a real name only (not one made from an email address like sraj04307).
+  const named = account ? String(account.name || account.userMetadata?.full_name || '').trim().split(/\s+/)[0] : '';
   const workspace = first ? `${first[0].toUpperCase()}${first.slice(1)}’s workspace` : 'Workline';
   const doc = TEMPLATES.find(t => t.key === 'doc');
 
@@ -275,6 +288,12 @@ Reply with ONLY a JSON object: {"title": "...", "doc": "...", "diagrams": [...]}
           <button className="nav" aria-current={view === 'tools' ? 'page' : undefined} onClick={() => setView('tools')}>
             <Ico d={IC.tools} /><span>Tools</span><kbd>T</kbd>
           </button>
+          <button className="nav" aria-current={view === 'apps' ? 'page' : undefined} onClick={() => setView('apps')}>
+            <Ico d={IC.apps} /><span>Apps</span><kbd>R</kbd>
+          </button>
+          <button className="nav" aria-current={view === 'templates' ? 'page' : undefined} onClick={() => setView('templates')}>
+            <Ico d={IC.bookmark} /><span>Templates</span><kbd>P</kbd>
+          </button>
         </nav>
         <div className="side-sec">
           <h2>Folders</h2>
@@ -300,38 +319,47 @@ Reply with ONLY a JSON object: {"title": "...", "doc": "...", "diagrams": [...]}
       <main className="main">
         <div className="main-in">
           <header className="topbar">
-            <div className="tabs" role="tablist" aria-label="Filter files" hidden={view === 'tools'}>
+            <div className="tabs" role="tablist" aria-label="Filter files" hidden={view === 'tools' || view === 'templates' || view === 'apps'}>
               {[['all', 'All'], ['recent', 'Recents']].map(([k, l]) => (
                 <button key={k} role="tab" aria-selected={tab === k} className="tab-btn" onClick={() => setTab(k)}>{l}</button>
               ))}
             </div>
             <label className="dsearch">
               <Ico d={IC.search} size={17} />
-              <input ref={searchRef} type="search" placeholder={view === 'tools' ? 'Search tools' : 'Search'} aria-label={view === 'tools' ? 'Search tools' : 'Search files'} value={q}
+              <input ref={searchRef} type="search" placeholder={view === 'tools' ? 'Search tools' : view === 'templates' ? 'Search templates' : view === 'apps' ? 'Search apps' : 'Search'} aria-label={view === 'tools' ? 'Search tools' : view === 'templates' ? 'Search templates' : view === 'apps' ? 'Search apps' : 'Search files'} value={q}
                 onChange={e => setQ(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') { setQ(''); e.currentTarget.blur(); } }} />
               <kbd>/</kbd>
             </label>
             <AccountMenu account={account} who={who} initial={initial} saveState={saveState} storage={storage} onAccount={onAccount} onSignOut={onSignOut} />
           </header>
 
-          {view === 'tools' ? <Tools q={q} busy={busy} onCreate={onCreate} onGenerate={generate} /> : (<>
+          {view === 'apps' ? <Apps files={files} q={q} onEdit={onOpen} /> : view === 'templates' ? <Templates q={q} onCreate={onCreate} /> : view === 'tools' ? <Tools q={q} busy={busy} onCreate={onCreate} onGenerate={generate} /> : (<>
+          {view === 'all' && !q && (
+            <section className="hero" aria-label="Welcome">
+              <div className="hero-art" aria-hidden="true"><i /><i /><i /><svg viewBox="0 0 400 120" preserveAspectRatio="none"><path d="M0 90 C 80 20, 160 120, 240 60 S 360 20, 400 50" /><path d="M0 60 C 90 110, 170 10, 260 70 S 350 100, 400 30" /></svg></div>
+              <div className="hero-text">
+                <h1>{hello}{named ? `, ${named}` : ''}</h1>
+                <p>{live.length ? <><b>{live.length}</b> file{live.length === 1 ? '' : 's'}{flows ? <> · <b>{flows}</b> workflow{flows === 1 ? '' : 's'}</> : null} · draw, write, calculate and automate, all in one place.</> : 'Draw, write, calculate and automate, all in one place. Start with one of these.'}</p>
+              </div>
+            </section>
+          )}
           <div className="actions">
             <button className="action a-blue" aria-label="Create a Blank File" title="An empty doc and canvas" onClick={() => createFrom(TEMPLATES[0])}>
-              <i className="a-ico"><Ico d={IC.plus} size={28} /></i><span>Create a Blank File</span>
+              <svg className="a-dash" aria-hidden="true"><rect x="0" y="0" width="100%" height="100%" rx="14" /></svg><i className="a-ico"><Ico d={IC.plus} size={28} /></i><span>Create a Blank File</span>
             </button>
             <button className={'action a-purple' + (busy ? ' working' : '')} aria-label={busy ? 'Generating, click to stop' : 'Generate an AI Diagram'} title="Describe a system, AI draws it" onClick={generate}>
-              <i className="a-ico"><Ico d={IC.sparkle} size={28} /></i><span className={busy ? 'busy' : undefined}>{busy ? 'Generating… click to stop' : 'Generate an AI Diagram'}</span>
+              <svg className="a-dash" aria-hidden="true"><rect x="0" y="0" width="100%" height="100%" rx="14" /></svg><i className="a-ico"><Ico d={IC.sparkle} size={28} /></i><span className={busy ? 'busy' : undefined}>{busy ? 'Generating… click to stop' : 'Generate an AI Diagram'}</span>
             </button>
             <button className="action a-green" aria-label="Write a Design Doc" title="A doc with sections ready to fill in" onClick={() => doc && createFrom(doc)}>
-              <i className="a-ico"><Ico d={IC.doc} size={28} /></i><span>Write a Design Doc</span>
+              <svg className="a-dash" aria-hidden="true"><rect x="0" y="0" width="100%" height="100%" rx="14" /></svg><i className="a-ico"><Ico d={IC.doc} size={28} /></i><span>Write a Design Doc</span>
             </button>
             <button className="action a-orange" aria-label="Start from a Template" title="Architecture, flows, schemas" aria-haspopup="menu" onClick={e => popup(e.currentTarget, TEMPLATES.filter(t => t.key !== 'blank' && t.key !== 'doc').map(t => ({ label: t.name, note: t.note, act: () => createFrom(t) })))}>
-              <i className="a-ico"><Ico d={IC.layers} size={28} /></i><span>Start from a Template</span>
+              <svg className="a-dash" aria-hidden="true"><rect x="0" y="0" width="100%" height="100%" rx="14" /></svg><i className="a-ico"><Ico d={IC.layers} size={28} /></i><span>Start from a Template</span>
             </button>
           </div>
 
           {view !== 'all' && <h2 className="list-title">{heading}</h2>}
-          {!list.length ? <div className="nofiles">{empty}</div> : (
+          {!list.length ? <div className="nofiles"><svg className="nofiles-art" viewBox="0 0 160 110" aria-hidden="true"><rect x="22" y="24" width="70" height="56" rx="10" /><rect x="68" y="38" width="70" height="56" rx="10" /><path d="M80 56h44M80 66h30M80 76h38" /><circle cx="40" cy="42" r="6" /><path d="M34 64h40" /></svg><div>{empty}</div></div> : (
             <table className="ftable">
               <thead>
                 <tr>
@@ -373,6 +401,7 @@ Reply with ONLY a JSON object: {"title": "...", "doc": "...", "diagrams": [...]}
         </div>
         <button className="help-fab" aria-label="Help" aria-haspopup="menu" title="Help" onClick={e => popup(e.currentTarget, [
           { label: 'How to use Workline', kbd: 'G', act: () => onGuide('app') },
+          { label: 'Workflows guide', act: () => onGuide('flow') },
           { label: 'Database schema guide', act: () => onGuide('erd') },
         ])}><Ico d={IC.help} size={20} /></button>
       </main>

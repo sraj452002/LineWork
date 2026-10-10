@@ -25,7 +25,7 @@ test('the Tools page lists every tool, and search narrows it', async ({ page }) 
   await page.keyboard.press('t');
   await expect(page.getByRole('navigation', { name: 'Files' }).getByRole('button', { name: /^Tools/ })).toHaveAttribute('aria-current', 'page');
   for (const g of ['Diagrams', 'Databases', 'Docs & spreadsheets', 'Code']) await expect(page.getByRole('heading', { name: g })).toBeVisible();
-  await expect(page.locator('.tool-card')).toHaveCount(18);
+  await expect(page.locator('.tool-card')).toHaveCount(25);
   // Each card says where it opens.
   await expect(page.locator('.tool-card').filter({ hasText: 'Open a .sql file' }).locator('.tool-view')).toHaveText('Canvas');
   // A category chip shows just that category.
@@ -34,7 +34,7 @@ test('the Tools page lists every tool, and search narrows it', async ({ page }) 
   await expect(page.locator('.tool-card')).toHaveCount(4);
   await expect(page.getByRole('heading', { name: 'Code' })).toHaveCount(0);
   await cats.getByRole('button', { name: /^All/ }).click();
-  await expect(page.locator('.tool-card')).toHaveCount(18);
+  await expect(page.locator('.tool-card')).toHaveCount(25);
   await page.getByRole('searchbox', { name: 'Search tools' }).fill('python');
   await expect(page.locator('.tool-card')).toHaveCount(1);
   await page.getByRole('searchbox', { name: 'Search tools' }).fill('zzz');
@@ -79,4 +79,23 @@ test('tools open new files in the right view', async ({ page }) => {
 
   // The new files are in the list.
   await expect(page.locator('.ftable tbody tr')).toHaveCount(3);
+});
+
+test('a workflow saved as a template appears in Templates (not in Tools) and starts new workflows', async ({ page }) => {
+  await expect(page.getByRole('button', { name: 'Create a Blank File' })).toBeVisible();
+  const nav = page.getByRole('navigation', { name: 'Files' });
+  await nav.getByRole('button', { name: /^Templates/ }).click();
+  await expect(page.getByText('No templates yet')).toBeVisible();
+  await nav.getByRole('button', { name: /^Tools/ }).click();
+  await tool(page, 'Feed to Telegram').click();
+  await page.getByRole('button', { name: 'Template', exact: true }).click();
+  await page.getByRole('dialog').getByRole('textbox').fill('My feed bot');
+  await page.getByRole('button', { name: 'Save template' }).click();
+  await page.getByRole('button', { name: 'Files' }).click();
+  await nav.getByRole('button', { name: /^Tools/ }).click();
+  await expect(page.locator('.tool-card')).toHaveCount(25);
+  await nav.getByRole('button', { name: /^Templates/ }).click();
+  await expect(page.locator('.tpl-card')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Use the template My feed bot' }).click();
+  await expect(page.locator('.fv-node')).toHaveCount(2);
 });

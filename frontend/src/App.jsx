@@ -118,7 +118,7 @@ function Workspace({ session, onSignOut, onUser }) {
   const first = useRef(true);
   useEffect(() => {
     if (first.current) { first.current = false; return; }
-    if (!cloud) setSaveState('Saving');
+    setSaveState('Saving');
     const t = setTimeout(() => {
       const ok = writeLocal(files);
       if (!cloud) setSaveState(ok ? 'Saved' : 'Not saved');
@@ -132,8 +132,11 @@ function Workspace({ session, onSignOut, onUser }) {
     const vis = () => { if (document.hidden) { flush(); sync(); } };
     addEventListener('pagehide', flush);
     addEventListener('online', sync);
+    // Save now (the Workflow view's Save and Ctrl+S).
+    const now = () => { writeLocal(filesRef.current); sync(); };
+    addEventListener('workline:save', now);
     document.addEventListener('visibilitychange', vis);
-    return () => { removeEventListener('pagehide', flush); removeEventListener('online', sync); document.removeEventListener('visibilitychange', vis); };
+    return () => { removeEventListener('pagehide', flush); removeEventListener('online', sync); removeEventListener('workline:save', now); document.removeEventListener('visibilitychange', vis); };
   }, [writeLocal, sync]);
   // Cloud: changes not on the account yet would be lost with the page, so ask before it closes.
   useEffect(() => {
@@ -174,6 +177,35 @@ function Workspace({ session, onSignOut, onUser }) {
     });
     return () => { live = false; clearTimeout(retry.current); };
   }, [cloud, uid, attempt]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Cloud: files changed elsewhere (by a workflow, or on another device) come in when this tab is back in
+  // view or a workflow run ends, unless this browser has changes to them it hasn't saved yet.
+  const pull = useCallback(async () => {
+    if (!cloud || !loaded.current) return;
+    let remote;
+    try { remote = await listFiles(); } catch (e) { return; }
+    const b = book.current;
+    setFiles(fs => {
+      const byId = new Map(fs.map(f => [f.id, f]));
+      let changed = false;
+      for (const r of remote) {
+        const l = byId.get(r.id);
+        const fresh = l ? (r.updated || 0) > (l.updated || 0) && b.synced[l.id] === l.updated : !(b.deleted || []).includes(r.id) && !(r.id in b.synced);
+        if (!fresh) continue;
+        byId.set(r.id, r);
+        b.synced = { ...b.synced, [r.id]: r.updated };
+        changed = true;
+      }
+      return changed ? [...byId.values()] : fs;
+    });
+  }, [cloud]);
+  useEffect(() => {
+    if (!cloud) return undefined;
+    const seen = () => { if (!document.hidden) pull(); };
+    document.addEventListener('visibilitychange', seen);
+    addEventListener('workline:pull', pull);
+    return () => { document.removeEventListener('visibilitychange', seen); removeEventListener('workline:pull', pull); };
+  }, [cloud, pull]);
 
   // Folders live on the account (cloud) or in this browser (local).
   const firstF = useRef(true);
