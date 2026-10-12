@@ -5,6 +5,7 @@ import { highlight } from '../lib/highlight.js';
 import { LANG, NO_AI, copyFor, downloads, langFor, sampleP } from '../lib/ai.js';
 import { DIALECTS, erdToSql, readSql } from '../lib/sql.js';
 import { shapesToCode } from '../lib/erdconvert.js';
+import { traceJS } from '../lib/codeviz.js';
 import { HELP } from '../lib/help.js';
 import { imageKeys, loadImages, saveImage, useImages } from '../lib/images.js';
 import { isPackIcon, loadIconPacks, useIconPacks } from '../lib/iconpacks.js';
@@ -134,7 +135,9 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
   // Hand-drawn objects. `live` previews a draw, move or resize until the pointer is released.
   const [tool, setTool] = useState('select');
   const [live, setLive] = useState(null);
+  const [wireActive, setWireActive] = useState(false);
   const [selection, setSelection] = useState([]);
+  const [codeRuns, setCodeRuns] = useState({});
   const [marquee, setMarquee] = useState(null);
   const [target, setTarget] = useState(null); // box an arrow end will attach to, while dragging
   const [space, setSpace] = useState(false); // Space held: drag pans
@@ -195,6 +198,20 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
     if (diagBox) m = `<rect x="${diagBox.x - 14}" y="${diagBox.y - 14}" width="${diagBox.w + 28}" height="${diagBox.h + 28}" rx="${10 / k}" fill="none" stroke="${diagSel ? C.hi : C.line}" stroke-width="${(diagSel ? 2.5 : 1.2) / k}" pointer-events="none"/>` + m;
     if (marquee) m += marqueeMarkup(marquee, k);
     if (target) m += targetMarkup(target, k);
+    // Each canvas figure gets four workflow-style connection ports. Their hit area scales with zoom.
+    m += shapes.filter(s => !['line', 'arrow', 'pen', 'text', 'comment'].includes(s.t)).map(s => {
+      const r = bbox(s), y = r.y + r.h / 2, z = 5.5 / k;
+      return [
+        [r.x + r.w, y, 'out'], [r.x, y, 'in'],
+      ].map(([px, py, side]) => `<g class="cv-port ${side}" data-connector-id="${s.id}" data-connector-side="${side}" role="button" aria-label="${side === 'out' ? 'Output: drag to connect' : 'Input'}"><circle class="cv-port-hit" cx="${px}" cy="${py}" r="${z * 1.7}"/><circle class="cv-port-dot" cx="${px}" cy="${py}" r="${z}"/></g>`).join('');
+    }).join('');
+    if (E.draggable) m += [...ids].map(id => {
+      const r = nodeRect(id);
+      if (!r) return '';
+      const y = r.y + r.h / 2, z = 5.5 / k;
+      return [[r.x + r.w, y, 'out'], [r.x, y, 'in']]
+        .map(([px, py, side]) => `<g class="cv-port ${side}" data-connector-node="${id}" data-connector-side="${side}" role="button" aria-label="${side === 'out' ? 'Output: drag to connect' : 'Input'}"><circle class="cv-port-hit" cx="${px}" cy="${py}" r="${z * 1.7}"/><circle class="cv-port-dot" cx="${px}" cy="${py}" r="${z}"/></g>`).join('');
+    }).join('');
     return m;
   })();
 
@@ -253,7 +270,7 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
     return 'tab';
   };
   // Drawings that can become code: boxes and sticky notes with text, and diagram icons.
-  const drawn = shapes.filter(x => ((isBox(x) || x.t === 'sticky') && (x.text || '').trim()) || (x.t === 'icon' && !String(x.v).includes(':')));
+  const unconvertedShapes = shapes.filter(x => ((isBox(x) || x.t === 'sticky') && (x.text || '').trim()) || (x.t === 'icon' && !String(x.v).includes(':')));
   // Turn drawings into diagram code. With code already there, they're added to it (in this diagram's type);
   // otherwise this diagram becomes `type`. newTab puts them in a new diagram instead.
   const convertDrawing = (type, list, newTab) => {
@@ -435,17 +452,47 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
 
   // What an arrow end at world point p would attach to: a shape first, then a diagram node.
   const hitTarget = (p, other) => {
-    const s = shapeAt(shapes, p, other && other.s);
+    // Mouse releases often land a few pixels beside a small port. Keep the drop zone
+    // generous and screen-sized at every zoom level, while preferring the topmost figure.
+    const tol = 20 / viewRef.current.k;
+    const s = shapeAt(shapes, p, other && other.s) || [...shapes].reverse().find(x => {
+      if (x.id === (other && other.s) || x.pts || ['frame', 'comment'].includes(x.t)) return false;
+      return p.x >= x.x - tol && p.x <= x.x + x.w + tol && p.y >= x.y - tol && p.y <= x.y + x.h + tol;
+    });
     let hit = s ? { a: { s: s.id }, r: bbox(s) } : null;
     if (!hit) {
       for (const id of ids) {
         const r = nodeRect(id);
-        if (r && p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h) { hit = { a: { n: id }, r }; }
+        if (r && p.x >= r.x - tol && p.x <= r.x + r.w + tol && p.y >= r.y - tol && p.y <= r.y + r.h + tol) { hit = { a: { n: id }, r }; }
       }
     }
     // Both ends on the same box would collapse the arrow.
     return hit && other && selKey(hit.a) === selKey(other) ? null : hit;
   };
+  const hitTargetRef = useRef(hitTarget);
+  hitTargetRef.current = hitTarget;
+  const finishConnect = (dr, e) => {
+    const movedFar = dr.moved || Math.hypot(e.clientX - dr.sx, e.clientY - dr.sy) >= 4;
+    const p = toWorld(e.clientX, e.clientY);
+    const drop = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-connector-id], [data-connector-node]');
+    let to = null;
+    if (drop && drop.dataset.connectorSide === 'in') {
+      const id = drop.dataset.connectorId, nodeId = drop.dataset.connectorNode;
+      const shape = id && (dRef.current.shapes || []).find(x => x.id === id);
+      const r = shape ? bbox(shape) : nodeId ? nodeRect(nodeId) : null;
+      const a = shape ? { s: id } : nodeId ? { n: nodeId } : null;
+      if (r && a && selKey(a) !== selKey(dr.from)) to = { a, r };
+    }
+    to = to || hitTargetRef.current(p, dr.from);
+    if (!movedFar || !to) return false;
+    const arrow = dr.shape || drawn('arrow', dr.a, p, false, dr.id);
+    arrow.a0 = dr.from; arrow.a1 = to.a;
+    putShapes([...(dRef.current.shapes || []), arrow]);
+    setSelection([dr.id]);
+    return true;
+  };
+  const finishConnectRef = useRef(finishConnect);
+  finishConnectRef.current = finishConnect;
 
   /* ---- shape actions ---- */
   const startEdit = s => { setDraft(s.text || ''); setEditing(s.id); setSelection([s.id]); };
@@ -497,6 +544,12 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
     if (!selShapes.length) return;
     putShapes(baseShapes().filter(s => !selSet.has(s.id)));
     setSelection([]);
+  };
+  const runCodeBlock = async s => {
+    const path = s.lang === 'typescript' ? 'block.ts' : 'block.js';
+    setCodeRuns(r => ({ ...r, [s.id]: { busy: true, out: '', error: '' } }));
+    const result = await traceJS([{ path, text: s.text || '' }], path);
+    setCodeRuns(r => ({ ...r, [s.id]: { busy: false, out: result.out || '', error: result.error || '' } }));
   };
   const duplicateSel = () => {
     const src = baseShapes().filter(s => selSet.has(s.id));
@@ -702,7 +755,23 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
     lastTap.current = { id: null, t: 0 };
     const pan = () => { drag.current = { t: 'p', vx: v.x, vy: v.y, ...at }; setGrabbing(true); };
 
-    if (e.button === 1 || tool === 'hand' || spaceRef.current) { pan(); return; }
+    if (e.button === 1 || spaceRef.current) { pan(); return; }
+
+    const port = e.target.closest('[data-connector-id], [data-connector-node]');
+    if (port) {
+      const id = port.dataset.connectorId, nodeId = port.dataset.connectorNode;
+      if (port.dataset.connectorSide !== 'out') return;
+      const s = id && shapes.find(x => x.id === id), r = s ? bbox(s) : nodeId ? nodeRect(nodeId) : null;
+      if (!r) return;
+      const from = s ? { s: id } : { n: nodeId };
+      const start = { x: r.x + r.w, y: r.y + r.h / 2 };
+      setSelection([s ? id : NODE + nodeId]);
+      drag.current = { t: 'connect', id: rid('s'), from, a: start, ...at };
+      setWireActive(true); setGrabbing(true);
+      return;
+    }
+
+    if (tool === 'hand') { pan(); return; }
 
     if (tool !== 'select') {
       if (tool === 'text' || tool === 'comment') {
@@ -793,6 +862,7 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
       return;
     }
     const dr = drag.current; if (!dr) return;
+    if (dr.t === 'connect') return; // wire movement is handled at window capture, like Workflow
     const dx = e.clientX - dr.sx, dy = e.clientY - dr.sy;
     if (!dr.moved && Math.hypot(dx, dy) < 4) return;
     dr.moved = true;
@@ -863,6 +933,9 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
         else if (!s || (s.w != null && s.w < 8 && s.h < 8)) s = make(dr.tool, dr.a.x, dr.a.y); // a click drops a default-size shape
         if (s) { putShapes([...(dRef.current.shapes || []), s]); setSelection([s.id]); }
         if (dr.tool !== 'pen') setTool('select');
+      } else if (dr.t === 'connect') {
+        finishConnectRef.current(dr, e);
+        setWireActive(false);
       } else if (dr.t === 'move') {
         if (dr.moved) {
           if (dr.next && dr.next.some(s => dr.keys.has(s.id))) putShapes(dr.next);
@@ -885,6 +958,50 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
     drag.current = null;
     setGrabbing(false);
   };
+
+  // Workflow wires listen on window while dragging, so the gesture survives leaving the node/canvas.
+  useLayoutEffect(() => {
+    if (!wireActive) return undefined;
+    const move = e => {
+      const dr = drag.current;
+      if (!dr || dr.t !== 'connect') return;
+      const dx = e.clientX - dr.sx, dy = e.clientY - dr.sy;
+      if (!dr.moved && Math.hypot(dx, dy) < 4) return;
+      dr.moved = true;
+      const p = toWorld(e.clientX, e.clientY), arrow = drawn('arrow', dr.a, p, false, dr.id);
+      arrow.a0 = dr.from;
+      const to = hitTargetRef.current(p, dr.from);
+      if (to) { arrow.a1 = to.a; dr.to = to.a; } else delete dr.to;
+      dr.shape = arrow;
+      setTarget(to ? to.r : null);
+      setLive([...(dRef.current.shapes || []), arrow]);
+    };
+    const finish = e => {
+      const dr = drag.current;
+      if (!dr || dr.t !== 'connect') return;
+      drag.current = null;
+      ptrs.current.delete(e.pointerId);
+      e.stopPropagation();
+      finishConnectRef.current(dr, e);
+      setLive(null); setTarget(null); setGrabbing(false); setWireActive(false);
+    };
+    const cancel = e => {
+      const dr = drag.current;
+      if (!dr || dr.t !== 'connect') return;
+      drag.current = null;
+      ptrs.current.delete(e.pointerId);
+      e.stopPropagation();
+      setLive(null); setTarget(null); setGrabbing(false); setWireActive(false);
+    };
+    window.addEventListener('pointermove', move, true);
+    window.addEventListener('pointerup', finish, true);
+    window.addEventListener('pointercancel', cancel, true);
+    return () => {
+      window.removeEventListener('pointermove', move, true);
+      window.removeEventListener('pointerup', finish, true);
+      window.removeEventListener('pointercancel', cancel, true);
+    };
+  }, [wireActive]);
 
   const pickTool = t => {
     if (t === 'icon') { setPanel('icon'); return; }
@@ -1176,6 +1293,19 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
         }} />
     );
   }
+  const codeBlockControls = selS && selS.t === 'code' && !editing ? (() => {
+    const run = codeRuns[selS.id], lang = selS.lang || '';
+    return <div className="cv-code-ui" style={{ left: view.x + selS.x * view.k, top: view.y + selS.y * view.k, width: selS.w * view.k }} onPointerDown={e => e.stopPropagation()}>
+      <div className="cv-code-actions">
+        <label><select aria-label="Select language" value={lang} onChange={e => {
+          const value = e.target.value;
+          putShapes(baseShapes().map(s => s.id === selS.id ? { ...s, lang: value } : s));
+        }}><option value="">Select language</option><option value="javascript">JavaScript</option><option value="typescript">TypeScript</option></select></label>
+        <button className="cv-code-run" onClick={() => runCodeBlock(selS)} disabled={!lang || !!run?.busy}>{run?.busy ? 'Running…' : '▶ Run'}</button>
+      </div>
+      {run && !run.busy && <div className={'cv-code-output' + (run.error ? ' err' : '')} aria-live="polite"><b>{run.error ? 'Error' : 'Output'}</b><pre>{run.error || run.out || '(no output)'}</pre></div>}
+    </div>;
+  })() : null;
 
   return (
     <div className={'cwrap' + (drawer ? ' has-drawer side-open' : '') + (aiOpen ? ' ai-open side-open' : '')}
@@ -1198,6 +1328,7 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
         </svg>
       </div>
       {editor}
+      {codeBlockControls}
 
       {empty && tool === 'select' && (
         <div className="cempty">
@@ -1274,7 +1405,7 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
           straighten: () => putShapes(baseShapes().map(x => (selSet.has(x.id) ? { ...x, pts: [x.pts[0], x.pts[x.pts.length - 1]] } : x))),
           order: reorder, step, figure: createFigure, duplicate: duplicateSel, remove: removeSel, group: groupSel, ungroup: ungroupSel,
           copyPng, copySvg, exportPng, copyStyles, pasteStyles,
-          convert: selShapes.some(x => drawn.includes(x)) ? { hasCode: !!d.code.trim(), type: d.type, run: (t, newTab) => convertDrawing(t, selShapes, newTab) } : null,
+          convert: selShapes.some(x => unconvertedShapes.includes(x)) ? { hasCode: !!d.code.trim(), type: d.type, run: (t, newTab) => convertDrawing(t, selShapes, newTab) } : null,
         }} />
       )}
 
@@ -1318,10 +1449,10 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
             <button className="ai-ib" aria-label="Copy code" title="Copy code" onClick={copyCode}><Ico d={IC.copy} /></button>
             <button className="ai-ib" aria-label="Close code editor" title="Close" onClick={() => setDrawer(false)}><Ico d={IC.close} /></button>
           </div>
-          {drawn.length > 0 && (
+          {unconvertedShapes.length > 0 && (
             <div className="code-convert">
-              <span>{drawn.length} drawn shape{drawn.length === 1 ? '' : 's'} on the canvas {drawn.length === 1 ? 'isn’t' : 'aren’t'} in the code yet.</span>
-              <button className="btn" onClick={() => convertDrawing(d.type, drawn)}>Convert to code</button>
+              <span>{unconvertedShapes.length} drawn shape{unconvertedShapes.length === 1 ? '' : 's'} on the canvas {unconvertedShapes.length === 1 ? 'isn’t' : 'aren’t'} in the code yet.</span>
+              <button className="btn" onClick={() => convertDrawing(d.type, unconvertedShapes)}>Convert to code</button>
             </div>
           )}
           <div className="code-ed">

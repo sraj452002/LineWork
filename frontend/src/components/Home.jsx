@@ -333,7 +333,7 @@ Reply with ONLY a JSON object: {"title": "...", "doc": "...", "diagrams": [...]}
             <AccountMenu account={account} who={who} initial={initial} saveState={saveState} storage={storage} onAccount={onAccount} onSignOut={onSignOut} />
           </header>
 
-          {view === 'apps' ? <Apps files={files} q={q} onEdit={onOpen} /> : view === 'templates' ? <Templates q={q} onCreate={onCreate} /> : view === 'tools' ? <Tools q={q} busy={busy} onCreate={onCreate} onGenerate={generate} /> : (<>
+          {view === 'apps' ? <Apps files={files} q={q} onEdit={onOpen} onUpdate={onUpdate} /> : view === 'templates' ? <Templates q={q} onCreate={onCreate} /> : view === 'tools' ? <Tools q={q} busy={busy} onCreate={onCreate} onGenerate={generate} /> : (<>
           {view === 'all' && !q && (
             <section className="hero" aria-label="Welcome">
               <div className="hero-art" aria-hidden="true"><i /><i /><i /><svg viewBox="0 0 400 120" preserveAspectRatio="none"><path d="M0 90 C 80 20, 160 120, 240 60 S 360 20, 400 50" /><path d="M0 60 C 90 110, 170 10, 260 70 S 350 100, 400 30" /></svg></div>

@@ -625,7 +625,10 @@ function PublishDialog({ file, flow, change, onClose }) {
           <select value={app.outputId} onChange={e => set({ outputId: e.target.value })}><option value="">The last steps</option>{others.map(n => <option key={n.id} value={n.id}>{n.name}</option>)}</select></label>
         <label className="fv-f"><span>Show it as</span>
           <select value={app.show} onChange={e => set({ show: e.target.value })}>{SHOW.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
-        <div className="mact"><button className="btn dark" onClick={onClose}>Done</button></div>
+        <div className="mact">
+          {app.published && <button className="btn danger-text" onClick={() => { set({ published: false }); onClose(); }}>Unpublish</button>}
+          <button className="btn dark" onClick={onClose}>{app.published ? 'Done' : 'Close'}</button>
+        </div>
       </div>
     </div>
   );

@@ -526,6 +526,7 @@ export default function CodeWorkspace({ file, update, visible }) {
               })}
             </div>
             <div className="cw-actions">
+              {activeFile && monaco && <button className="cw-langpick" onClick={e => langMenu(e.currentTarget)} title="Choose the language for this file"><span className="cw-langlabel">Language</span>{langName}<span aria-hidden="true">⌄</span></button>}
               <div className="cw-run">
                 <button className="cw-runbtn" onClick={() => (running ? runRef.current?.stop() : runSpec(mainSpec))} disabled={!running && !mainSpec}
                   title={running ? 'Stop the running program' : mainSpec ? `${mainSpec.label}  F5` : 'Open a .js, .ts, .py or .html file, or add scripts to package.json, to run it'}>
@@ -587,7 +588,6 @@ export default function CodeWorkspace({ file, update, visible }) {
           <span>Ln {pos.ln}, Col {pos.col}{pos.sel ? ` (${pos.sel} selected)` : ''}</span>
           <span>Spaces: 2</span>
           <span>UTF-8</span>
-          {monaco && <button onClick={e => langMenu(e.currentTarget)} title="Change the language">{langName}</button>}
         </>)}
         <button onClick={() => setPanel(p => ({ ...p, open: !p.open }))} title="Toggle the panel  Ctrl `">{running ? 'Running…' : 'Terminal'}</button>
         <button onClick={() => setQuick('')} title="Go to file  Ctrl P">Go to file</button>
