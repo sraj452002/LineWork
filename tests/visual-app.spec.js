@@ -55,7 +55,8 @@ return [
     await props.getByLabel('Text').fill('Hello **{{ vars.input1 || "stranger" }}**, {{ data.items.length }} orders');
     await expect(canvas.locator('.wl-t').last()).toHaveText('Hello stranger, 2 orders');
 
-    // Move it: drag the box two columns right.
+    // Make it half as wide, then drag it two columns right.
+    await props.getByLabel('Width').fill('6');
     const box = page.getByRole('button', { name: 'Text text2' });
     const b = await box.boundingBox();
     await page.mouse.move(b.x + 20, b.y + 10);
