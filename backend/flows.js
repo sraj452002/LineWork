@@ -8,6 +8,7 @@ import { POLL_EVERY, TRIGGER_TYPES } from './flow-triggers.js';
 import { WEB_NODES } from './flow-web.js';
 import { EXTRA_NODES } from './flow-extra.js';
 import { UI_NODES, renderPage } from './flow-ui.js';
+import { installRoutes } from './app-install.js';
 
 const TYPES = { ...NODE_TYPES, ...APP_NODES, ...WORKLINE_NODES, ...TRIGGER_TYPES, ...WEB_NODES, ...EXTRA_NODES, ...UI_NODES };
 import { DUMMY, checkPassword, hashPassword, limiter, newToken, tokenHash } from './auth.js';
@@ -321,6 +322,8 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
     res.set({ 'content-security-policy': 'sandbox allow-scripts allow-forms allow-popups allow-modals allow-downloads', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer' });
     res.type('html').send(String(a.file.ui.doc || a.file.ui.html || ''));
   });
+  // The app as an installable app (a PWA): /api/ui/<token>/app, with its manifest, icons and service worker.
+  installRoutes(ui, uiOf);
   // The page sends its JSON as text/plain, a request browsers make without asking first (no preflight).
   ui.post('/:token/run', express.text({ type: () => true, limit: '1mb' }), async (req, res) => {
     try { req.body = typeof req.body === 'string' && req.body ? JSON.parse(req.body) : {}; } catch (e) { return res.status(400).json({ error: 'bad_json', message: 'Send JSON: {workflow, input}.' }); }

@@ -11,7 +11,13 @@ import { createApp } from '../backend/app.js';
 test('build an app visually, publish it behind sign-in, and use it on a phone', async ({ browser }) => {
   test.setTimeout(240_000);
   const { spawn } = await import('node:child_process');
-  const srv = createApp(await openStore(memoryBackend()), { requireVerified: false }).listen(0);
+  // Electron's release, as GitHub would hand it over (a small stand-in).
+  const JSZip = require('../frontend/node_modules/jszip');
+  const ezip = new JSZip(); ezip.file('electron.exe', 'MZ'); ezip.file('ffmpeg.dll', 'dll'); ezip.file('resources/default_app.asar', 'x');
+  const ebody = await ezip.generateAsync({ type: 'nodebuffer' });
+  const { createServer } = await import('node:http');
+  const gh = createServer((req, res) => { res.writeHead(200, { 'content-type': 'application/zip', 'content-length': ebody.length }); res.end(ebody); }).listen(0);
+  const srv = createApp(await openStore(memoryBackend()), { requireVerified: false, electronBase: `http://localhost:${gh.address().port}` }).listen(0);
   const port = 5187;
   const vite = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--port', String(port), '--strictPort'], { cwd: 'frontend', env: { ...process.env, LINEWORK_API: `http://localhost:${srv.address().port}` }, stdio: 'ignore', detached: true });
   try {
@@ -112,6 +118,23 @@ return [
     await page.getByRole('menuitem', { name: 'Android app (project for an .apk)' }).click();
     expect((await dl).suggestedFilename()).toBe('orders-android.zip');
     await page.getByRole('button', { name: 'Got it' }).click();
+    // A Windows app, ready to run: Electron with the app in it, named after it.
+    await page.getByRole('button', { name: 'Export ▾' }).click();
+    dl = page.waitForEvent('download');
+    await page.getByRole('menuitem', { name: 'Windows app (.exe, ready to run)' }).click();
+    const winZip = await dl;
+    expect(winZip.suggestedFilename()).toBe('orders-windows.zip');
+    const win = await JSZip.loadAsync(require('node:fs').readFileSync(await winZip.path()));
+    const names = Object.keys(win.files).filter(n => !win.files[n].dir).sort();
+    expect(names).toEqual(['Orders/Orders.exe', 'Orders/README.txt', 'Orders/ffmpeg.dll', 'Orders/resources/app/app/index.html', 'Orders/resources/app/main.js', 'Orders/resources/app/package.json']);
+    expect(await win.file('Orders/resources/app/app/index.html').async('string')).toContain(`window.WORKLINE_BASE = "${link}"`);
+    expect(JSON.parse(await win.file('Orders/resources/app/package.json').async('string'))).toMatchObject({ productName: 'Orders', main: 'main.js' });
+    await page.getByRole('button', { name: 'Got it' }).click();
+    // Installable on a phone: its link.
+    await page.getByRole('button', { name: 'Export ▾' }).click();
+    await page.getByRole('menuitem', { name: /^Install on a phone/ }).click();
+    await expect(page.getByRole('dialog').getByRole('textbox')).toHaveValue(`${link}/app`);
+    await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
 
     // Someone opens the link on a phone: a sign-in screen, then the app, made for them.
     const phone = await browser.newContext({ viewport: { width: 390, height: 800 } });
@@ -148,6 +171,6 @@ return [
     await ctx.close();
   } finally {
     try { process.kill(-vite.pid); } catch (e) {}
-    srv.close();
+    srv.close(); gh.close();
   }
 });

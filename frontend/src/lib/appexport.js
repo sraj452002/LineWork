@@ -268,3 +268,43 @@ export async function exportZip(files, name) {
   for (const [p, text] of Object.entries(files)) root.file(p, text);
   download(await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' }), `${name}.zip`);
 }
+
+/* ---- Ready to run: Electron's official build, with the app put in it (no build tools needed) ----
+   The server passes Electron's release through (GET /api/electron/<platform>); here the app goes into
+   resources/app, Electron's own sample app comes out, and the program takes the app's name. Unzip it and
+   double-click <App>.exe (Windows) or run ./<app> (Linux). */
+const fileName = s => String(s || '').replace(/[\\/:*?"<>|]+/g, '').trim().slice(0, 60) || 'App';
+
+export async function readyDesktop(ui, opts, platform, onProgress = () => {}) {
+  const res = await fetch(`/api/electron/${platform}`, { cache: 'no-store' });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).message || 'Couldn’t get the app’s runtime. Try again in a minute.');
+  // Download, with progress.
+  const total = Number(res.headers.get('content-length')) || 0, parts = [];
+  let got = 0;
+  const reader = res.body.getReader();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    parts.push(value); got += value.length;
+    onProgress(total ? Math.round(got / total * 70) : 30, 'Downloading');
+  }
+  const { default: JSZip } = await import('jszip');
+  const src = await JSZip.loadAsync(new Blob(parts));
+  const name = fileName(opts.title), slug = slugOf(opts.title), win = platform.startsWith('win');
+  const out = new JSZip(), root = out.folder(name);
+  for (const [p, f] of Object.entries(src.files)) {
+    if (f.dir || p === 'resources/default_app.asar') continue;
+    const to = win && p === 'electron.exe' ? `${name}.exe` : !win && p === 'electron' ? slug : p;
+    root.file(to, f.async('uint8array'), { binary: true, date: f.date, unixPermissions: f.unixPermissions, dosPermissions: f.dosPermissions });
+  }
+  const app = desktopFiles(ui, opts);
+  root.file('resources/app/package.json', JSON.stringify({ name: slug, productName: opts.title || 'App', version: '1.0.0', main: 'main.js' }, null, 2));
+  root.file('resources/app/main.js', app['main.js']);
+  root.file('resources/app/app/index.html', app['app/index.html']);
+  root.file('README.txt', win
+    ? `${name}\r\n\r\nDouble-click "${name}.exe" to open the app. Keep it in this folder (it needs the files beside it).\r\nWindows may say it protected your PC (the app isn't code-signed): press "More info", then "Run anyway".\r\nTo have it in the Start menu, right-click "${name}.exe" → Pin to Start.\r\n`
+    : `${name}\n\nRun ./${slug} in this folder to open the app (or double-click it). If it doesn't start, run: chmod +x ${slug}\n`);
+  const blob = await out.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 3 }, platform: win ? 'DOS' : 'UNIX' },
+    meta => onProgress(70 + Math.round(meta.percent * 0.3), 'Packing'));
+  download(blob, `${slug}-${win ? 'windows' : 'linux'}.zip`);
+}

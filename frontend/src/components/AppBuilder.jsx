@@ -44,6 +44,7 @@ export default function AppBuilder({ file, update, files = [], onGuide, assist }
   useEffect(() => { if (!file.ui) write({ mode: 'visual', spec: newVisualApp(file.title || 'My app', hasFlow(file) ? file.title : ''), flows: hasFlow(file) ? [file.id] : [] }); }, [file.ui]); // eslint-disable-line react-hooks/exhaustive-deps
   const visual = !!(file.ui && file.ui.mode === 'visual' && file.ui.spec);
   const [previewing, setPreviewing] = useState(false);
+  const [building, setBuilding] = useState('');
   // Is the published link answering? Checked when the app opens published, and after publishing.
   const [live, setLive] = useState(null), [liveCheck, setLiveCheck] = useState(0);
   const liveLink = file.ui && file.ui.published && file.ui.token ? `${location.origin}/api/ui/${file.ui.token}` : '';
@@ -204,6 +205,26 @@ ${ui ? ui.html : ''}`,
     const ex = await import('../lib/appexport.js');
     const name = ex.slugOf(title);
     if (kind === 'html') { ex.exportHtml(ui, opts); toast('Web page downloaded'); return; }
+    if (kind === 'install') {
+      const at = `${location.origin}/api/ui/${token}/app`;
+      const ok = await ask({ title: 'Install it as an app', value: at, ok: 'Copy the link',
+        text: 'Open this link on the phone or computer, then: on Android (Chrome), ⋮ → Install app: it goes in the app drawer like any app. On iPhone (Safari), Share → Add to Home Screen. On a computer (Chrome or Edge), the install icon in the address bar. It updates by itself when you change the app.' });
+      if (ok) { navigator.clipboard?.writeText(at); toast('Link copied'); }
+      return;
+    }
+    if (kind === 'win32-x64' || kind === 'linux-x64') {
+      if (building) return;
+      try {
+        setBuilding('Getting ready…');
+        await ex.readyDesktop(ui, opts, kind, (pct, what) => setBuilding(`${what} ${pct}%`));
+        setBuilding('');
+        await ask({ title: kind === 'win32-x64' ? 'Windows app downloaded' : 'Linux app downloaded', input: false, ok: 'Got it',
+          text: kind === 'win32-x64'
+            ? `Unzip it, then double-click “${title}.exe” inside. Windows may say it protected your PC, as the app isn’t code-signed: press More info → Run anyway. Keep the .exe with the files beside it; to find it easily, right-click it → Pin to Start.`
+            : 'Unzip it, then run the program inside (chmod +x it first if needed).' });
+      } catch (err) { setBuilding(''); toast(err.message || 'Couldn’t build the app.'); }
+      return;
+    }
     await ex.exportZip(kind === 'android' ? ex.androidFiles(ui, opts) : ex.desktopFiles(ui, opts), kind === 'android' ? `${name}-android` : `${name}-desktop`);
     await ask({
       title: kind === 'android' ? 'Android project downloaded' : 'Desktop project downloaded', input: false, ok: 'Got it',
@@ -211,6 +232,9 @@ ${ui ? ui.html : ''}`,
     });
   };
   const exportMenu = el => popup(el, [
+    { label: 'Windows app (.exe, ready to run)', act: () => exportAs('win32-x64') },
+    { label: 'Install on a phone or computer (Android, iPhone, Chrome)', act: () => exportAs('install') },
+    { label: 'Linux app (ready to run)', act: () => exportAs('linux-x64') },
     { label: 'Android app (project for an .apk)', act: () => exportAs('android') },
     { label: 'Windows, Mac & Linux app (project for an .exe)', act: () => exportAs('desktop') },
     { label: 'Web page (.html file)', act: () => exportAs('html') },
@@ -231,7 +255,7 @@ ${ui ? ui.html : ''}`,
           ? <button className={'btn' + (previewing ? ' dark' : '')} aria-pressed={previewing} onClick={() => { setShown(ui.html); setPreviewing(v => !v); setReload(n => n + 1); }}>{previewing ? '✎ Edit' : '▶ Preview'}</button>
           : <button className="btn" aria-haspopup="menu" onClick={e => startFrom(e.currentTarget)}>Start from ▾</button>}
         <button className="btn" onClick={() => setReload(n => n + 1)} title="Load the preview again">↻ Reload</button>
-        <button className="btn" aria-haspopup="menu" onClick={e => exportMenu(e.currentTarget)} title="Download the app as a web page, an Android app or a desktop app">Export ▾</button>
+        <button className="btn" aria-haspopup="menu" disabled={!!building} onClick={e => exportMenu(e.currentTarget)} title="Make it a Windows or Linux app, install it on a phone, or download it as a project or a web page">{building ? `⏳ ${building}` : 'Export ▾'}</button>
         {onGuide && <button className="btn" onClick={() => onGuide('apps')} title="How custom apps work: workline.run, helpers, publishing">? Guide</button>}
         <span className="ab-sp" />
         {link && <>

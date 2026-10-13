@@ -194,7 +194,9 @@ The **App** view starts in **Visual**: build an app for other people by dragging
 - **Phone**: on a narrow screen the components stack, top to bottom; **Phone** in the builder shows it.
 - **Preview** runs the app as people will see it (signed in as you). The AI panel can build or change the whole app from a description.
 
-- **Export ▾** (visual or code apps) downloads the app to run outside Workline. It still runs its workflows through its published link (`window.WORKLINE_BASE`), so the app is published first:
+- **Export ▾** (visual or code apps) makes the app run outside Workline. It still runs its workflows through its published link (`window.WORKLINE_BASE`), so the app is published first:
+  - *Windows app (.exe, ready to run)* and *Linux app*: a zip with the app inside Electron's official build, named after the app: unzip and double-click `<App>.exe`. The server passes Electron's release through (`GET /api/electron/win32-x64`, signed in; a browser can't fetch GitHub's releases itself) and the browser puts the app in it (`readyDesktop` in `frontend/src/lib/appexport.js`), so nothing is compiled. Not code-signed: Windows asks once (More info → Run anyway).
+  - *Install on a phone or computer*: `/api/ui/<token>/app` is an installable page (a PWA: manifest, icons, a service worker; `backend/app-install.js`) with the app in its sandboxed frame. On Android, Chrome → Install app puts it in the app drawer like any app (Chrome builds a WebAPK); on iPhone, Share → Add to Home Screen; on a computer, the install button in Chrome or Edge. It updates when you change the app, and keeps people signed in between launches.
   - *Android app*: a Gradle project, the page in a full-screen WebView, with a GitHub Actions workflow (`.github/workflows/build-android.yml`) that builds the `.apk`: upload the folder to a GitHub repository and download the APK from the run's Artifacts. Or open it in Android Studio.
   - *Windows, Mac & Linux app*: an Electron project; its workflow builds a Windows installer and portable `.exe`, a Mac `.dmg` and a Linux `.AppImage`. Or `npm install && npm run dist`.
   - *Web page*: one `.html` file to host anywhere.
