@@ -37,8 +37,10 @@ return [
       { id: 'c', type: 'core.code', name: 'Orders', x: 340, y: 160, params: { language: 'javascript', code } },
     ], edges: [{ id: 'e', from: 't', fromPort: 'main', to: 'c', toPort: 'main' }] } } });
     expect(put.ok()).toBe(true);
-    await page.reload();
-    await page.locator('.ftable tbody tr', { hasText: 'Orders' }).click();
+    // The file list loads from the server; reload until the new file is in it.
+    const row = page.locator('.ftable tbody tr', { hasText: 'Orders' });
+    for (let i = 0; i < 6 && !(await row.count()); i++) { await page.reload(); await row.waitFor({ timeout: 8000 }).catch(() => {}); }
+    await row.click();
 
     // A new app starts in Visual, with a table filled from this file's workflow.
     await expect(page.getByRole('button', { name: 'Visual' }), errors.join('\n')).toHaveAttribute('aria-pressed', 'true', { timeout: 15_000 });
