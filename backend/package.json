@@ -11,14 +11,22 @@
     "drive-auth": "node --env-file-if-exists=.env drive-auth.js"
   },
   "dependencies": {
+    "exceljs": "^4.4.0",
     "express": "^5.1.0",
+    "imapflow": "^1.7.8",
+    "mailparser": "^3.9.37",
     "mongodb": "^6.21.0",
     "mssql": "^11.0.2",
     "mysql2": "^3.24.5",
     "node-html-parser": "^7.1.0",
     "nodemailer": "^7.0.6",
     "pg": "^8.23.1",
-    "qrcode": "^1.5.4"
+    "pyodide": "^314.0.7",
+    "qrcode": "^1.5.4",
+    "redis": "^4.7.1",
+    "sql.js": "^1.14.2",
+    "sucrase": "^3.35.1",
+    "wasmoon": "^1.16.0"
   },
   "engines": {
     "node": ">=22.13"

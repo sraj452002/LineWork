@@ -13,7 +13,7 @@ const strip = s => String(s || '').replace(/\/+$/, '');
 
 // Google: a service account's key → an access token for some scopes (an hour, cached).
 const googleTokens = new Map();
-async function googleToken(args, c, scope) {
+export async function googleToken(args, c, scope) {
   let key;
   try { key = typeof c.serviceAccountJson === 'string' ? JSON.parse(c.serviceAccountJson) : c.serviceAccountJson; } catch (e) { throw new FlowError('The service account key is not valid JSON.', 'credential'); }
   if (!key || !key.client_email || !key.private_key) throw new FlowError('Paste the whole service account key (the JSON file).', 'credential');

@@ -5,6 +5,7 @@ import { nodeDef } from '../lib/flows.js';
 import { fromTemplate } from '../lib/flowio.js';
 import { getData, setData } from '../lib/userdata.js';
 import { LOGOS } from '../lib/flowlogos.js';
+import { STARTERS } from '../lib/starters.js';
 import { useUI } from './ui.jsx';
 
 /* Home → Templates: the workflows saved as templates (the Template button in the Workflow view), kept
@@ -56,6 +57,26 @@ export default function Templates({ q = '', onCreate }) {
         <h2>Templates</h2>
         <p>Workflows you saved as templates. Open one to start a new workflow from it; credentials and secrets aren’t kept, so pick them again.</p>
       </header>
+      {/* Ready-made: a workflow with a custom app built on it, to start from. */}
+      {STARTERS.filter(t => !needle || `${t.name} ${t.note}`.toLowerCase().includes(needle)).length > 0 && (
+        <section className="tpl-ready" aria-label="Ready-made">
+          <h3>Ready-made</h3>
+          <div className="tpl-grid">
+            {STARTERS.filter(t => !needle || `${t.name} ${t.note}`.toLowerCase().includes(needle)).map(t => {
+              const f = t.make();
+              return (
+                <button key={t.k} className="tpl-starter" onClick={() => onCreate(t.make())} aria-label={`Use the template ${t.name}`}>
+                  <Marks flow={f.flow} />
+                  <b>{t.name}</b>
+                  <small>{t.note}</small>
+                  <small className="tpl-kind">Workflow + app</small>
+                </button>
+              );
+            })}
+          </div>
+          <h3>Yours</h3>
+        </section>
+      )}
       {!list.length ? (
         <div className="nofiles">
           <svg className="nofiles-art" viewBox="0 0 160 110" aria-hidden="true"><rect x="22" y="24" width="70" height="56" rx="10" /><rect x="68" y="38" width="70" height="56" rx="10" /><path d="M80 56h44M80 66h30M80 76h38" /><circle cx="40" cy="42" r="6" /><path d="M34 64h40" /></svg>

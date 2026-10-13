@@ -16,6 +16,8 @@ test('canvas figures connect by dragging an output port to an input port', async
     await svg.click({ position: { x, y: 320 } });
   }
 
+  // Ports show on the figure under the pointer (and the selected one): point at the first box.
+  await svg.hover({ position: { x: 320, y: 320 } });
   const output = svg.locator('.cv-port.out').nth(0);
   const input = svg.locator('.cv-port.in').nth(1);
   await expect(output).toBeVisible();

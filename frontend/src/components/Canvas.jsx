@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { C, TEMPLATES, TYPES, engineOf, prep, tableHue, tableIcon } from '../lib/engines.js';
+import { C, PAL, TEMPLATES, TYPES, engineOf, prep, tableHue, tableIcon } from '../lib/engines.js';
 import { addColumn, deleteColumn, deleteTable, getColumn, moveColumn, notationOf, renameTable, setColumn, setNotation, setTableAttr } from '../lib/erdcode.js';
 import { highlight } from '../lib/highlight.js';
 import { LANG, NO_AI, copyFor, downloads, langFor, sampleP } from '../lib/ai.js';
 import { DIALECTS, erdToSql, readSql } from '../lib/sql.js';
 import { shapesToCode } from '../lib/erdconvert.js';
 import { traceJS } from '../lib/codeviz.js';
+import { asList, cacheable, runFlowForData, runForData, wiredCode } from '../lib/dashboard.js';
+import DashFrame from './DashFrame.jsx';
 import { HELP } from '../lib/help.js';
 import { imageKeys, loadImages, saveImage, useImages } from '../lib/images.js';
 import { isPackIcon, loadIconPacks, useIconPacks } from '../lib/iconpacks.js';
@@ -13,7 +15,7 @@ import { esc, rid, slug, trunc } from '../lib/utils.js';
 import { colName, newSheet, usedRange } from '../lib/sheet.js';
 import {
   DEVICES, KEEP_RATIO, SHAPE_LIST, bbox, contains, drawn, dropDeadLinks, editBox, handlesMarkup,
-  brandColor, hasText, icons, isBox, shapesDoc, isLink, make, marqueeMarkup, measure, moved, outlinesMarkup, overlaps, resized, resolveLinks, selKey,
+  brandColor, hasText, icons, isBox, isCodeKind, shapesDoc, isLink, make, marqueeMarkup, measure, moved, outlinesMarkup, overlaps, resized, resolveLinks, selKey,
   shapeAt, shapeBounds, shapeIcon, shapesMarkup, targetMarkup, unionBox, groupMarkup, textSize,
 } from '../lib/shapes.js';
 import { IC, Ico, InsertPanel, TOOL_KEYS, Toolbar } from './Toolbar.jsx';
@@ -138,6 +140,8 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
   const [wireActive, setWireActive] = useState(false);
   const [selection, setSelection] = useState([]);
   const [codeRuns, setCodeRuns] = useState({});
+  const [hover, setHover] = useState(null); // the figure under the pointer: its connection ports show
+  const [dashData, setDashData] = useState({}); // dashboard id -> {busy, data, error, at}
   const [marquee, setMarquee] = useState(null);
   const [target, setTarget] = useState(null); // box an arrow end will attach to, while dragging
   const [space, setSpace] = useState(false); // Space held: drag pans
@@ -198,14 +202,16 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
     if (diagBox) m = `<rect x="${diagBox.x - 14}" y="${diagBox.y - 14}" width="${diagBox.w + 28}" height="${diagBox.h + 28}" rx="${10 / k}" fill="none" stroke="${diagSel ? C.hi : C.line}" stroke-width="${(diagSel ? 2.5 : 1.2) / k}" pointer-events="none"/>` + m;
     if (marquee) m += marqueeMarkup(marquee, k);
     if (target) m += targetMarkup(target, k);
-    // Each canvas figure gets four workflow-style connection ports. Their hit area scales with zoom.
-    m += shapes.filter(s => !['line', 'arrow', 'pen', 'text', 'comment'].includes(s.t)).map(s => {
+    // Workflow-style connection ports (output on the right, input on the left) on the figure under the
+    // pointer and the selected ones, and on every figure while a wire is being dragged. Their hit area scales with zoom.
+    const portsOn = s => wireActive || s.id === hover || selSet.has(s.id);
+    m += shapes.filter(s => !['line', 'arrow', 'pen', 'text', 'comment'].includes(s.t) && portsOn(s)).map(s => {
       const r = bbox(s), y = r.y + r.h / 2, z = 5.5 / k;
       return [
         [r.x + r.w, y, 'out'], [r.x, y, 'in'],
       ].map(([px, py, side]) => `<g class="cv-port ${side}" data-connector-id="${s.id}" data-connector-side="${side}" role="button" aria-label="${side === 'out' ? 'Output: drag to connect' : 'Input'}"><circle class="cv-port-hit" cx="${px}" cy="${py}" r="${z * 1.7}"/><circle class="cv-port-dot" cx="${px}" cy="${py}" r="${z}"/></g>`).join('');
     }).join('');
-    if (E.draggable) m += [...ids].map(id => {
+    if (E.draggable) m += [...ids].filter(id => wireActive || hover === NODE + id || selSet.has(NODE + id)).map(id => {
       const r = nodeRect(id);
       if (!r) return '';
       const y = r.y + r.h / 2, z = 5.5 / k;
@@ -469,6 +475,18 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
     // Both ends on the same box would collapse the arrow.
     return hit && other && selKey(hit.a) === selKey(other) ? null : hit;
   };
+  // The figure (or diagram node) whose ports should show for the pointer at event e: the one under it,
+  // with a margin so the ports on its edges keep it shown.
+  const hoverAt = e => {
+    const port = e.target.closest && e.target.closest('[data-connector-id], [data-connector-node]');
+    if (port) return port.dataset.connectorId || NODE + port.dataset.connectorNode;
+    const p = toWorld(e.clientX, e.clientY), tol = 12 / viewRef.current.k;
+    const inside = r => p.x >= r.x - tol && p.x <= r.x + r.w + tol && p.y >= r.y - tol && p.y <= r.y + r.h + tol;
+    const s = [...shapes].reverse().find(x => !x.pts && !['text', 'comment'].includes(x.t) && inside(bbox(x)));
+    if (s) return s.id;
+    for (const id of ids) { const r = nodeRect(id); if (r && inside(r)) return NODE + id; }
+    return null;
+  };
   const hitTargetRef = useRef(hitTarget);
   hitTargetRef.current = hitTarget;
   const finishConnect = (dr, e) => {
@@ -486,7 +504,8 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
     to = to || hitTargetRef.current(p, dr.from);
     if (!movedFar || !to) return false;
     const arrow = dr.shape || drawn('arrow', dr.a, p, false, dr.id);
-    arrow.a0 = dr.from; arrow.a1 = to.a;
+    // A wire made from the ports runs from the source's output to the target's input.
+    arrow.a0 = { ...dr.from, p: 'out' }; arrow.a1 = { ...to.a, p: 'in' };
     putShapes([...(dRef.current.shapes || []), arrow]);
     setSelection([dr.id]);
     return true;
@@ -501,7 +520,7 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
     setEditing(null);
     const base = dRef.current.shapes || [], s = base.find(x => x.id === id);
     if (!s) return;
-    const text = s.t === 'code' ? draft.replace(/\s+$/, '') : draft.trim();
+    const text = isCodeKind(s) ? draft.replace(/\s+$/, '') : draft.trim();
     if (!text && (s.t === 'text' || s.t === 'comment')) { putShapes(base.filter(x => x.id !== id)); setSelection([]); return; }
     if (text === (s.text || '')) return;
     const n = { ...s, text };
@@ -510,6 +529,9 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
   };
   const place = (t, extra, at) => {
     const c = at || center(), s = make(t, c.x, c.y, extra);
+    // Placing the same thing twice puts the copy beside the last one rather than exactly on top of it.
+    const taken = (dRef.current.shapes || []).filter(x => x.t === t && !x.pts);
+    for (let i = 0; i < 40 && taken.some(x => Math.abs(x.x - s.x) < 24 && Math.abs(x.y - s.y) < 24); i++) { s.x += 32; s.y += 32; }
     putShapes([...(dRef.current.shapes || []), s]);
     setSelection([s.id]); setTool('select');
     return s;
@@ -551,6 +573,49 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
     const result = await traceJS([{ path, text: s.text || '' }], path);
     setCodeRuns(r => ({ ...r, [s.id]: { busy: false, out: result.out || '', error: result.error || '' } }));
   };
+  // Dashboard blocks: where their data comes from, and getting it.
+  const dashSource = s => (s.src != null ? s.src : wiredCode(dRef.current.shapes || [], s.id).length ? 'code' : '');
+  const refreshDash = async s => {
+    const src = dashSource(s);
+    setDashData(m => ({ ...m, [s.id]: { ...m[s.id], busy: true, error: '' } }));
+    try {
+      let data = [];
+      if (src === 'flow') data = await runFlowForData(file);
+      else if (src === 'code') {
+        const got = await Promise.all(wiredCode(dRef.current.shapes || [], s.id).map(c => runForData(c.text || '')));
+        const bad = got.find(r => r.error);
+        if (bad) throw new Error(bad.error);
+        data = asList(got.map(r => r.data));
+      }
+      const at = Date.now();
+      setDashData(m => ({ ...m, [s.id]: { busy: false, data, at } }));
+      // Workflow data is kept with the file, so the dashboard shows it next time without running the workflow.
+      if (src === 'flow' && cacheable(data)) putShapes((dRef.current.shapes || []).map(x => (x.id === s.id ? { ...x, data, dataAt: at } : x)), false);
+    } catch (e) {
+      setDashData(m => ({ ...m, [s.id]: { ...m[s.id], busy: false, error: e.message || String(e) } }));
+    }
+  };
+  const refreshDashRef = useRef(refreshDash);
+  refreshDashRef.current = refreshDash;
+  // Dashboards fed by code blocks update when that code (or the wiring) changes.
+  const codeFeeds = JSON.stringify(shapes.filter(s => s.t === 'dash').map(s => [s.id, s.src, wiredCode(shapes, s.id).map(c => c.text)]));
+  useEffect(() => {
+    if (!visible) return undefined;
+    const t = setTimeout(() => (dRef.current.shapes || []).filter(s => s.t === 'dash' && dashSource(s) === 'code').forEach(s => refreshDashRef.current(s)), 300);
+    return () => clearTimeout(t);
+  }, [codeFeeds, visible]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Dashboards fed by the workflow can refresh on a timer while the canvas is showing.
+  const flowTimers = shapes.filter(s => s.t === 'dash' && s.src === 'flow' && s.every).map(s => s.id + ':' + s.every).join(',');
+  useEffect(() => {
+    if (!visible || !flowTimers) return undefined;
+    const timers = flowTimers.split(',').map(x => {
+      const [id, every] = x.split(':');
+      return setInterval(() => { const s = (dRef.current.shapes || []).find(y => y.id === id); if (s) refreshDashRef.current(s); }, every * 60_000);
+    });
+    return () => timers.forEach(clearInterval);
+  }, [flowTimers, visible]);
+  // The dashboard frames take the app's colours.
+  const dashTheme = useMemo(() => ({ ink: C.ink, ink2: C.ink2, surface: C.paper, line: C.line, bg: C.surface, dark: PAL[0] !== '#2E62C9' }), [theme]); // eslint-disable-line react-hooks/exhaustive-deps
   const duplicateSel = () => {
     const src = baseShapes().filter(s => selSet.has(s.id));
     if (!src.length) return;
@@ -850,6 +915,7 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
         const h = hitTarget(toWorld(e.clientX, e.clientY)), r = h ? h.r : null;
         setTarget(t => (sameRect(t, r) ? t : r));
       }
+      if (!drag.current) { const h = hoverAt(e); setHover(o => (o === h ? o : h)); }
       return;
     }
     ptrs.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -1250,7 +1316,8 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
         place('sheet', { sheet: sh.id, w: 440, h: 26 + 6 * 26 });
       } },
     ] },
-    { key: 'codeblock', icon: 'codeblock', label: 'Code block', note: 'A snippet of code', tile: true, act: () => place('code') },
+    { key: 'codeblock', icon: 'codeblock', label: 'Code block', note: 'A snippet of code you can run', tile: true, act: () => place('code') },
+    { key: 'dashblock', icon: 'chart', label: 'Dashboard block', note: 'Live cards, charts and tables from HTML and JavaScript, fed by a workflow or code blocks', tile: true, act: () => place('dash') },
     { key: 'image', icon: 'image', label: 'Image', note: 'Upload a picture', tile: true, act: () => fileRef.current?.click() },
   ];
   const closePanel = useCallback(() => setPanel(null), []);
@@ -1271,7 +1338,7 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
   if (editS) {
     const b = editBox(editS, draft), k = view.k;
     editor = (
-      <textarea className={'sedit' + (b.card ? ' card' : '')} autoFocus value={draft} spellCheck={editS.t !== 'code'} aria-label="Edit text"
+      <textarea className={'sedit' + (b.card ? ' card' : '')} autoFocus value={draft} spellCheck={!isCodeKind(editS)} aria-label="Edit text"
         style={{
           left: view.x + b.x * k, top: view.y + b.y * k, width: b.w * k, height: b.h * k,
           fontSize: b.fs * k, textAlign: b.align, fontWeight: b.weight, color: b.color,
@@ -1285,7 +1352,7 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
           if (e.key === 'Escape' || (e.key === 'Enter' && (e.metaKey || e.ctrlKey))) { e.preventDefault(); e.target.blur(); }
           // Enter starts a new line; a frame's label is one line, so there Enter finishes.
           else if (e.key === 'Enter' && editS.t === 'frame') { e.preventDefault(); e.target.blur(); }
-          else if (e.key === 'Tab' && editS.t === 'code') {
+          else if (e.key === 'Tab' && isCodeKind(editS)) {
             e.preventDefault();
             const t = e.target, s = t.selectionStart, v = t.value.slice(0, s) + '  ' + t.value.slice(t.selectionEnd);
             setDraft(v); requestAnimationFrame(() => { t.selectionStart = t.selectionEnd = s + 2; });
@@ -1293,17 +1360,56 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
         }} />
     );
   }
-  const codeBlockControls = selS && selS.t === 'code' && !editing ? (() => {
-    const run = codeRuns[selS.id], lang = selS.lang || '';
-    return <div className="cv-code-ui" style={{ left: view.x + selS.x * view.k, top: view.y + selS.y * view.k, width: selS.w * view.k }} onPointerDown={e => e.stopPropagation()}>
+  // Controls laid over code and dashboard blocks. They're drawn at the block's own size and scaled with
+  // the zoom, so the header row always lines up with the block's 28px header.
+  const blockBox = (s, dy = 0) => ({ left: view.x + s.x * view.k, top: view.y + (s.y + dy) * view.k, width: s.w, transform: `scale(${view.k})` });
+  const controlsFit = view.k >= 0.45;
+  const codeBlockControls = selS && selS.t === 'code' && !editing && controlsFit ? (() => {
+    const run = codeRuns[selS.id], lang = selS.lang || 'javascript';
+    return <div className="cv-code-ui" style={blockBox(selS)} onPointerDown={e => e.stopPropagation()}>
       <div className="cv-code-actions">
         <label><select aria-label="Select language" value={lang} onChange={e => {
           const value = e.target.value;
           putShapes(baseShapes().map(s => s.id === selS.id ? { ...s, lang: value } : s));
-        }}><option value="">Select language</option><option value="javascript">JavaScript</option><option value="typescript">TypeScript</option></select></label>
-        <button className="cv-code-run" onClick={() => runCodeBlock(selS)} disabled={!lang || !!run?.busy}>{run?.busy ? 'Running…' : '▶ Run'}</button>
+        }}><option value="javascript">JavaScript</option><option value="typescript">TypeScript</option></select></label>
+        <button className="cv-code-run" onClick={() => runCodeBlock(selS)} disabled={!!run?.busy}>{run?.busy ? 'Running…' : '▶ Run'}</button>
       </div>
-      {run && !run.busy && <div className={'cv-code-output' + (run.error ? ' err' : '')} aria-live="polite"><b>{run.error ? 'Error' : 'Output'}</b><pre>{run.error || run.out || '(no output)'}</pre></div>}
+      {/* The output sits under the block, so it never covers the code. */}
+      {run && !run.busy && <div className={'cv-code-output' + (run.error ? ' err' : '')} style={{ top: selS.h + 8 }} aria-live="polite"><b>{run.error ? 'Error' : 'Output'}</b><pre>{run.error || run.out || '(no output)'}</pre></div>}
+    </div>;
+  })() : null;
+  const dashFrames = shapes.filter(s => s.t === 'dash' && s.id !== editing && s.h > 60).map(s => {
+    const st = dashData[s.id] || {}, data = st.data !== undefined ? st.data : s.data || [];
+    // The frame sits over the whole canvas, so cut it away wherever a figure stacked above the block overlaps it.
+    const body = { x: s.x, y: s.y + 28, w: s.w, h: s.h - 28 };
+    const holes = shapes.slice(shapes.indexOf(s) + 1).filter(x => !x.pts && x.t !== 'comment').map(bbox).filter(r => overlaps(r, body))
+      .map(r => `M${r.x - body.x} ${r.y - body.y}h${r.w}v${r.h}h${-r.w}Z`);
+    const clipPath = holes.length ? `path(evenodd, "M-20 -20H${body.w + 20}V${body.h + 20}H-20Z ${holes.join(' ')}")` : undefined;
+    return <div key={s.id} className={'cv-dash' + (selSet.has(s.id) && selection.length === 1 ? ' live' : '')} style={{ ...blockBox(s, 28), height: body.h, clipPath }}>
+      <DashFrame html={s.text || ''} data={data} theme={dashTheme} title={s.title || 'Dashboard'} />
+    </div>;
+  });
+  const dashControls = selS && selS.t === 'dash' && !editing && controlsFit ? (() => {
+    const st = dashData[selS.id] || {}, src = dashSource(selS), wired = wiredCode(baseShapes(), selS.id).length;
+    const set = p => putShapes(baseShapes().map(s => (s.id === selS.id ? { ...s, ...p } : s)));
+    const at = st.at || selS.dataAt;
+    return <div className="cv-code-ui" style={blockBox(selS)} onPointerDown={e => e.stopPropagation()}>
+      <div className="cv-code-actions">
+        <label><select aria-label="Dashboard data" value={src} onChange={e => { set({ src: e.target.value }); }}>
+          <option value="">Sample data</option>
+          <option value="flow">This file’s workflow</option>
+          <option value="code">Code blocks{wired ? ` (${wired})` : ''}</option>
+        </select></label>
+        {src === 'flow' && <label><select aria-label="Refresh every" value={selS.every || 0} onChange={e => set({ every: +e.target.value || undefined })}>
+          <option value={0}>Manual</option><option value={1}>Every minute</option><option value={5}>Every 5 min</option><option value={15}>Every 15 min</option>
+        </select></label>}
+        {src && <button className="cv-code-run" onClick={() => refreshDash(selS)} disabled={!!st.busy} title={at ? 'Updated ' + new Date(at).toLocaleTimeString() : 'Get the data'}>{st.busy ? 'Loading…' : '↻ Refresh'}</button>}
+        <button className="cv-code-run" onClick={() => startEdit(selS)}>Edit HTML</button>
+      </div>
+      {(st.error || (src === 'code' && !wired)) && <div className={'cv-code-output' + (st.error ? ' err' : '')} style={{ top: selS.h + 8 }} aria-live="polite">
+        <b>{st.error ? 'Couldn’t get the data' : 'No code blocks wired in'}</b>
+        <pre>{st.error || 'Drag from a code block’s output port (right side) to this dashboard. Whatever the code returns becomes `data`.'}</pre>
+      </div>}
     </div>;
   })() : null;
 
@@ -1323,12 +1429,14 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
         <svg id="svg" ref={svgRef} className={(grabbing ? 'grabbing' : '') + (tool === 'hand' || space ? ' panning' : tool !== 'select' ? ' drawing' : '')} xmlns="http://www.w3.org/2000/svg"
           fontFamily="Bricolage Grotesque, system-ui, -apple-system, Segoe UI, sans-serif" aria-label="Diagram canvas"
           onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerEnd} onPointerCancel={onPointerEnd}
-          onPointerLeave={() => { if (!drag.current) setTarget(null); }}>
+          onPointerLeave={() => { if (!drag.current) { setTarget(null); setHover(null); } }}>
           <g transform={`translate(${view.x} ${view.y}) scale(${view.k})`} dangerouslySetInnerHTML={{ __html: layers.under + markup + layers.over + overlay }} />
         </svg>
       </div>
+      {dashFrames}
       {editor}
       {codeBlockControls}
+      {dashControls}
 
       {empty && tool === 'select' && (
         <div className="cempty">

@@ -122,17 +122,20 @@ The **Workflow** view (View menu → Automate, or **Tools → Automation**; its 
 - **Triggers:** Run by hand, **Webhook** (a secret URL, `<APP_URL>/api/hook/<token>`, that any app can call), **Schedule** (every N minutes, hours or days, or daily at a UTC time), and (`backend/flow-triggers.js`):
   - **Form:** a page of its own at its URL; each answer starts the workflow with the fields filled in.
   - **App events** at a URL of their own, checked against the app's signing secret when one is filled in, and filtered to the events asked for: **GitHub**, **Stripe**, **Shopify**, **Slack** (Events API, URL check included), **Typeform**, **Calendly**.
-  - **Something new**, looked for every few minutes: **New in a feed** (RSS/Atom), **Telegram message** (to your bot), **Page changed** (a page or API), **New sheet row** (a Workline sheet). The first look only notes what's there.
+  - **Something new**, looked for every few minutes: **New in a feed** (RSS/Atom), **Telegram message** (to your bot), **Page changed** (a page or API), **New sheet row** (a Workline sheet), **New database row** (a table's rows past the largest id or time seen), **New email** (IMAP), **New calendar event** (Google). The first look only notes what's there.
+  - **On error:** starts when another of the account's active workflows fails, with the workflow, the step and the error.
+- **Webhook replies:** a Webhook trigger set to respond "when the workflow ends" waits (up to 25 seconds) and answers with a **Respond to webhook** node's status, headers and body, or else the last step's items.
+- **If it fails** (every node): stop the run, carry on with the error on each item, or send the items out of an **error** output (try/catch).
 - **Workline:** the account's own files. **Sheet** reads a sheet's rows (the first row names the fields) or adds each item as a row; **Doc** reads, adds to or replaces a file's doc, or makes a new file; **Diagram** draws a diagram from code into a file (a tab with that name is replaced, else one is added), or reads them; **Database** runs a query on a connection saved in the Database view (its password must be remembered). A file a workflow changes is saved like any other, with its version history; the app fetches it again when its tab comes back into view or a run ends, unless it has unsaved changes of its own. Sheet cells are read as written: a formula cell gives its formula.
-- **Flow:** IF, Switch (up to four ways), Filter, Merge, Split out, Batch, Limit, Sort, Remove duplicates, Wait, Run another workflow, Stop and error, No operation, Code (JavaScript over the items; `await` and `fetch` work).
-- **Data:** Bitly short links, QR codes, Set fields, Rename fields, Aggregate, Summarize (count, sum, average, min, max, by group), Date & time, Text, JSON, Extract (regex), CSV (read and write), Crypto (hashes, HMAC, base64, UUIDs).
+- **Flow:** IF, Switch (up to four ways), Filter, Merge, Split out, Batch, Limit, Sort, Remove duplicates, Wait, Run another workflow, Respond to webhook, Stop and error, No operation, Sticky note, Code (JavaScript over the items; `await` and `fetch` work).
+- **Data:** Pivot (rows × columns, counts or sums), Text splitter (chunks for AI), Key-value store (per account, kept between runs), Bitly short links, QR codes, Set fields, Rename fields, Aggregate, Summarize (count, sum, average, min, max, by group), Date & time, Text, JSON, Extract (regex), CSV (read and write), Crypto (hashes, HMAC, base64, UUIDs).
 - **Web:** **Web page** reads a page as sent (text, links, tables, CSS selectors, named fields; `backend/flow-web.js`, with node-html-parser); **Browser** uses a real Chrome through Browserless (its API token in a credential) for pages built by JavaScript, steps (click, type, wait), screenshots and PDFs.
-- **AI:** Claude (the server's key), OpenAI (or any OpenAI-style API), Gemini, DeepL translate.
+- **AI:** Claude (the server's key), and on it **Summarize**, **Extract** (named fields, as JSON), **Classify**, **Rewrite**, **Translate**, **Read an image** (describe it or read its text), **Decide** (one of your options, with reasons), **Score & rank**; **MCP tool** (call or list the tools of an MCP server over Streamable HTTP); OpenAI (or any OpenAI-style API), Gemini, DeepL translate. These are in `backend/flow-extra.js`.
 - **Communication:** Slack, Discord, Telegram, WhatsApp (Cloud API), Microsoft Teams, Google Chat, Mattermost, Email (SMTP or the server's own), SendGrid, Resend, Mailgun, Postmark, Brevo, Twilio SMS, Mailchimp, ntfy and Pushover push.
 - **Productivity:** Notion, Google Sheets and Google Calendar (a service account the sheet or calendar is shared with), Airtable, Trello, Asana, ClickUp, Todoist, WordPress.
-- **Developer:** HTTP request (any API), GitHub, GitLab, Jira, Linear, Zendesk, PagerDuty.
+- **Developer:** HTTP request (any API), GraphQL, GitHub, GitLab, Jira, Linear, Zendesk, PagerDuty.
 - **Sales & payments:** HubSpot, Pipedrive, Stripe, Shopify.
-- **Storage & feeds:** Database (PostgreSQL, MySQL, SQL Server, MongoDB, through `backend/dbconnect.js`), Supabase, Dropbox, RSS feeds, Hacker News, Weather (Open-Meteo), Currency (today's rates, Frankfurter).
+- **Storage & feeds:** Database (PostgreSQL, MySQL, SQL Server, MongoDB, through `backend/dbconnect.js`), Redis, Spreadsheet file (an .xlsx or .csv at a URL), Supabase, Dropbox, RSS feeds, Hacker News, Weather (Open-Meteo), Currency (today's rates, Frankfurter).
 
 **Apps.** **Publish** turns a workflow into an app in **Apps** (home page): a form with the questions you choose and a Run button, for people who don't build workflows. It runs the saved workflow on the server (`POST /api/flows/:fileId/app`, only the declared answers are passed, as one item) with the owner's credentials, and shows the chosen node's output as text, a table or cards. The settings live in `file.flow.app` (`frontend/src/lib/apps.js`).
 
@@ -144,7 +147,17 @@ Workflows run on the backend (`backend/flows.js`, `flow-engine.js`, `flow-nodes.
 
 - **Credentials** (API keys, tokens, connection strings) are encrypted with AES-256-GCM under `FLOW_SECRET` and never sent back to the browser. Set `FLOW_SECRET` to a long random value and keep it: changing it makes saved credentials unreadable. (`render.yaml` generates one.)
 - **Schedules run while the server is awake.** A free Render service sleeps after 15 idle minutes, so a schedule then waits until something wakes it: a webhook, a visit, or a pinger such as cron-job.org calling the site every 10 minutes. Webhooks wake it themselves (the first call takes about a minute).
-- HTTP and app nodes refuse private and local addresses unless `DB_ALLOW_PRIVATE=1`. The Code node runs JavaScript on the server with time limits but no real sandbox: it's for the server's own, trusted accounts.
+- HTTP and app nodes refuse private and local addresses unless `DB_ALLOW_PRIVATE=1`.
+- **The Code node** (`backend/flow-code.js`) takes a language. **JavaScript, TypeScript, Python, Lua and SQL** run on the server in `backend/code-sandbox.js`: a separate Node process per language under Node's permission model (`--permission`), which can read only the runtimes' own packages, can't start processes or write files (other than Python's package cache), and gets no environment variables, so code can't reach the server's files or secrets. It can still use the network. Python is [Pyodide](https://pyodide.org) (`import numpy`, `pandas` and other Pyodide packages are fetched on first use), Lua is wasmoon, SQL is SQLite (sql.js) with the items as a table `items`. Limits: 10 s (Python 60 s), 384 MB. **Go, Java, C, C++, C#, Rust, Ruby, PHP, Kotlin, Swift, Bash, R, Perl, Scala, Haskell, Dart and Elixir** run on a code runner the user connects as a **Code runner** credential: a [Piston](https://github.com/engineer-man/piston) server, or Judge0 (self-hosted, or Judge0 CE on RapidAPI). Those programs read the items as JSON on stdin and print the new items as JSON (the last line of output). Each language starts with an example (`frontend/src/lib/codelangs.js`).
+
+## Custom apps
+
+The **App** view (Tools → Custom app, or View → App) makes an app with a UI of your own around your workflows: write its page in HTML, CSS and JavaScript with a live preview beside the code, choose which of your workflows it may run (**Workflows ▾**), and **Publish** it for a link anyone can open, outside Workline: `/api/ui/<token>`. In its script:
+
+- `await workline.run('Workflow name', { … })` runs one of those workflows (the saved version, from its Run by hand trigger) with that input and resolves to what its last steps output, as a list. With no name, the app's first workflow.
+- `workline.workflows` lists them; `cards`, `bars`, `line`, `pie` and `table` draw results (as in dashboard blocks).
+
+**Start from** has a form, a dashboard that refreshes itself, and a chat. **Templates → Ready-made** (and Tools) has whole apps to start from (`frontend/src/lib/starters.js`): **Video streaming app** is a video library workflow (find videos in JavaScript → signed, expiring playback links in Python) and a player app around it with search, categories, MP4 and HLS (hls.js). The workflow hands out the links; a CDN or video host streams the video. `frontend/src/lib/apphost.js` builds the page (saved in `file.ui.doc`); `backend/flows.js` serves it with `Content-Security-Policy: sandbox`, so the page is an origin of its own with no access to Workline's cookies or storage, and its runs (`POST /api/ui/<token>/run`, rate-limited) can only start the workflows the app was given. Like a webhook, a published app runs them with its owner's credentials. In the editor's preview the runs go through the signed-in API (`POST /api/flows/:fileId/data` with the workflow as it is in the editor).
 
 ## Running code
 
@@ -173,6 +186,17 @@ The **Database** view connects to PostgreSQL, MySQL / MariaDB, SQL Server and Mo
 ## Database schemas from SQL
 
 A `.sql` file becomes a database schema diagram without AI: drop it on the canvas, or use **Insert → Database schema from SQL**, **Tools → Open a .sql file**, or a schema's **⋯ → Import SQL**. `frontend/src/lib/sql.js` reads schema files, migrations and dumps from PostgreSQL (`pg_dump`), MySQL (`mysqldump`), SQLite and SQL Server: tables, column types, primary keys (including ones added by `ALTER TABLE`), unique columns and foreign keys, and follows `ALTER TABLE` column changes in order. It also writes a diagram back out as PostgreSQL or MySQL.
+
+## Code and dashboard blocks on the canvas
+
+Every figure has two **connection ports**, shown when you point at it or select it: an output on the right and an input on the left. Drag from an output to another figure to wire them; the wire runs from that output to the other's input, and goes round when the input is behind the output. A **code block** (Insert → Code block) runs its JavaScript or TypeScript with **▶ Run**; the output shows under the block.
+
+A **dashboard block** (Insert → Dashboard block, `frontend/src/lib/dashboard.js`) is HTML with `<style>` and `<script>`, shown live on the canvas in a sandboxed frame (scripts run, with no access to the app, its storage or cookies; they can fetch public URLs and load chart libraries from a CDN). Its script gets `data`, a list, from the block's source:
+
+- **Code blocks**: wire one or more code blocks into it; whatever each returns (or last logs as JSON) is joined into `data`, again whenever the code changes.
+- **This file's workflow**: **↻ Refresh** runs the file's workflow on the server (`POST /api/flows/:fileId/data`, which waits up to a minute) and `data` is everything its last steps output. That data is kept with the file, and it can refresh every 1, 5 or 15 minutes while the canvas is open.
+
+Helpers in the frame: `cards(el, [[label, value], …])`, `bars(el, rows, labelKey, valueKey)`, `line(…)`, `pie(…)` and `table(el, rows)`. **Edit HTML** opens the block's code. Exports show the code rather than the live view.
 
 ## The doc (like Word)
 
@@ -217,6 +241,7 @@ frontend/               the app (Netlify)
       SheetView.jsx     Sheet view: an Excel-like workbook (ribbon, grid, charts)
       DatabaseView.jsx  Database view: live connections, schema, data and queries
       FlowView.jsx      Workflow view: the n8n-style editor, credentials and runs
+      AppBuilder.jsx    App view: a custom app's code, live preview, workflows and publishing
       ui.jsx            menus, dialogs, toasts, theme button
     lib/
       backend.js        talking to the API (and waiting for it to wake)
@@ -232,6 +257,9 @@ frontend/               the app (Netlify)
       xlsx.js           .xlsx open and save (ExcelJS)
       dbclient.js       live database connections, SQLite in the browser, schema → diagram
       flows.js          workflow node types, credential kinds, and the workflow API
+      codelangs.js      the Code node's languages and their starter code
+      apphost.js        custom apps: the page around your HTML (workline.run) and starters
+      dashboard.js      dashboard blocks: the frame's document, helpers and data sources
       charts.js         charts from cells, as SVG
       theme.js          light, dark or system theme, remembered
       python.worker.js  Pyodide in a web worker
@@ -252,6 +280,9 @@ backend/                the API (Render)
   flows.js              workflows: credentials, runs, webhooks and schedules
   flow-engine.js        runs a workflow: order, items, {{ expressions }}
   flow-nodes.js         what each workflow node does (HTTP, Code, Slack, GitHub…)
+  flow-extra.js         AI helpers, MCP, GraphQL, Redis, spreadsheet files, pivot, key-value store, more triggers
+  flow-code.js          the Code node's languages: the sandbox processes and Piston / Judge0 runners
+  code-sandbox.js       the sandbox process (JavaScript, TypeScript, Python, Lua, SQL)
   auth.js               passwords, sessions, sign-in limits
   mail.js               sending email (Resend or SMTP)
   oauth.js              Google and GitHub sign-in (OAuth 2 with PKCE)

@@ -75,7 +75,7 @@ const N8N = {
   noOp: { type: 'core.noop' },
   stopAndError: { type: 'core.stop', params: p => ({ message: p.errorMessage || '' }) },
   executeWorkflow: { type: 'core.subflow' },
-  code: { type: 'core.code', params: p => ({ code: n8nCode(p.jsCode || '') }) },
+  code: { type: 'core.code', params: p => (p.language === 'python' || p.language === 'pythonNative' ? { language: 'python', code: n8nPython(p.pythonCode || '') } : { language: 'javascript', code: n8nCode(p.jsCode || '') }) },
   function: { type: 'core.code', params: p => ({ code: n8nCode(p.functionCode || '') }) },
   httpRequest: { type: 'core.http', params: p => ({ method: p.method || p.requestMethod || 'GET', url: n8nExpr(p.url || ''), query: [], headers: [], bodyType: 'json', body: '', failOnError: true }) },
   rssFeedRead: { type: 'data.rss', params: p => ({ url: p.url || '' }) },
@@ -127,6 +127,8 @@ const N8N = {
 const n8nExpr = v => (typeof v === 'string' && v.startsWith('=') ? v.slice(1) : v);
 // n8n's Code node reads $input.all() (items with .json); ours gets the json objects themselves.
 const n8nCode = code => `// Imported from n8n: \`items\` here are the items' JSON (n8n's $input.all().map(i => i.json)).\nconst $input = { all: () => items.map(json => ({ json })), first: () => ({ json: items[0] }) };\n${code}`;
+
+const n8nPython = code => `# Imported from n8n: \`items\` here are the items' JSON, as dicts (n8n's [i.json for i in _input.all()]).\nclass _input:\n    all = staticmethod(lambda: [{"json": i} for i in items])\n    first = staticmethod(lambda: {"json": items[0]})\n${code}`;
 
 // Read a workflow file (ours or n8n's) into {flow, name, skipped: [n8n types we don't have]}.
 export function importFlow(text) {

@@ -6,8 +6,9 @@ import { APP_NODES } from './flow-apps.js';
 import { WORKLINE_NODES } from './flow-workline.js';
 import { POLL_EVERY, TRIGGER_TYPES } from './flow-triggers.js';
 import { WEB_NODES } from './flow-web.js';
+import { EXTRA_NODES } from './flow-extra.js';
 
-const TYPES = { ...NODE_TYPES, ...APP_NODES, ...WORKLINE_NODES, ...TRIGGER_TYPES, ...WEB_NODES };
+const TYPES = { ...NODE_TYPES, ...APP_NODES, ...WORKLINE_NODES, ...TRIGGER_TYPES, ...WEB_NODES, ...EXTRA_NODES };
 import { limiter, newToken } from './auth.js';
 
 /* Workflows on the server: credentials, runs, webhooks and schedules. A workflow lives in a file
@@ -64,6 +65,9 @@ export const CRED_FIELDS = {
   deepl: ['apiKey'],
   bitly: ['token'],
   browserless: ['token', 'baseUrl'],
+  imap: ['host', 'port', 'user', 'password', 'secure'],
+  redis: ['url'],
+  coderunner: ['service', 'url', 'apiKey'],
 };
 const KEEP_RUNS = 20, SAMPLE = 20, MAX_DETAIL = 1_000_000, RUNNING_PER_USER = 5;
 const UNIT = { minutes: 60_000, hours: 3_600_000, days: 86_400_000 };
@@ -123,6 +127,18 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
       try { return unseal(c.data); } catch (e) { throw new FlowError(`The credential “${c.name}” can't be read (did FLOW_SECRET change?). Enter it again.`, 'credential'); }
     },
     ai: { key: ai.key, base: ai.base, model: ai.model, allow: () => store.useAi(uid, ai.dailyLimit ?? 50) },
+    // The Key-value store node's values: per account, kept between runs (at most 1,000 keys of 100 KB).
+    kv: {
+      get: k => (m.userdata[uid]?.kv || {})[k],
+      set(k, v) {
+        const kv = ((m.userdata[uid] ||= {}).kv ||= {});
+        if (JSON.stringify(v ?? null).length > 100_000) throw new FlowError('That value is over 100 KB.', 'too_large');
+        if (!(k in kv) && Object.keys(kv).length >= 1000) throw new FlowError('The key-value store is full (1,000 keys). Delete some first.', 'too_many');
+        kv[k] = v ?? null; store.touch();
+      },
+      del(k) { const kv = m.userdata[uid]?.kv; if (kv && k in kv) { delete kv[k]; store.touch(); } },
+      list: prefix => Object.fromEntries(Object.entries(m.userdata[uid]?.kv || {}).filter(([k]) => k.startsWith(prefix))),
+    },
   });
 
   /* ---- runs ---- */
@@ -143,20 +159,64 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
     if (size) await store.blob.write(uid, `run.${run.id}.json`, text);
   };
   const running = uid => [...live.values()].filter(x => x.uid === uid && x.run.status === 'running').length;
+  // Start a run in the background. `run.done` (not saved) settles when it ends; `run.reply` when a Respond
+  // node answers (or the run ends without one).
   const start = (uid, fileId, flow, startId, input, trigger) => {
     if (running(uid) >= RUNNING_PER_USER) throw new FlowError(`${RUNNING_PER_USER} workflows are already running. Wait for one to finish.`, 'busy');
     const run = { id: newToken().slice(0, 16), fileId, trigger, startId, status: 'running', started: Date.now(), nodes: {} };
+    let answered, answer = null;
+    Object.defineProperty(run, 'reply', { value: new Promise(r => { answered = r; }) });
     live.set(run.id, { uid, run });
-    (async () => {
+    const ctx = ctxFor(uid);
+    ctx.respond = r => { if (!answer) { answer = r; answered(r); } };
+    Object.defineProperty(run, 'done', { value: (async () => {
+      let r = null;
       try {
-        const r = await runFlow(flow, { startId, input, types: TYPES, ctx: ctxFor(uid), onStep: (id, res) => { run.nodes[id] = trim(res); } });
+        r = await runFlow(flow, { startId, input, types: TYPES, ctx, onStep: (id, res) => { run.nodes[id] = trim(res); } });
         Object.assign(run, { status: r.status, error: r.error, failed: r.failed });
       } catch (e) { Object.assign(run, { status: 'error', error: e.message }); }
       run.finished = Date.now();
+      if (!answer) answered(null);
       await save(uid, run).catch(e => console.error('Saving a workflow run failed:', e.message));
       setTimeout(() => live.delete(run.id), 10 * 60_000).unref?.();
-    })();
+      if (run.status === 'error' && trigger !== 'error') onFailure(uid, fileId, flow, run).catch(e => console.error('An On error workflow could not start:', e.message));
+      return { run, result: r };
+    })() });
     return run;
+  };
+  // Run a saved or given flow from its Run by hand trigger (else its first trigger) and wait up to a minute
+  // for what its last steps output, in full: {items} or {pending, runId}. Throws FlowError.
+  const runForItems = async (uid, fileId, flow, input, trigger) => {
+    const first = flow.nodes.find(n => n.type === 'trigger.manual')?.id || flow.nodes.find(n => String(n.type).startsWith('trigger.'))?.id;
+    if (!first) throw new FlowError('The workflow needs a trigger: add Run by hand.', 'no_start');
+    const run = start(uid, fileId, flow, first, input, trigger);
+    const got = await Promise.race([run.done, new Promise(r => setTimeout(() => r(null), 60_000))]);
+    if (!got) return { pending: true, runId: run.id };
+    const r = got.result;
+    if (!r || run.status !== 'success') throw Object.assign(new FlowError(run.error || 'The workflow failed.', 'flow_error'), { runId: run.id });
+    const ok = id => r.nodes[id]?.status === 'success';
+    const ends = flow.nodes.filter(n => ok(n.id) && !flow.edges.some(e => e.from === n.id && ok(e.to)));
+    let items = ends.flatMap(n => r.nodes[n.id].output?.main || []).slice(0, 5000);
+    while (items.length > 1 && JSON.stringify(items).length > 2_000_000) items = items.slice(0, Math.floor(items.length / 2));
+    return { runId: run.id, items };
+  };
+  const sendItems = async (res, work) => {
+    try { const got = await work(); res.status(got.pending ? 202 : 200).json(got); }
+    catch (e) { res.status(e.code === 'busy' ? 429 : e.code === 'no_start' ? 400 : 422).json({ error: e.code || 'flow_error', message: e.message, runId: e.runId }); }
+  };
+
+  // A run failed: start the account's active workflows that begin with “On error” (for this one, or any).
+  const onFailure = async (uid, fileId, flow, run) => {
+    for (const t of Object.values(m.errorTriggers || {})) {
+      if (t.uid !== uid || t.fileId === fileId || (t.only && t.only !== fileId)) continue;
+      const other = await savedFlow(uid, t.fileId).catch(() => null);
+      if (!other || !other.active) continue;
+      const file = await store.readFile(uid, fileId).then(x => (x ? JSON.parse(x) : null)).catch(() => null);
+      const failed = flow.nodes.find(n => n.id === run.failed);
+      try {
+        start(uid, t.fileId, other, t.nodeId, [{ json: { workflowId: fileId, workflow: file?.title || null, runId: run.id, trigger: run.trigger, error: run.error, failedNode: failed?.name || null, failedAt: new Date(run.finished).toISOString() } }], 'error');
+      } catch (e) { console.error('An On error workflow could not start:', e.message); }
+    }
   };
   const savedFlow = async (uid, fileId) => {
     const text = await store.readFile(uid, fileId);
@@ -168,7 +228,12 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
   const reindex = (uid, fileId, file) => {
     const before = {};
     m.polls ||= {};
-    for (const table of ['hooks', 'schedules', 'polls']) for (const [k, v] of Object.entries(m[table])) if (v.uid === uid && v.fileId === fileId) { before[k] = v; delete m[table][k]; }
+    m.errorTriggers ||= {};
+    m.uiApps ||= {};
+    for (const table of ['hooks', 'schedules', 'polls', 'errorTriggers', 'uiApps']) for (const [k, v] of Object.entries(m[table])) if (v.uid === uid && v.fileId === fileId) { before[k] = v; delete m[table][k]; }
+    // A published custom app (the App view): its link's token.
+    const ui = file && file.ui;
+    if (ui && ui.published && /^[a-z0-9]{20,80}$/.test(String(ui.token || '')) && !m.uiApps[ui.token]) m.uiApps[ui.token] = { uid, fileId };
     const flow = file && file.flow;
     if (flow && flow.active) for (const n of Array.isArray(flow.nodes) ? flow.nodes : []) {
       const p = n.params || {};
@@ -178,9 +243,10 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
       if (TYPES[n.type]?.poll) {
         const k = `${uid}:${fileId}:${n.id}`, was = before[k];
         // The same thing watched keeps what was seen; something else starts afresh.
-        const what = JSON.stringify([n.type, p.url, p.fileId, p.sheet, n.credential]);
+        const what = JSON.stringify([n.type, p.url, p.fileId, p.sheet, p.table, p.column, p.mailbox, p.calendarId, n.credential]);
         m.polls[k] = { uid, fileId, nodeId: n.id, type: n.type, every: POLL_EVERY(p), last: was?.what === what ? was.last : 0, what, state: was?.what === what ? was.state : {}, error: null };
       }
+      if (n.type === 'trigger.error') m.errorTriggers[`${uid}:${fileId}:${n.id}`] = { uid, fileId, nodeId: n.id, only: p.fileId ? String(p.fileId) : '' };
       if (n.type === 'trigger.schedule') {
         const k = `${uid}:${fileId}:${n.id}`;
         m.schedules[k] = { uid, fileId, nodeId: n.id, mode: p.mode === 'daily' ? 'daily' : 'interval', every: Math.max(1, Number(p.every) || 15), unit: UNIT[p.unit] ? p.unit : 'minutes', at: /^\d\d:\d\d$/.test(p.at || '') ? p.at : '09:00', last: before[k]?.last || Date.now() };
@@ -228,6 +294,49 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
   }, 30_000);
   timer.unref?.();
 
+  /* ---- custom apps (the App view), published: anyone with the link ----
+     The page is the app's own HTML, so it's served as a sandbox (an origin of its own, with no access to
+     this site's cookies or storage), and its script calls back here, cross-origin, to run the workflows
+     the app was given, with the owner's credentials (like a webhook). */
+  const ui = express.Router();
+  const uiHits = limiter({ max: 60, windowMs: 60_000 });
+  const uiOf = async token => {
+    const a = (m.uiApps || {})[token];
+    if (!a) return null;
+    const text = await store.readFile(a.uid, a.fileId).catch(() => null), file = text ? JSON.parse(text) : null;
+    return file && file.ui && file.ui.published && file.ui.token === token ? { ...a, file } : null;
+  };
+  ui.use((req, res, next) => {
+    res.set({ 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET, POST', 'access-control-allow-headers': 'content-type', 'cache-control': 'no-store' });
+    if (req.method === 'OPTIONS') return res.status(204).end();
+    next();
+  });
+  ui.get('/:token', async (req, res) => {
+    const a = await uiOf(req.params.token);
+    if (!a) return res.status(404).type('text').send('This app isn’t published (or the link is wrong).');
+    res.set({ 'content-security-policy': 'sandbox allow-scripts allow-forms allow-popups allow-modals allow-downloads', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer' });
+    res.type('html').send(String(a.file.ui.doc || a.file.ui.html || ''));
+  });
+  // The page sends its JSON as text/plain, a request browsers make without asking first (no preflight).
+  ui.post('/:token/run', express.text({ type: () => true, limit: '1mb' }), async (req, res) => {
+    try { req.body = typeof req.body === 'string' && req.body ? JSON.parse(req.body) : {}; } catch (e) { return res.status(400).json({ error: 'bad_json', message: 'Send JSON: {workflow, input}.' }); }
+    if (uiHits.blocked(req.params.token)) return res.status(429).json({ error: 'too_many', message: 'Too many runs. Wait a minute.' });
+    uiHits.fail(req.params.token);
+    const a = await uiOf(req.params.token);
+    if (!a) return res.status(404).json({ error: 'not_found', message: 'This app isn’t published.' });
+    // Only the workflows the app was given, by id or by name.
+    const want = String((req.body || {}).workflow || ''), allowed = (Array.isArray(a.file.ui.flows) ? a.file.ui.flows : []).filter(id => ID.test(String(id)));
+    let fileId = allowed.includes(want) ? want : null;
+    if (!fileId) for (const id of allowed) {
+      const t = await store.readFile(a.uid, id).catch(() => null), f = t ? JSON.parse(t) : null;
+      if (f && (!want || f.title === want)) { fileId = id; break; }
+    }
+    if (!fileId) return res.status(403).json({ error: 'not_allowed', message: want ? `This app can’t run “${want}”.` : 'This app has no workflows.' });
+    const flow = await savedFlow(a.uid, fileId).catch(() => null);
+    if (!flow || !Array.isArray(flow.nodes) || !flow.nodes.length) return res.status(404).json({ error: 'not_found', message: 'That workflow is empty.' });
+    await sendItems(res, () => runForItems(a.uid, fileId, flow, asItems((req.body || {}).input), 'app'));
+  });
+
   /* ---- webhooks: anyone with the URL, so they're mounted before the API's same-site checks ---- */
   const hooks = express.Router();
   const hits = limiter({ max: 120, windowMs: 60_000 });
@@ -253,7 +362,18 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
       }
       const headers = Object.fromEntries(Object.entries(req.headers).filter(([k]) => !/^(cookie|authorization|x-forwarded-|x-real-ip|cf-)/i.test(k)));
       const run = start(h.uid, h.fileId, flow, h.nodeId, [{ json: { method: req.method, query: req.query, headers, body: req.body ?? null } }], 'webhook');
-      res.status(202).json({ ok: true, runId: run.id });
+      if ((node.params || {}).respond !== 'end') return res.status(202).json({ ok: true, runId: run.id });
+      // Wait (up to 25 s) for a Respond node's answer, or the end of the run: its last step's items.
+      const answer = await Promise.race([run.reply, new Promise(r => setTimeout(() => r('late'), 25_000))]);
+      if (answer === 'late') return res.status(202).json({ ok: true, runId: run.id, pending: true });
+      if (answer) {
+        for (const [k, v] of Object.entries(answer.headers || {})) if (/^[\w-]+$/.test(k) && !/^(set-cookie|content-length|transfer-encoding|connection)$/i.test(k)) res.set(k, String(v));
+        return answer.type === 'json' ? res.status(answer.status).json(answer.body) : res.status(answer.status).type(answer.type).send(String(answer.body));
+      }
+      if (run.status === 'error') return res.status(500).json({ error: 'flow_error', message: run.error, runId: run.id });
+      const ends = flow.nodes.filter(n => run.nodes[n.id]?.status === 'success' && !flow.edges.some(e => e.from === n.id && run.nodes[e.to]?.status === 'success'));
+      const items = ends.flatMap(n => run.nodes[n.id].output?.main || []);
+      res.status(200).json(items.length === 1 ? items[0] : items);
     } catch (e) { res.status(e.code === 'busy' ? 429 : 500).json({ error: e.code || 'flow_error', message: e.message }); }
   });
 
@@ -302,6 +422,23 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
         res.status(202).json({ runId: run.id });
       } catch (e) { res.status(e.code === 'busy' ? 429 : 400).json({ error: e.code || 'flow_error', message: e.message }); }
     });
+    // Run a flow as it is in the editor (with optional input) and answer with what its last steps output,
+    // in full (a run keeps only a sample of each step): for dashboard blocks and a custom app's preview. Waits up to 60 s, then answers with the run id.
+    api.post('/flows/:fileId/data', signedIn, async (req, res) => {
+      if (!ID.test(req.params.fileId)) return res.status(400).json({ error: 'bad_id' });
+      const { flow } = req.body || {};
+      if (!flow || !Array.isArray(flow.nodes) || flow.nodes.length > 300 || !Array.isArray(flow.edges)) return res.status(400).json({ error: 'bad_flow', message: 'That isn’t a workflow.' });
+      const { input, trigger } = req.body;
+      await sendItems(res, () => runForItems(req.user.id, req.params.fileId, flow, asItems(input), trigger === 'app' ? 'app' : 'dashboard'));
+    });
+    // Run one of the account's saved workflows with some input and answer with its output in full: what a
+    // custom app (the App view) does while it's being built.
+    api.post('/flows/:fileId/call', signedIn, async (req, res) => {
+      if (!ID.test(req.params.fileId)) return res.status(400).json({ error: 'bad_id' });
+      const flow = await savedFlow(req.user.id, req.params.fileId).catch(() => null);
+      if (!flow || !Array.isArray(flow.nodes) || !flow.nodes.length) return res.status(404).json({ error: 'not_found', message: 'That workflow isn’t there (or is empty).' });
+      await sendItems(res, () => runForItems(req.user.id, req.params.fileId, flow, asItems((req.body || {}).input), 'app'));
+    });
     // Run a published app: the saved workflow (so always its latest version), from its chosen trigger,
     // with the form's answers as the one item. Only the inputs the app declares are passed on.
     api.post('/flows/:fileId/app', signedIn, async (req, res) => {
@@ -340,5 +477,5 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
     });
   };
 
-  return { hooks, routes, reindex, tick, poll, close: () => clearInterval(timer) };
+  return { hooks, ui, routes, reindex, tick, poll, close: () => clearInterval(timer) };
 }

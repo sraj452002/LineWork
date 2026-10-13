@@ -25,7 +25,7 @@ test('the Tools page lists every tool, and search narrows it', async ({ page }) 
   await page.keyboard.press('t');
   await expect(page.getByRole('navigation', { name: 'Files' }).getByRole('button', { name: /^Tools/ })).toHaveAttribute('aria-current', 'page');
   for (const g of ['Diagrams', 'Databases', 'Docs & spreadsheets', 'Code']) await expect(page.getByRole('heading', { name: g })).toBeVisible();
-  await expect(page.locator('.tool-card')).toHaveCount(25);
+  await expect(page.locator('.tool-card')).toHaveCount(27);
   // Each card says where it opens.
   await expect(page.locator('.tool-card').filter({ hasText: 'Open a .sql file' }).locator('.tool-view')).toHaveText('Canvas');
   // A category chip shows just that category.
@@ -34,7 +34,7 @@ test('the Tools page lists every tool, and search narrows it', async ({ page }) 
   await expect(page.locator('.tool-card')).toHaveCount(4);
   await expect(page.getByRole('heading', { name: 'Code' })).toHaveCount(0);
   await cats.getByRole('button', { name: /^All/ }).click();
-  await expect(page.locator('.tool-card')).toHaveCount(25);
+  await expect(page.locator('.tool-card')).toHaveCount(27);
   await page.getByRole('searchbox', { name: 'Search tools' }).fill('python');
   await expect(page.locator('.tool-card')).toHaveCount(1);
   await page.getByRole('searchbox', { name: 'Search tools' }).fill('zzz');
@@ -93,7 +93,7 @@ test('a workflow saved as a template appears in Templates (not in Tools) and sta
   await page.getByRole('button', { name: 'Save template' }).click();
   await page.getByRole('button', { name: 'Files' }).click();
   await nav.getByRole('button', { name: /^Tools/ }).click();
-  await expect(page.locator('.tool-card')).toHaveCount(25);
+  await expect(page.locator('.tool-card')).toHaveCount(27);
   await nav.getByRole('button', { name: /^Templates/ }).click();
   await expect(page.locator('.tpl-card')).toHaveCount(1);
   await page.getByRole('button', { name: 'Use the template My feed bot' }).click();

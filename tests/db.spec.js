@@ -243,7 +243,7 @@ test('live PostgreSQL in the app, through the Workline server', async ({ browser
     await page.getByLabel('Edit price').press('Enter');
     await expect(grid.locator('tbody tr', { hasText: 'Mouse' })).toContainText('21.00');
     // The password isn't stored, so after a reload it's asked for again.
-    expect(await page.evaluate(() => localStorage.getItem('linework:db-connections'))).not.toContain(new URL(LIVE.postgres).password || '\u0000');
+    expect(String(await page.evaluate(() => localStorage.getItem('linework:db-connections')) ?? '')).not.toContain(new URL(LIVE.postgres).password || '\u0000');
   } finally {
     try { process.kill(-vite.pid); } catch (e) { vite.kill(); }
     srv.close(); store.close();

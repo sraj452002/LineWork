@@ -34,6 +34,7 @@ export function createApp(store, opts = {}) {
   // before the checks below that changes come from this site as JSON.
   const flows = createFlows({ store, ai: { key: aiKey, base: aiBase, model: aiModel, dailyLimit: aiDailyLimit }, mailer, allowPrivate: dbAllowPrivate, secret: opts.flowSecret || '' });
   api.use('/hook', flows.hooks);
+  api.use('/ui', flows.ui); // published custom apps: public pages, like webhooks
   api.use((req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
   // Changes must come from the app's own site, sending JSON. Cross-site forms can do neither.
   // Through the frontend's proxy a request arrives addressed to this host, from a page at APP_URL.

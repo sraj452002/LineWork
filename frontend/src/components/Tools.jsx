@@ -6,6 +6,7 @@ import { readSql } from '../lib/sql.js';
 import { rid } from '../lib/utils.js';
 import { emptyFlow, newNode } from '../lib/flows.js';
 import { importFlow } from '../lib/flowio.js';
+import { STARTERS } from '../lib/starters.js';
 import { useUI } from './ui.jsx';
 
 /* The Tools page: every tool in Workline in one place. Each one makes a new file that opens in that tool. */
@@ -128,13 +129,15 @@ export default function Tools({ q = '', onCreate, onGenerate, busy }) {
       { k: 'sheet', view: 'Sheet', name: 'Budget sheet', note: 'An example spreadsheet with totals', act: () => onCreate(sheetFile('Budget', SAMPLE())) },
       { k: 'csv', view: 'Sheet', name: 'Open an Excel or CSV file', note: 'Open a .xlsx, CSV or TSV as a spreadsheet', act: () => csvRef.current?.click() },
     ] },
-    { id: 'automation', name: 'Automation', k: 'auto', note: 'Workflows that run on the server: start them by hand, from another app (webhook) or on a schedule, and connect apps like Slack, GitHub and Notion.', list: [
+    { id: 'automation', name: 'Automation', k: 'auto', note: 'Workflows that run on the server: start them by hand, from another app (webhook) or on a schedule, and connect apps like Slack, GitHub and Notion. Give them a UI of your own with a custom app.', list: [
       { k: 'auto', view: 'Workflow', name: 'Workflow', note: 'A blank workflow, like n8n', act: () => onCreate(blank('Workflow', { view: 'flow', flow: emptyFlow() })) },
       { k: 'auto', view: 'Workflow', name: 'Webhook to Slack', note: 'When another app calls a URL, post to Slack', act: () => onCreate(flowFile('Webhook to Slack', [['trigger.webhook'], ['app.slack', { text: 'New event: {{ JSON.stringify($json.body) }}' }]])) },
       { k: 'auto', view: 'Workflow', name: 'Check a site every hour', note: 'Call a URL on a schedule, tell Discord when it fails', act: () => onCreate(flowFile('Site check', [['trigger.schedule', { every: 1, unit: 'hours' }], ['core.http', { url: 'https://example.com', failOnError: false }], ['core.if', { left: '{{ $json.status || 200 }}', op: 'gte', right: '400' }], ['app.discord', { content: 'The site answered {{ $json.status }}' }]])) },
       { k: 'auto', view: 'Workflow', name: 'Form to a sheet', note: 'A shareable form; each answer becomes a row', act: () => onCreate(flowFile('Form to sheet', [['trigger.form'], ['workline.sheet', { operation: 'append' }]])) },
       { k: 'auto', view: 'Workflow', name: 'New GitHub issues to Slack', note: 'Post each new issue in a channel', act: () => onCreate(flowFile('GitHub issues to Slack', [['trigger.github', { events: 'issues.opened' }], ['app.slack', { text: 'New issue in {{ $json.repository }}: {{ $json.payload.issue.title }} {{ $json.payload.issue.html_url }}' }]])) },
       { k: 'auto', view: 'Workflow', name: 'Feed to Telegram', note: 'Send each new blog post to a Telegram chat', act: () => onCreate(flowFile('Feed to Telegram', [['trigger.rss'], ['app.telegram', { text: '{{ $json.title }}\n{{ $json.link }}' }]])) },
+      { k: 'auto', view: 'App', name: 'Custom app', note: 'Your own page (HTML, CSS, JS) that runs workflows, with a link to share', act: () => onCreate({ ...flowFile('My app', [['trigger.manual'], ['core.code', { language: 'javascript', code: "return items.map(i => ({ question: i.question, answer: 'You asked: ' + (i.question || 'nothing') }));" }]]), view: 'app' }) },
+      ...STARTERS.map(t => ({ k: 'auto', view: 'App', name: t.name, note: t.note, act: () => onCreate(t.make()) })),
       { k: 'auto', view: 'Workflow', name: 'Import a workflow', note: 'Open a .json workflow: Workline’s or n8n’s', act: () => flowRef.current?.click() },
     ] },
     { id: 'code', name: 'Code', k: 'code', note: 'Write, run and understand code, all in the browser.', list: [

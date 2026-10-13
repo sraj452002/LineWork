@@ -6,7 +6,7 @@ import * as si from 'simple-icons';
 const SLUGS = ['discord', 'telegram', 'github', 'notion', 'gmail', 'googlesheets', 'airtable', 'trello', 'jira', 'linear', 'asana',
   'clickup', 'todoist', 'hubspot', 'stripe', 'shopify', 'mailchimp', 'googlegemini', 'supabase', 'dropbox', 'googlechat', 'whatsapp',
   'zendesk', 'gitlab', 'wordpress', 'ntfy', 'resend', 'postgresql', 'rss', 'claude', 'ycombinator', 'mattermost', 'googlecalendar',
-  'calendly', 'mailgun', 'brevo', 'pagerduty', 'deepl', 'bitly', 'googleforms'];
+  'calendly', 'mailgun', 'brevo', 'pagerduty', 'deepl', 'bitly', 'googleforms', 'redis'];
 const bySlug = new Map(Object.values(si).filter(i => i && i.slug).map(i => [i.slug, i]));
 const out = {};
 for (const s of SLUGS) {
