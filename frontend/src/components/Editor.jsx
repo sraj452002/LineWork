@@ -5,7 +5,7 @@ import { imageKeys, loadImages } from '../lib/images.js';
 import { isPackIcon, loadIconPacks } from '../lib/iconpacks.js';
 import { clone, rid, slug, trunc } from '../lib/utils.js';
 import { setSheets } from '../lib/sheet.js';
-import DocPane from './DocPane.jsx';
+import WordDoc from './WordDoc.jsx';
 import Canvas from './Canvas.jsx';
 import { ThemeButton, useUI } from './ui.jsx';
 
@@ -191,7 +191,7 @@ export default function Editor({ file, update, saveState, onBack, onRename, onDu
       </div>
 
       <div className="panes" data-view={view}>
-        <DocPane file={file} update={update} />
+        <WordDoc file={file} update={update} />
         <div className="canvaspane">
           <div className="ctabs" role="tablist" aria-label="Diagrams">
             {file.diagrams.map((x, i) => (

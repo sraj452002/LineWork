@@ -108,7 +108,7 @@ function appGuide() {
     { id: 'basics', title: 'The basics', body: <>
       <p>Workline is for technical design work. Every <b>file</b> holds two things side by side:</p>
       <ul>
-        <li>A <b>design doc</b>, written in Markdown.</li>
+        <li>A <b>design doc</b>, written like in Word: pages, styles, tables, pictures, comments.</li>
         <li>One or more <b>diagrams</b>, each on its own tab: Architecture, Flowchart, Sequence or Database schema.</li>
       </ul>
       <p>You can make diagrams three ways, and mix them freely: write a few lines of <b>diagram code</b>, <b>ask AI</b> to draw them, or <b>draw by hand</b> on the canvas.</p>
@@ -260,12 +260,17 @@ function appGuide() {
       <p className="gnote">If AI isn't set up for this site, you'll see “AI is off”. Everything else still works.</p>
     </> },
     { id: 'doc', title: 'Writing the doc', body: <>
-      <p>Switch between <b>Write</b> and <b>Read</b> at the top of the doc. It's Markdown:</p>
-      <pre className="gpre">{`# Heading      ## Smaller heading
-- bullet       1. numbered
-**bold**       *italic*       \`code\`
-| a | b |      tables
-|---|---|`}</pre>
+      <p>The doc works like Microsoft Word: white pages with margins, and a <b>ribbon</b> on top.</p>
+      <ul>
+        <li><b>Home</b>: undo, the format painter, fonts and sizes, bold / italic / underline, colour and highlight, bullets, numbering and checklists, indent (<K>Tab</K>), alignment, line spacing, and styles (Heading 1–4, Quote, Code).</li>
+        <li><b>Insert</b>: page breaks (<K>Ctrl</K> + <K>Enter</K>), tables (pick the size on the grid; a <b>Table</b> tab appears inside one), pictures (a <b>Picture</b> tab sets their size and position), links, comments, lines, symbols, the date and a table of contents.</li>
+        <li><b>Layout</b>: paper size (A4, Letter, Legal), portrait or landscape, margins, and a header, footer and page numbers on every page.</li>
+        <li><b>Review</b>: spelling, word count, <b>comments</b> (select text → New comment; reply, resolve or delete them on the right), <b>Track changes</b> (while it’s on, additions show green and deletions red until you accept or reject them, one by one or all at once) and <b>Compare</b> with an earlier version (for files in your account).</li>
+        <li><b>View</b>: Read mode, Print layout (pages) or Web layout (one long page), the <b>Navigation</b> pane (every heading; click to go there), and zoom. The status bar at the bottom shows the page, words and zoom.</li>
+        <li><b>Find and replace</b>: <K>Ctrl</K> + <K>F</K> / <K>Ctrl</K> + <K>H</K>, with match case and whole words.</li>
+        <li><b>File</b>: open a Word file (.docx), save as Word, print or save as PDF (<K>Ctrl</K> + <K>P</K>), or save as Markdown.</li>
+      </ul>
+      <p>Markdown still works when pasted, and AI writes into the doc as before. A copy of the doc’s text is kept as Markdown, so search, exports and workflows read it too.</p>
     </> },
     { id: 'export', title: 'Exporting and sharing', body: <>
       <ul>

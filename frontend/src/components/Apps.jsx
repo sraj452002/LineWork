@@ -13,13 +13,22 @@ import { useUI } from './ui.jsx';
 const ago = t => { const s = Math.round((Date.now() - t) / 1000); return s < 60 ? 'just now' : s < 3600 ? `${Math.round(s / 60)} min ago` : s < 86400 ? `${Math.round(s / 3600)} h ago` : new Date(t).toLocaleDateString(); };
 const label = k => String(k).replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').replace(/^\w/, c => c.toUpperCase());
 
-export default function Apps({ files, q = '', onEdit }) {
+export default function Apps({ files, q = '', onEdit, onUpdate }) {
+  const { ask, toast } = useUI();
+  // Removing an app unpublishes it: the workflow (and the app's settings, to publish it again) stay.
+  const remove = async f => {
+    const name = f.flow.app.name;
+    if (!await ask({ title: `Unpublish “${name}”?`, text: 'It disappears from Apps. Its workflow stays as it is; publish it again any time from the workflow.', input: false, ok: 'Unpublish' })) return false;
+    onUpdate(f.id, c => { if (c.flow && c.flow.app) c.flow.app.published = false; });
+    toast('Unpublished: it’s no longer in Apps');
+    return true;
+  };
   const [openId, setOpenId] = useState(null);
   const [server, setServer] = useState(undefined);
   useEffect(() => { serverInfo().then(i => setServer(!!(i && (i.features || []).includes('flows')))); }, []);
   const apps = publishedApps(files);
   const open = apps.find(f => f.id === openId);
-  if (open) return <AppRunner file={open} server={server} onBack={() => setOpenId(null)} onEdit={onEdit} />;
+  if (open) return <AppRunner file={open} server={server} onBack={() => setOpenId(null)} onEdit={onEdit} onRemove={onUpdate ? async () => { if (await remove(open)) setOpenId(null); } : null} />;
   const needle = q.trim().toLowerCase();
   const shown = apps.filter(f => !needle || `${f.flow.app.name} ${f.flow.app.description}`.toLowerCase().includes(needle));
   return (
@@ -38,12 +47,15 @@ export default function Apps({ files, q = '', onEdit }) {
           {shown.map(f => {
             const a = f.flow.app;
             return (
-              <button key={f.id} className={'app-card t-' + (a.tone || 'blue')} onClick={() => setOpenId(f.id)} aria-label={`Open the app ${a.name}`}>
-                <i className="app-icon" aria-hidden="true">{a.icon || '✨'}</i>
-                <b>{a.name}</b>
-                {a.description && <small>{a.description}</small>}
-                <span className="app-go">Open →</span>
-              </button>
+              <div key={f.id} className="app-wrap">
+                <button className={'app-card t-' + (a.tone || 'blue')} onClick={() => setOpenId(f.id)} aria-label={`Open the app ${a.name}`}>
+                  <i className="app-icon" aria-hidden="true">{a.icon || '✨'}</i>
+                  <b>{a.name}</b>
+                  {a.description && <small>{a.description}</small>}
+                  <span className="app-go">Open →</span>
+                </button>
+                {onUpdate && <button className="btn app-x" aria-label={`Unpublish the app ${a.name}`} title="Take it out of Apps (the workflow stays)" onClick={() => remove(f)}>Unpublish</button>}
+              </div>
             );
           })}
         </div>
@@ -52,7 +64,7 @@ export default function Apps({ files, q = '', onEdit }) {
   );
 }
 
-function AppRunner({ file, server, onBack, onEdit }) {
+function AppRunner({ file, server, onBack, onEdit, onRemove }) {
   const { toast } = useUI();
   const a = file.flow.app;
   const inputs = a.inputs || [];
@@ -85,6 +97,7 @@ function AppRunner({ file, server, onBack, onEdit }) {
         <button className="btn" onClick={onBack}>← Apps</button>
         <span className="grow" />
         {onEdit && <button className="link" onClick={() => onEdit(file.id)}>Edit the workflow</button>}
+        {onRemove && <button className="btn danger-text" onClick={onRemove}>Unpublish</button>}
       </div>
       <header className={'app-hero t-' + (a.tone || 'blue')}>
         <i className="app-icon" aria-hidden="true">{a.icon || '✨'}</i>
