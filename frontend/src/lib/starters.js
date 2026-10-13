@@ -109,7 +109,8 @@ const PLAYER = `<style>
   }
   async function load() {
     // The workflow finds the videos and hands out their playback links.
-    state.videos = await workline.run('Video library', { search: state.search, category: state.category });
+    try { state.videos = await workline.run('Video library', { search: state.search, category: state.category }); }
+    catch (e) { $('list').innerHTML = '<p class="empty"></p>'; $('list').firstChild.textContent = e.message; return; }
     if (state.videos.length && (!state.current || !state.videos.some(v => v.id === state.current.id))) play(state.videos[0]); else render();
   }
   $('chips').onclick = e => { const c = e.target.dataset.c; if (c) { state.category = c; load(); } };

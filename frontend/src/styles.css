@@ -2541,3 +2541,16 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .assist-done{font-size:12.5px;font-weight:600;color:var(--ok, #1a7f37)}
 .ai-msg.err p{color:var(--err)}
 @media (max-width:760px){.aichat.assist{position:absolute;right:0;top:0;bottom:0;width:100%;max-width:none;z-index:6}}
+/* Templates → Ready-made: a chip per tool */
+.tpl-tools{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 14px}
+.tpl-tool{padding:5px 12px;border:1px solid var(--hair);border-radius:999px;background:var(--surface);color:var(--ink);font:inherit;font-size:13px;cursor:pointer}
+.tpl-tool span{color:var(--ink2);font-size:11.5px;margin-left:2px}
+.tpl-tool:hover{border-color:var(--c-blue)}
+.tpl-tool.on{background:var(--ink);border-color:var(--ink);color:var(--surface)}
+.tpl-tool.on span{color:inherit;opacity:.7}
+.tpl-ic{--tone:var(--c-blue)}
+.tpl-ic svg{width:16px;height:16px}
+.tpl-docs{--tone:var(--c-purple)}
+.tpl-sheets{--tone:var(--c-green)}
+.tpl-databases{--tone:var(--c-orange)}
+.tpl-code{--tone:var(--ink2)}

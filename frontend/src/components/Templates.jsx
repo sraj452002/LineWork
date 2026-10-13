@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { dg } from '../lib/engines.js';
 import { rid } from '../lib/utils.js';
 import { nodeDef } from '../lib/flows.js';
@@ -6,11 +6,19 @@ import { fromTemplate } from '../lib/flowio.js';
 import { getData, setData } from '../lib/userdata.js';
 import { LOGOS } from '../lib/flowlogos.js';
 import { STARTERS } from '../lib/starters.js';
+import { READY, READY_TOOLS } from '../lib/readymade.js';
+import { IC, Ico } from './Toolbar.jsx';
 import { useUI } from './ui.jsx';
 
-/* Home → Templates: the workflows saved as templates (the Template button in the Workflow view), kept
-   apart from Tools so a long list doesn't crowd it. Each one starts a new workflow; they can be renamed
-   and removed. Searched with the home page's search box. */
+/* Home → Templates: ready-made templates for every tool (diagrams, docs, sheets, databases, code,
+   workflows, apps and pages), then the workflows saved as templates (the Template button in the Workflow
+   view), which can be renamed and removed. Searched with the home page's search box. */
+
+// Every ready-made template, with the video starters among the apps and pages.
+const ALL = [...READY, ...STARTERS.map(t => ({ ...t, tool: t.k === 'videopage' ? 'Pages' : 'Apps', view: t.k === 'videopage' ? 'Workflow' : 'App' }))]
+  .sort((a, b) => READY_TOOLS.indexOf(a.tool) - READY_TOOLS.indexOf(b.tool));
+const TOOL_ICON = { Diagrams: IC.diagram, Docs: IC.doc, Sheets: IC.sheet, Databases: IC.dErd, Code: IC.braces };
+const KIND = { Diagrams: 'Diagram', Docs: 'Doc', Sheets: 'Sheet', Databases: 'Database schema', Code: 'Code', Workflows: 'Workflow', Apps: 'Workflow + app', Pages: 'Page from nodes' };
 
 const fmt = t => new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 
@@ -35,6 +43,10 @@ export default function Templates({ q = '', onCreate }) {
   const put = next => { setList(next); setData('flow-templates', next); };
   const needle = q.trim().toLowerCase();
   const shown = list.filter(t => !needle || t.name.toLowerCase().includes(needle));
+  const [tool, setTool] = useState('All');
+  const flows = useMemo(() => Object.fromEntries(ALL.filter(t => !TOOL_ICON[t.tool]).map(t => [t.k, t.make().flow])), []);
+  const matching = ALL.filter(t => !needle || `${t.name} ${t.note} ${t.tool}`.toLowerCase().includes(needle));
+  const ready = matching.filter(t => tool === 'All' || t.tool === tool);
 
   const use = t => {
     const now = Date.now();
@@ -55,24 +67,29 @@ export default function Templates({ q = '', onCreate }) {
     <div className="tpl">
       <header className="tpl-head">
         <h2>Templates</h2>
-        <p>Workflows you saved as templates. Open one to start a new workflow from it; credentials and secrets aren’t kept, so pick them again.</p>
+        <p>Start a diagram, doc, sheet, database schema, code project, workflow, app or page from a ready-made template, or from a workflow you saved as one (credentials and secrets aren’t kept, so pick them again).</p>
       </header>
-      {/* Ready-made: a workflow with a custom app built on it, to start from. */}
-      {STARTERS.filter(t => !needle || `${t.name} ${t.note}`.toLowerCase().includes(needle)).length > 0 && (
+      {/* Ready-made: a starting point for each tool. */}
+      {matching.length > 0 && (
         <section className="tpl-ready" aria-label="Ready-made">
           <h3>Ready-made</h3>
-          <div className="tpl-grid">
-            {STARTERS.filter(t => !needle || `${t.name} ${t.note}`.toLowerCase().includes(needle)).map(t => {
-              const f = t.make();
-              return (
-                <button key={t.k} className="tpl-starter" onClick={() => onCreate(t.make())} aria-label={`Use the template ${t.name}`}>
-                  <Marks flow={f.flow} />
-                  <b>{t.name}</b>
-                  <small>{t.note}</small>
-                  <small className="tpl-kind">Workflow + app</small>
-                </button>
-              );
+          <div className="tpl-tools" role="group" aria-label="Show templates for">
+            {['All', ...READY_TOOLS].map(k => {
+              const n = k === 'All' ? matching.length : matching.filter(t => t.tool === k).length;
+              return n > 0 && <button key={k} className={'tpl-tool' + (tool === k ? ' on' : '')} aria-pressed={tool === k} onClick={() => setTool(k)}>{k} <span>{n}</span></button>;
             })}
+          </div>
+          <div className="tpl-grid">
+            {(ready.length ? ready : matching).map(t => (
+              <button key={t.k} className="tpl-starter" onClick={() => onCreate(t.make())} aria-label={`Use the template ${t.name}`}>
+                {TOOL_ICON[t.tool]
+                  ? <span className="tpl-marks" aria-hidden="true"><i className={'tpl-ic tpl-' + t.tool.toLowerCase()}><Ico d={TOOL_ICON[t.tool]} /></i></span>
+                  : <Marks flow={flows[t.k]} />}
+                <b>{t.name}</b>
+                <small>{t.note}</small>
+                <small className="tpl-kind">{KIND[t.tool]}</small>
+              </button>
+            ))}
           </div>
           <h3>Yours</h3>
         </section>

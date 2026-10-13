@@ -193,6 +193,23 @@ The Code view's **Run** button, **Terminal** and **Python** prompt run code in t
 - `curl` and `wget` run in the browser, so they can only fetch sites that allow cross-origin requests.
 - Native binaries, system packages (`apt-get`) and other languages need a real machine, which this in-browser setup doesn't provide.
 
+## Templates for every tool
+
+**Home → Templates → Ready-made** has a starting point for each tool, with a chip per tool to narrow the list (the home search box narrows it too). Each one makes a new file in its view (`frontend/src/lib/readymade.js`, plus the video starters in `starters.js`):
+
+| Tool | Templates |
+|---|---|
+| Diagrams | Microservices architecture, Sign-up flow, Checkout sequence, CI/CD pipeline |
+| Docs | Product requirements (PRD), Meeting notes, Incident postmortem, Architecture decision record |
+| Sheets | Project tracker, Invoice, Sales report with chart, Weekly habit tracker (with working formulas) |
+| Databases | Online shop, Blog, SaaS accounts and billing (schemas, drawn) |
+| Code | Node.js REST API, Python data analysis, Landing page, TypeScript utility with tests |
+| Workflows | Daily AI news digest, Lead capture with AI, Support ticket triage, Weekly sales report, Failure alerts |
+| Apps | Feedback analyzer, KPI dashboard, Video streaming app |
+| Pages | Sales dashboard page, Feedback form page, Video library page |
+
+Templates that need an account of yours (Slack, email, a database connection, a sheet to add rows to) are wired up and named; pick the credential or file on the node. Below them are the workflows you saved with **Template**.
+
 ## Tools
 
 **Tools** in the home page's sidebar lists every tool, grouped (Diagrams, Docs & data, Code), and each one starts a new file open in that tool: the Code view can open straight into the Terminal, the Python prompt or the Visualize pane. See `frontend/src/components/Tools.jsx`.
