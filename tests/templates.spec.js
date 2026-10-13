@@ -27,7 +27,7 @@ test('Ready-made has templates for every tool, filtered by tool and by search', 
   const chips = ready.getByRole('group', { name: 'Show templates for' });
   for (const t of ['All', 'Diagrams', 'Docs', 'Sheets', 'Databases', 'Code', 'Workflows', 'Apps', 'Pages']) await expect(chips.getByRole('button', { name: new RegExp(`^${t} \\d+$`) })).toBeVisible();
   const all = await ready.locator('.tpl-starter').count();
-  expect(all).toBeGreaterThanOrEqual(30);
+  expect(all).toBeGreaterThanOrEqual(25);
   await chips.getByRole('button', { name: /^Sheets/ }).click();
   await expect(chips.getByRole('button', { name: /^Sheets/ })).toHaveAttribute('aria-pressed', 'true');
   await expect(ready.locator('.tpl-starter')).toHaveCount(4);

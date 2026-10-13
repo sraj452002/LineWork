@@ -88,10 +88,10 @@ test('a custom app runs its workflow in the preview and at its published link', 
     await lang.selectOption('sql');
     await expect(src).toHaveValue(/FROM items/);
 
-    // Templates → Ready-made → Video streaming app: the workflow and its player app, working.
+    // Tools → Video streaming app: the workflow and its player app, working.
     await page.getByRole('button', { name: 'Files' }).click();
-    await page.getByRole('navigation', { name: 'Files' }).getByRole('button', { name: /^Templates/ }).click();
-    await page.getByRole('button', { name: 'Use the template Video streaming app' }).click();
+    await page.getByRole('navigation', { name: 'Files' }).getByRole('button', { name: /^Tools/ }).click();
+    await page.locator('.tool-card', { hasText: 'Video streaming app' }).click();
     await expect(page.getByRole('button', { name: 'View: App' })).toBeVisible();
     await expect(page.getByRole('button', { name: /^Workflows: Video library/ })).toBeVisible();
     const player = page.frameLocator('iframe[title="App preview"]');

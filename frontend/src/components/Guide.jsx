@@ -799,18 +799,19 @@ function appsGuide() {
         <tr><th>Databases</th><td>Online shop, Blog, SaaS accounts and billing: schemas, drawn. Connect a live database in the Database view.</td></tr>
         <tr><th>Code</th><td>Node.js REST API, Python data analysis, Landing page, TypeScript utility with tests</td></tr>
         <tr><th>Workflows</th><td>Daily AI news digest, Lead capture with AI, Support ticket triage, Weekly sales report, Failure alerts</td></tr>
-        <tr><th>Apps</th><td>Ecommerce store, Food ordering app, StreamBox (video streaming), Chat app, Sales command center, Stay finder, Fitness journal, AI help center, Order tracker: all drag and drop, ready to restyle. Also Feedback analyzer, KPI dashboard, Video streaming app (code)</td></tr>
+        <tr><th>Apps</th><td>OTT streaming app (Hotstar-style): a whole streaming service on one workflow. Simpler examples are in <a href="#" data-guide="easy">Easy start</a>; more starters (form, dashboard, chat, video library) are in <b>Tools</b>.</td></tr>
         <tr><th>Pages</th><td>Sales dashboard page, Feedback form page, Video library page: made only of nodes</td></tr>
       </tbody></table>
       <p>Where a template sends to Slack or email, reads a database or adds rows to a sheet, the node is there and named: pick your credential, connection or file on it, then turn the workflow <b>Active</b>.</p>
     </> },
-    { id: 'templates', title: 'Ready-made: Video streaming app', body: <>
-      <p><b>Templates → Ready-made → Video streaming app</b> (also in Tools) makes a whole app to start from: a <i>Video library</i> workflow and a player around it, with search, categories, a playlist, MP4 and HLS (<code>.m3u8</code>) streams.</p>
+    { id: 'templates', title: 'Ready-made: OTT streaming app', body: <>
+      <p><b>Templates → Apps → OTT streaming app</b> makes <i>StarPlay</i>, a streaming service in the style of the big Indian OTT apps, to start from: a side menu, a spotlight slideshow, Top 10, continue watching, live sports with a countdown, title pages with seasons and episodes, a player with “up next”, audio and quality, search, profiles, a watchlist and a plans page.</p>
       <ol>
-        <li><b>Find videos</b> (JavaScript) holds the list of videos and filters it by the search and category the app sends. Replace the list with your own, or with a <b>Google Sheet</b>, <b>Airtable</b>, a database or your video host’s API (an HTTP node).</li>
-        <li><b>Playback links</b> (Python) hands out the links. With your own CDN, put its signing secret in <code>SECRET</code> and links stop working after 10 minutes; the player gets fresh ones by itself.</li>
-        <li>Put the videos on a video host or CDN (Cloudflare Stream, Mux, Bunny, S3 with CloudFront, …). It does the streaming; the workflow only decides <i>what</i> plays and <i>who</i> gets a link. A workflow doesn’t send the video itself.</li>
+        <li><b>Fetch video files</b> (HTTP request) downloads the list of video files. Point it at your own list, or your video host’s API.</li>
+        <li><b>Build the catalogue</b> (JavaScript) turns them into titles, rows, live matches and plans. Replace it with a <b>Google Sheet</b>, <b>Airtable</b> or a database: the app needs the same fields.</li>
+        <li>Put the videos on a video host or CDN (Cloudflare Stream, Mux, Bunny, S3 with CloudFront, …): MP4 or HLS (<code>.m3u8</code>). It does the streaming; the workflow decides <i>what</i> plays. A workflow doesn’t send the video itself.</li>
       </ol>
+      <p>No code: every page is made in the <b>Visual</b> builder, so you can drag, restyle and rebind anything. Tools → Automation also has a smaller <b>Video streaming app</b> to start from.</p>
     </> },
     { id: 'code', title: 'Code in many languages', body: <>
       <p>The workflow’s <b>Code</b> node has a <b>Language</b>. Picking one brings a small example to change.</p>

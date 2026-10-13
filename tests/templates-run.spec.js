@@ -14,7 +14,7 @@ test.beforeAll(async () => {
 });
 
 test('every template makes a well-formed file', () => {
-  expect(READY.length).toBeGreaterThanOrEqual(28);
+  expect(READY.length).toBeGreaterThanOrEqual(20);
   expect(new Set(READY.map(t => t.k)).size).toBe(READY.length);
   for (const t of READY) {
     const f = t.make();
@@ -103,36 +103,38 @@ test.describe('pages made of nodes', () => {
     return { status: r.status, json: await r.json().catch(() => null) };
   };
 
-  test('the chat app keeps each room’s messages, from whoever is signed in', async () => {
-    const token = 'chatroom' + 'x'.repeat(24);
-    await publish('a-chat', token, 'signin');
-    const join = async (email, name) => (await (await fetch(`${base}/ui/${token}/signup`, { method: 'POST', body: JSON.stringify({ email, password: 'a long password', name }) })).json()).session;
-    const ann = await join('ann@example.com', 'Ann'), bo = await join('bo@example.com', 'Bo');
-    expect((await run(token, { action: 'list', room: 'general' })).status).toBe(401); // signed-in people only
-    expect((await run(token, { action: 'send', room: 'general', text: 'Hello all' }, ann)).json.items.map(m => m.text)).toEqual(['Hello all']);
-    await run(token, { action: 'send', room: 'general', text: 'Hi Ann!' }, bo);
-    await run(token, { action: 'send', room: 'random', text: 'Elsewhere' }, bo);
-    const general = (await run(token, { action: 'list', room: 'general' }, ann)).json.items;
-    expect(general.map(m => [m.from, m.text])).toEqual([['Ann', 'Hello all'], ['Bo', 'Hi Ann!']]);
-    expect(general[0].email).toBe('ann@example.com');
-    expect((await run(token, { action: 'list', room: 'random' }, ann)).json.items.map(m => m.text)).toEqual(['Elsewhere']);
-    // Listing doesn't add anything.
-    expect((await run(token, { action: 'list', room: 'general' }, bo)).json.items).toHaveLength(2);
-  });
-
-  test('the shop and food apps list their catalogue and take orders', async () => {
-    await publish('a-shop', 'shopping' + 'x'.repeat(24));
-    const products = (await run('shopping' + 'x'.repeat(24), {})).json.items;
-    expect(products).toHaveLength(12);
-    const order = (await run('shopping' + 'x'.repeat(24), { action: 'order', cart: [products[0], products[2]], customer: { name: 'Sam' } })).json.items[0];
-    expect(order).toMatchObject({ total: products[0].price + products[2].price, count: 2, name: 'Sam' });
-    expect(order.orderId).toMatch(/^SN-\d{6}$/);
-    await publish('a-food', 'foodfood' + 'x'.repeat(24));
-    const places = (await run('foodfood' + 'x'.repeat(24), {})).json.items;
-    expect(places[0].menu.length).toBeGreaterThan(2);
-    const meal = (await run('foodfood' + 'x'.repeat(24), { action: 'order', cart: [places[0].menu[0]] })).json.items[0];
-    expect(meal.total).toBeCloseTo(places[0].menu[0].price + 2.99, 2);
-    await publish('a-stream', 'streamin' + 'x'.repeat(24));
-    expect((await run('streamin' + 'x'.repeat(24), {})).json.items[0].src).toMatch(/^https:\/\/storage\.googleapis\.com\/.+\.mp4$/);
+  test('the OTT app’s workflow fetches the video files and builds the whole catalogue', async () => {
+    const { createServer } = await import('node:http');
+    const { readFileSync } = await import('node:fs');
+    // The list of video files, as GitHub hands it over (JSON as plain text).
+    const list = createServer((req, res) => { res.writeHead(200, { 'content-type': 'text/plain' }); res.end(readFileSync('samples/videos.json')); }).listen(0);
+    const ott = createApp(await openStore(memoryBackend()), { requireVerified: false, dbAllowPrivate: true }), osrv = ott.listen(0);
+    try {
+      const obase = `http://localhost:${osrv.address().port}/api`;
+      const f = READY.find(t => t.k === 'a-ott').make();
+      expect(f.flow.nodes.map(n => n.type)).toEqual(['trigger.manual', 'core.http', 'core.code']);
+      expect(f.flow.nodes[1].params.url).toMatch(/samples\/videos\.json$/);
+      f.flow.nodes[1].params.url = `http://localhost:${list.address().port}/samples/videos.json`;
+      f.ui = { ...f.ui, published: true, token: 'starplay' + 'x'.repeat(24) };
+      const up = await fetch(`${obase}/auth/signup`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'ott@example.com', password: 'a long password' }) });
+      const ck = up.headers.get('set-cookie').split(';')[0];
+      expect((await fetch(`${obase}/files/${f.id}`, { method: 'PUT', headers: { 'content-type': 'application/json', cookie: ck }, body: JSON.stringify(f) })).status).toBe(200);
+      const r = await fetch(`${obase}/ui/${'starplay' + 'x'.repeat(24)}/run`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: JSON.stringify({ input: {} }) });
+      const cat = (await r.json()).items;
+      const files = JSON.parse(readFileSync('samples/videos.json', 'utf8')).map(v => v.src);
+      const titles = cat.filter(t => !['Live', 'Plan'].includes(t.kind)), live = cat.filter(t => t.kind === 'Live'), plans = cat.filter(t => t.kind === 'Plan');
+      expect(titles.length).toBeGreaterThanOrEqual(25);
+      for (const t of [...titles, ...live]) expect(files, t.id).toContain(t.src);
+      expect(titles.filter(t => t.rows.includes('spotlight')).length).toBeGreaterThanOrEqual(4);
+      expect(titles.filter(t => t.rank).map(t => t.rank).sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+      const show = titles.find(t => t.id === 'code-red');
+      expect(show.episodes).toHaveLength(12);
+      for (const e of show.episodes) expect(files).toContain(e.src);
+      expect(live.filter(l => l.status === 'LIVE')).toHaveLength(3);
+      expect(live.find(l => l.status === 'UPCOMING').startsAt).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d$/);
+      expect(plans.map(p => p.plan)).toEqual(['Mobile', 'Super', 'Premium']);
+      // The app reads it as data.cat, from this workflow.
+      expect(f.ui.spec.data).toEqual([expect.objectContaining({ name: 'cat', workflow: 'StarPlay', auto: true })]);
+    } finally { osrv.close(); ott.flows.close(); list.close(); }
   });
 });
