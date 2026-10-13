@@ -66,6 +66,9 @@ export default function FlowView({ file, update, visible, saveState = 'Saved', o
   const [help, setHelp] = useState(null);       // a node type explained in a popup
   const [publish, setPublish] = useState(false);
   const [webPub, setWebPub] = useState(false);
+  // Nodes drawn as raised 3D tiles: a look to try, kept for this person.
+  const [look3d, setLook3d] = useState(() => !!getData('flow-3d', false));
+  const toggle3d = () => { setData('flow-3d', !look3d); setLook3d(!look3d); };
   // A workflow that starts with a Page trigger is a web app: Publish puts its page on the web.
   const pageNode = (flow.nodes || []).find(n => n.type === 'trigger.page');
   // The page a Page trigger draws, made from the workflow as it is now (no need to save or turn it Active).
@@ -325,10 +328,13 @@ ${catalog}`;
   };
 
   return (
-    <div className="fv" hidden={!visible}>
+    <div className={'fv' + (look3d ? ' fv-3d' : '')} hidden={!visible}>
       <div className="fv-bar">
         <button className="fv-tool" aria-pressed={libOpen} title={libOpen ? 'Hide the nodes' : 'Show the nodes'} onClick={() => setLibOpen(!libOpen)}>
           <Ico d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM16.5 13v7M13 16.5h7" size={15} />Nodes
+        </button>
+        <button className="fv-tool" aria-pressed={look3d} onClick={toggle3d} title="Draw the nodes as raised 3D tiles (a look to try)">
+          <Ico d="M12 3l8 4.5v9L12 21l-8-4.5v-9zM12 12l8-4.5M12 12v9M12 12L4 7.5" size={15} />3D
         </button>
         <span className="fv-sep" />
         <label className={'fv-active' + (flow.active ? ' on' : '')} title="While active and saved, its webhooks and schedules start it">
