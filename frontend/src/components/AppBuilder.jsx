@@ -173,7 +173,7 @@ ${ui ? ui.html : ''}`,
           <button className={!visual ? 'on' : ''} aria-pressed={!visual} onClick={toCode}>Code</button>
         </div>
         {visual
-          ? <button className={'btn' + (previewing ? ' dark' : '')} aria-pressed={previewing} onClick={() => { setPreviewing(v => !v); setReload(n => n + 1); }}>{previewing ? '✎ Edit' : '▶ Preview'}</button>
+          ? <button className={'btn' + (previewing ? ' dark' : '')} aria-pressed={previewing} onClick={() => { setShown(ui.html); setPreviewing(v => !v); setReload(n => n + 1); }}>{previewing ? '✎ Edit' : '▶ Preview'}</button>
           : <button className="btn" aria-haspopup="menu" onClick={e => startFrom(e.currentTarget)}>Start from ▾</button>}
         <button className="btn" onClick={() => setReload(n => n + 1)} title="Load the preview again">↻ Reload</button>
         {onGuide && <button className="btn" onClick={() => onGuide('apps')} title="How custom apps work: workline.run, helpers, publishing">? Guide</button>}
