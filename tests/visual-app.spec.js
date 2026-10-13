@@ -38,7 +38,8 @@ return [
     ], edges: [{ id: 'e', from: 't', fromPort: 'main', to: 'c', toPort: 'main' }] } } });
     expect(put.ok()).toBe(true);
     await page.reload();
-    await page.getByRole('row', { name: /^Orders/ }).getByRole('cell', { name: 'Orders', exact: true }).click();
+    await page.getByRole('button', { name: 'Actions for Orders' }).click();
+    await page.getByRole('menuitem', { name: 'Open' }).click();
 
     // A new app starts in Visual, with a table filled from this file's workflow.
     await expect(page.getByRole('button', { name: 'Visual' })).toHaveAttribute('aria-pressed', 'true');
