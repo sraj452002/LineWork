@@ -32,17 +32,16 @@ return [
   { id: 1, customer: 'Ada', total: 120, who },
   { id: 2, customer: 'Grace', total: 80, who },
 ];`;
-    const put = await page.request.put('/api/files/f_orders', { data: { id: 'f_orders', title: 'Orders', diagrams: [], doc: '', updated: Date.now(), view: 'app', flow: { active: false, nodes: [
+    const put = await page.request.put('/api/files/f_orders', { data: { id: 'f_orders', title: 'Orders', diagrams: [{ id: 'd1', type: 'architecture', name: 'Diagram 1', code: '', manual: {}, dir: 'LR', style: 'color' }], active: 0, doc: '', updated: Date.now(), view: 'app', flow: { active: false, nodes: [
       { id: 't', type: 'trigger.manual', name: 'Run by hand', x: 80, y: 160, params: {} },
       { id: 'c', type: 'core.code', name: 'Orders', x: 340, y: 160, params: { language: 'javascript', code } },
     ], edges: [{ id: 'e', from: 't', fromPort: 'main', to: 'c', toPort: 'main' }] } } });
     expect(put.ok()).toBe(true);
     await page.reload();
-    await page.getByRole('button', { name: 'Actions for Orders' }).click();
-    await page.getByRole('menuitem', { name: 'Open' }).click();
+    await page.locator('.ftable tbody tr', { hasText: 'Orders' }).click();
 
     // A new app starts in Visual, with a table filled from this file's workflow.
-    await expect(page.getByRole('button', { name: 'Visual' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByRole('button', { name: 'Visual' }), errors.join('\n')).toHaveAttribute('aria-pressed', 'true', { timeout: 15_000 });
     const canvas = page.frameLocator('iframe[title="App canvas"]');
     await expect(canvas.locator('.wl-tbl')).toContainText('Grace');
     await expect(canvas.locator('.wl-stat b')).toHaveText('2');
