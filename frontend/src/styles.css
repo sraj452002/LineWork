@@ -2529,3 +2529,28 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .fv-pagebox{width:min(1100px,94vw);height:min(820px,90vh);display:flex;flex-direction:column;gap:8px;padding:12px}
 .fv-pagehead{display:flex;align-items:center;gap:10px}.fv-pagehead small{flex:1}
 .fv-pagebox iframe{flex:1;width:100%;border:1px solid var(--line);border-radius:10px;background:#fff}
+/* The AI panel beside a section: in the flow, so the section narrows rather than being covered. */
+.aichat.assist{position:relative;flex:none;width:360px;max-width:42vw;z-index:2}
+.sheetpane>:first-child,.dbpane>:first-child,.flowpane>:first-child,.apppane>:first-child,.codepane>:first-child{flex:1;min-width:0}
+.assist-intro{margin:0 0 12px;color:var(--ink2);font-size:13.5px;line-height:1.5}
+.assist-chips{display:grid;gap:8px}
+.assist-chips .ai-card{flex-direction:row;justify-content:flex-start;text-align:left;min-height:0;padding:10px 12px;gap:10px}
+.assist-msg{min-width:0;display:grid;gap:8px}
+.assist-msg p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
+.assist-apply{justify-self:start;font-size:12.5px;padding:6px 12px}
+.assist-done{font-size:12.5px;font-weight:600;color:var(--ok, #1a7f37)}
+.ai-msg.err p{color:var(--err)}
+@media (max-width:760px){.aichat.assist{position:absolute;right:0;top:0;bottom:0;width:100%;max-width:none;z-index:6}}
+/* Templates → Ready-made: a chip per tool */
+.tpl-tools{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 14px}
+.tpl-tool{padding:5px 12px;border:1px solid var(--hair);border-radius:999px;background:var(--surface);color:var(--ink);font:inherit;font-size:13px;cursor:pointer}
+.tpl-tool span{color:var(--ink2);font-size:11.5px;margin-left:2px}
+.tpl-tool:hover{border-color:var(--c-blue)}
+.tpl-tool.on{background:var(--ink);border-color:var(--ink);color:var(--surface)}
+.tpl-tool.on span{color:inherit;opacity:.7}
+.tpl-ic{--tone:var(--c-blue)}
+.tpl-ic svg{width:16px;height:16px}
+.tpl-docs{--tone:var(--c-purple)}
+.tpl-sheets{--tone:var(--c-green)}
+.tpl-databases{--tone:var(--c-orange)}
+.tpl-code{--tone:var(--ink2)}

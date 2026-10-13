@@ -52,7 +52,7 @@ function buildTree(files, folders) {
   return flat(root);
 }
 
-export default function CodeWorkspace({ file, update, visible }) {
+export default function CodeWorkspace({ file, update, visible, assist }) {
   const { ask, popup, toast, theme } = useUI();
   const code = file.code || EMPTY;
   const files = code.files || [], folders = code.folders || [];
@@ -473,6 +473,51 @@ export default function CodeWorkspace({ file, update, visible }) {
       '-',
       ...ids.filter(id => names.has(id)).map(id => ({ label: names.get(id), on: activeFile.lang === id, act: () => mut(c => { c.files = c.files.map(f => (f.id === active ? { ...f, lang: id } : f)); }) })),
     ]);
+  };
+
+  // The AI panel (Editor): it sees the open file, the selection and the project's files, and edits through
+  // the editor (so Ctrl Z undoes it) or adds a file.
+  if (assist) assist.current = {
+    section: 'Code', placeholder: 'Ask about the code, or say what to write or change.',
+    intro: 'I can see the open file, what you’ve selected, and the project’s files. Ask me to explain, fix, refactor, comment or test code, or to write a new file.',
+    chips: [
+      { label: 'Explain this file', prompt: 'Explain what this file does, briefly.' },
+      { label: 'Find bugs and fix them', prompt: 'Find bugs in this file and fix them.' },
+      { label: 'Refactor the selection', prompt: 'Refactor the selected code to be clearer, keeping what it does.' },
+      { label: 'Write tests for this file', prompt: 'Write tests for this file in a new test file.' },
+      { label: 'Write a new file that…', prompt: 'Write a new file that ', fill: true },
+    ],
+    context: () => {
+      const ed = edRef.current, model = ed && ed.getModel(), selection = ed && ed.getSelection();
+      const picked = model && selection && !selection.isEmpty() ? model.getValueInRange(selection) : '';
+      const text = model ? model.getValue() : activeFile ? activeFile.text || '' : '';
+      return `The Code view: a VS Code-style editor. Files in the project: ${files.map(f => f.path).slice(0, 200).join(', ') || '(none)'}.
+${activeFile ? `Open file: ${activeFile.path} (${langOf(activeFile)})${selection ? `, cursor at line ${selection.positionLineNumber}` : ''}.
+${picked ? `Selected (lines ${selection.startLineNumber}–${selection.endLineNumber}):\n${picked.slice(0, 20000)}\n\n` : ''}Its content:
+${text.slice(0, 40000)}` : 'No file is open.'}`;
+    },
+    rules: `One of:
+{"type": "replace", "code": "the whole new content of the open file"}
+{"type": "insert", "code": "code to put at the cursor, replacing the selection if there is one"}
+{"type": "file", "path": "folder/name.ext", "code": "the content of a new file"}`,
+    applyLabel: a => (a.type === 'file' ? `Create ${a.path || 'the file'}` : a.type === 'insert' ? (edRef.current && !edRef.current.getSelection()?.isEmpty() ? 'Replace the selection' : 'Insert at the cursor') : `Replace ${activeFile ? activeFile.path.split('/').pop() : 'the file'}`),
+    apply: a => {
+      const code = a && typeof a.code === 'string' ? a.code : null;
+      if (code == null) throw new Error('The answer had no code.');
+      if (a.type === 'file') {
+        const path = String(a.path || 'new-file.txt').replace(/^\/+/, '').slice(0, 200);
+        addFiles([{ path, text: code }]);
+        return `Created ${path}`;
+      }
+      const ed = edRef.current, model = ed && ed.getModel();
+      if (!model) throw new Error('Open a file first.');
+      const range = a.type === 'insert' ? ed.getSelection() : model.getFullModelRange();
+      ed.pushUndoStop();
+      ed.executeEdits('ai', [{ range, text: code, forceMoveMarkers: true }]);
+      ed.pushUndoStop();
+      ed.focus();
+      return a.type === 'insert' ? 'Inserted (Ctrl Z undoes it)' : 'File updated (Ctrl Z undoes it)';
+    },
   };
 
   return (

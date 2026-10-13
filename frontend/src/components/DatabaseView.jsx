@@ -36,7 +36,7 @@ const PLACEHOLDER = {
 // Statements that change a lot at once get a second look before they run.
 const RISKY = /\b(drop|truncate|alter)\b|\bdelete\s+from\b(?![\s\S]*\bwhere\b)|\bupdate\b(?![\s\S]*\bwhere\b)[\s\S]*\bset\b|\.(deleteMany|drop)\(/i;
 
-export default function DatabaseView({ file, update, visible, onDiagram }) {
+export default function DatabaseView({ file, update, visible, onDiagram, assist }) {
   const { popup, ask, toast } = useUI();
   const [conns, setConns] = useState(loadConnections);
   const [editing, setEditing] = useState(null);     // a connection being added or changed
@@ -44,6 +44,7 @@ export default function DatabaseView({ file, update, visible, onDiagram }) {
   const sel = file.db || {};
   const conn = conns.find(c => c.id === sel.conn) || null;
   const cs = (conn && state[conn.id]) || {};
+  const [aiSql, setAiSql] = useState(null); // SQL the AI panel put in the Query tab: {sql, n}
   const setSel = patch => update(c => { c.db = { ...(c.db || {}), ...patch }; });
   const persist = list => { setConns(list); saveConnections(list); };
 
@@ -201,10 +202,42 @@ export default function DatabaseView({ file, update, visible, onDiagram }) {
         {tab === 'data' && (current
           ? <DataPane key={conn.id + current.schema + current.name} conn={conn} table={current} ask={ask} toast={toast} onChanged={() => connect(conn, true)} />
           : <div className="dbv-start"><p>Pick a table on the left to see its rows.</p></div>)}
-        {tab === 'query' && <QueryPane key={conn.id} conn={conn} ask={ask} toast={toast} update={update} onChanged={() => connect(conn, true)} />}
+        {tab === 'query' && <QueryPane key={conn.id} conn={conn} ask={ask} toast={toast} update={update} onChanged={() => connect(conn, true)} incoming={aiSql} />}
       </>
     );
   }
+  // The AI panel (Editor): it sees the connection and its schema, writes queries and puts them in the Query tab.
+  if (assist) assist.current = {
+    section: 'Database', placeholder: conn ? 'Ask about the data, or describe a query.' : 'Ask about connecting a database.',
+    intro: conn && cs.status === 'ok'
+      ? 'I can see this database’s tables, columns and links. Ask me to write a query, explain the schema, or find where something is stored. Queries go into the Query tab; you run them.'
+      : 'Connect a database (left) and I can write queries for it and explain its schema. I can also help you with the connection details.',
+    chips: [
+      { label: 'Write a query that…', prompt: 'Write a query that ', fill: true },
+      { label: 'Explain this schema', prompt: 'Explain this database’s schema: the main tables, what they hold and how they connect.' },
+      { label: 'Show the latest rows of the open table', prompt: 'Write a query showing the 20 most recent rows of the open table.' },
+      { label: 'Find duplicate records', prompt: 'Write a query that finds duplicate records in the main table.' },
+    ],
+    context: () => {
+      if (!conn) return 'The Database view: no connection chosen yet. Kinds supported: PostgreSQL, MySQL, SQL Server, MongoDB, SQLite (in the browser).';
+      const kind = kindOf(conn.type).name;
+      const list = tables.slice(0, 80).map(t => `${t.schema}.${t.name}${t.rows != null ? ` (~${t.rows} rows)` : ''}: ${(t.columns || []).slice(0, 40).map(c => `${c.name} ${c.type}${t.pk.includes(c.name) ? ' PK' : ''}`).join(', ')}${t.fks.length ? `; links: ${t.fks.map(f => `${f.cols.join(',')} → ${f.refTable}.${f.refCols.join(',')}`).join('; ')}` : ''}`);
+      return `The Database view, connected to ${kind} "${conn.name || hostOf(conn)}" (${cs.version || cs.status || 'not connected'})${conn.readOnly ? ', read-only' : ', read and write'}.
+${current ? `Open table: ${current.schema}.${current.name}.\n` : ''}Tables (schema.table: columns)${tables.length > 80 ? ', the first 80' : ''}:
+${list.join('\n') || '(no tables, or not connected yet)'}
+${conn.type === 'mongodb' ? 'For MongoDB, queries are JSON: {"find": "collection", "filter": {…}, "limit": 50} or {"aggregate": "collection", "pipeline": […]}.' : `Write SQL for ${kind}.`}`;
+    },
+    rules: `{"type": "sql", "sql": "the query"}: put it in the Query tab for the user to run. One query (or a few separated by ;). Prefer SELECTs; only write changes (INSERT, UPDATE, DELETE, ALTER…) when asked, and never DROP or TRUNCATE unless asked outright.`,
+    applyLabel: () => 'Put it in the Query tab',
+    apply: a => {
+      if (!conn || cs.status !== 'ok') throw new Error('Connect the database first.');
+      const sql = a && (a.sql || a.query);
+      if (!sql) throw new Error('The answer had no query.');
+      setAiSql({ sql: typeof sql === 'string' ? sql : JSON.stringify(sql, null, 2), n: Date.now() });
+      setSel({ tab: 'query' });
+      return 'In the Query tab: check it, then Run';
+    },
+  };
   function saveConnPassword(c) { persist(conns.map(x => (x.id === c.id ? c : x))); setState(s => { const n = { ...s }; delete n[c.id]; return n; }); connect(c); }
 
   return (
@@ -469,9 +502,10 @@ function DataPane({ conn, table, ask, toast, onChanged }) {
 }
 
 /* ---- Query: run SQL (or MongoDB commands) and see the results ---- */
-function QueryPane({ conn, ask, toast, update, onChanged }) {
+function QueryPane({ conn, ask, toast, update, onChanged, incoming }) {
   const { popup } = useUI();
-  const [sql, setSql] = useState(() => queryHistory(conn.id)[0] || '');
+  const [sql, setSql] = useState(() => (incoming ? incoming.sql : queryHistory(conn.id)[0] || ''));
+  useEffect(() => { if (incoming) setSql(incoming.sql); }, [incoming]); // from the AI panel
   const [res, setRes] = useState(null), [err, setErr] = useState(null), [busy, setBusy] = useState(false);
   const history = () => queryHistory(conn.id);
   const run = async () => {

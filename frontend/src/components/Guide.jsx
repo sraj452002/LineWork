@@ -119,7 +119,7 @@ function appGuide() {
         <li><b>Create a Blank File</b> opens an empty doc and canvas.</li>
         <li><b>Generate an AI Diagram</b> asks what you're designing, then writes a short doc and draws 1 to 3 diagrams. Click the card again while it's working to stop it.</li>
         <li><b>Write a Design Doc</b> starts a doc with the usual sections (Context, Goals, Proposal…) already laid out.</li>
-        <li><b>Start from a Template</b> gives ready-made examples: cloud architecture, flowchart, sequence diagram and database schema.</li>
+        <li><b>Start from a Template</b> gives ready-made examples: cloud architecture, flowchart, sequence diagram and database schema. <b>Templates</b> in the sidebar has <a href="#" data-guide="readymade">templates for every tool</a>.</li>
         <li><b>New File</b> at the bottom of the sidebar has the same templates.</li>
       </ul>
       <h4>Finding and organising files</h4>
@@ -259,6 +259,17 @@ function appGuide() {
         <li>You can paste Terraform, SQL or code into any AI box. It will turn it into a diagram.</li>
       </ul>
       <p className="gnote">If AI isn't set up for this site, you'll see “AI is off”. Everything else still works.</p>
+    </> },
+    { id: 'ai-everywhere', title: 'AI in every view', body: <>
+      <p><b>AI Chat</b> in the top bar opens an AI panel next to whatever you’re working on. It sees what’s on screen, answers questions, and when it proposes a change, a button makes it (nothing changes until you press it):</p>
+      <ul>
+        <li><b>Sheet</b>: formulas for the selected cell, totals, filling in or cleaning up data, what the numbers say. Ctrl Z undoes it.</li>
+        <li><b>Database</b>: queries from a description, put in the Query tab for you to check and run; the schema explained.</li>
+        <li><b>Code</b>: explain, fix, refactor or test the open file, or write a new one. Ctrl Z undoes it.</li>
+        <li><b>Workflow</b>: describe an automation and it adds the nodes; or it writes a Code node’s code, or explains why a run failed.</li>
+        <li><b>App</b>: builds or restyles the page.</li>
+      </ul>
+      <p>On the canvas the same button opens the diagram chat; the doc has <b>Ask AI</b> in its ribbon.</p>
     </> },
     { id: 'doc', title: 'Writing the doc', body: <>
       <p>The doc works like Microsoft Word: white pages with margins, and a <b>ribbon</b> on top.</p>
@@ -632,6 +643,20 @@ function appsGuide() {
         <li>The page runs <b>apart from Workline</b> (a sandbox): it can’t see your Workline sign-in, files or storage, and <code>localStorage</code> isn’t available to it.</li>
         <li>Changes go live as soon as the file saves. Switch <b>Publish</b> off and the link stops working; switch it on again and the same link works again.</li>
       </ul>
+    </> },
+    { id: 'readymade', title: 'Templates for every tool', body: <>
+      <p><b>Home → Templates → Ready-made</b> has a starting point for each tool. The chips at the top show one tool’s templates; the search box narrows them too. Each makes a new file and opens it.</p>
+      <table className="gtable"><tbody>
+        <tr><th>Diagrams</th><td>Microservices architecture, Sign-up flow, Checkout sequence, CI/CD pipeline</td></tr>
+        <tr><th>Docs</th><td>Product requirements (PRD), Meeting notes, Incident postmortem, Architecture decision record</td></tr>
+        <tr><th>Sheets</th><td>Project tracker, Invoice, Sales report with a chart, Weekly habit tracker, with working formulas</td></tr>
+        <tr><th>Databases</th><td>Online shop, Blog, SaaS accounts and billing: schemas, drawn. Connect a live database in the Database view.</td></tr>
+        <tr><th>Code</th><td>Node.js REST API, Python data analysis, Landing page, TypeScript utility with tests</td></tr>
+        <tr><th>Workflows</th><td>Daily AI news digest, Lead capture with AI, Support ticket triage, Weekly sales report, Failure alerts</td></tr>
+        <tr><th>Apps</th><td>Feedback analyzer, KPI dashboard, Video streaming app</td></tr>
+        <tr><th>Pages</th><td>Sales dashboard page, Feedback form page, Video library page: made only of nodes</td></tr>
+      </tbody></table>
+      <p>Where a template sends to Slack or email, reads a database or adds rows to a sheet, the node is there and named: pick your credential, connection or file on it, then turn the workflow <b>Active</b>.</p>
     </> },
     { id: 'templates', title: 'Ready-made: Video streaming app', body: <>
       <p><b>Templates → Ready-made → Video streaming app</b> (also in Tools) makes a whole app to start from: a <i>Video library</i> workflow and a player around it, with search, categories, a playlist, MP4 and HLS (<code>.m3u8</code>) streams.</p>

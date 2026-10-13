@@ -64,7 +64,7 @@ const B = ({ icon, label, on, act, wide, menu: m, title, disabled }) => (
 );
 const Group = ({ name, children }) => <div className="xl-group" role="group" aria-label={name}><div className="xl-gbody">{children}</div><div className="xl-glabel">{name}</div></div>;
 
-export default function SheetView({ file, update, visible, onAddToCanvas }) {
+export default function SheetView({ file, update, visible, onAddToCanvas, assist }) {
   const { popup, ask, toast, theme } = useUI();
   const sheets = file.sheets || [];
   const active = sheets.find(s => s.id === file.activeSheet) || sheets[0] || null;
@@ -148,6 +148,22 @@ export default function SheetView({ file, update, visible, onAddToCanvas }) {
   const pickFile = () => fileRef.current?.click();
   const fileInput = <input ref={fileRef} type="file" accept=".xlsx,.xlsm,.csv,.tsv,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" hidden onChange={e => openFile(e.target.files[0])} />;
 
+  // The AI panel (Editor): with no sheet yet it can make one.
+  if (assist && !active) assist.current = {
+    section: 'Sheet', intro: 'This file has no sheet yet. Describe one and I’ll make it: say what it tracks and I’ll set up the columns, sample rows and formulas.',
+    chips: [{ label: 'Make a budget sheet', prompt: 'Make a monthly budget sheet with categories, amounts and totals.' }, { label: 'Make a sheet that…', prompt: 'Make a sheet that ', fill: true }],
+    context: () => 'There is no sheet yet.',
+    rules: `{"type": "cells", "cells": {"A1": "value or =FORMULA", …}}: a new sheet with these cells. Use Excel-style formulas (=SUM(B2:B9), =AVERAGE(…), =IF(…)).`,
+    applyLabel: () => 'Make the sheet',
+    apply: a => {
+      const cells = a && a.cells && typeof a.cells === 'object' ? a.cells : null;
+      if (!cells) throw new Error('The answer had no cells.');
+      const sh = newSheet('Sheet 1');
+      sh.cells = Object.fromEntries(Object.entries(cells).filter(([k]) => parseAddr(k)).slice(0, 5000).map(([k, v]) => [k.toUpperCase(), String(v)]));
+      update(c => { c.sheets = [...(c.sheets || []), sh]; c.activeSheet = sh.id; });
+      return `Made a sheet with ${Object.keys(sh.cells).length} cells`;
+    },
+  };
   if (!active) {
     const add = sample => update(c => { const s = sample ? SAMPLE() : newSheet(); c.sheets = [...(c.sheets || []), s]; c.activeSheet = s.id; });
     return (
@@ -221,6 +237,49 @@ export default function SheetView({ file, update, visible, onAddToCanvas }) {
     grow(s, Object.keys(map).map(parseAddr).filter(Boolean));
   });
   const eachIn = (b, fn) => { for (let r = b.r0; r <= b.r1; r++) for (let c = b.c0; c <= b.c1; c++) fn(addr(c, r), c, r); };
+
+  // The AI panel (Editor): it sees the sheet's cells (formulas and values) and the selection, and can fill cells.
+  if (assist) assist.current = {
+    section: 'Sheet', placeholder: 'Ask about the data, or say what to fill in.',
+    intro: 'I can see this sheet and what you’ve selected. Ask me for a formula, to fill or clean up cells, to add totals, or what the data says.',
+    chips: [
+      { label: 'Write a formula for the selected cell', prompt: 'Write a formula for the selected cell that ', fill: true },
+      { label: 'Explain the selected formula', prompt: 'Explain the formula in the selected cell, step by step.' },
+      { label: 'Add totals and averages', prompt: 'Add a totals row and an averages row under the data, with formulas.' },
+      { label: 'What does this data say?', prompt: 'Summarize what this data shows: totals, trends and anything unusual.' },
+      { label: 'Fill the selection with sample data', prompt: 'Fill the selected cells with realistic sample data that fits the headers.' },
+    ],
+    context: () => {
+      const u = usedRange(active), lines = [];
+      if (u) for (let r = u.r0; r <= Math.min(u.r1, u.r0 + 59); r++) {
+        const row = [];
+        for (let c = u.c0; c <= Math.min(u.c1, u.c0 + 19); c++) {
+          const a = addr(c, r), v = raw(a);
+          if (v === '') continue;
+          const out = String(v).startsWith('=') ? `${v} → ${shown(val, active, a)}` : String(v);
+          row.push(`${a}: ${out.slice(0, 120)}`);
+        }
+        if (row.length) lines.push(row.join(' | '));
+      }
+      const selRange = rangeName ? rangeName(box) : `${addr(box.c0, box.r0)}:${addr(box.c1, box.r1)}`;
+      return `The Sheet view: an Excel-like spreadsheet. Sheet "${active.name}"${sheets.length > 1 ? ` (others: ${sheets.filter(x => x !== active).map(x => x.name).join(', ')})` : ''}.
+Selected: ${selRange} (the active cell is ${curAddr}${raw(curAddr) !== '' ? `, holding ${raw(curAddr)}` : ', empty'}).
+Cells (address: content, formulas with their result)${u && (u.r1 - u.r0 > 59 || u.c1 - u.c0 > 19) ? ', first 60 rows and 20 columns' : ''}:
+${lines.join('\n') || '(the sheet is empty)'}`;
+    },
+    rules: `{"type": "cells", "cells": {"B10": "=SUM(B2:B9)", "A10": "Total", …}}: set these cells (text, numbers, or Excel-style formulas starting with =). Use real cell addresses; to write a formula "for the selected cell" put it at that cell. Leave other cells alone.`,
+    applyLabel: a => { const n = a && a.cells ? Object.keys(a.cells).length : 0; return n === 1 ? `Put it in ${Object.keys(a.cells)[0]}` : `Fill ${n} cells`; },
+    apply: a => {
+      const cells = a && a.cells && typeof a.cells === 'object' ? a.cells : null;
+      if (!cells) throw new Error('The answer had no cells.');
+      const map = Object.fromEntries(Object.entries(cells).filter(([k]) => parseAddr(k)).slice(0, 5000).map(([k, v]) => [k.toUpperCase(), v == null ? '' : String(v)]));
+      if (!Object.keys(map).length) throw new Error('The answer had no cell addresses.');
+      setCells(map);
+      const ps = Object.keys(map).map(parseAddr);
+      setSel({ a: { c: Math.min(...ps.map(p => p.c)), r: Math.min(...ps.map(p => p.r)) }, b: { c: Math.max(...ps.map(p => p.c)), r: Math.max(...ps.map(p => p.r)) } });
+      return `Filled ${Object.keys(map).length} cell${Object.keys(map).length === 1 ? '' : 's'} (Ctrl Z undoes it)`;
+    },
+  };
   const setFmt = patch => change(s => {
     const { box: b } = live();
     s.fmt = { ...(s.fmt || {}) };

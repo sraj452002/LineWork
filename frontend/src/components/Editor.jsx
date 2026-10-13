@@ -15,6 +15,7 @@ const SheetView = lazy(() => import('./SheetView.jsx'));
 const DatabaseView = lazy(() => import('./DatabaseView.jsx'));
 const FlowView = lazy(() => import('./FlowView.jsx'));
 const AppBuilder = lazy(() => import('./AppBuilder.jsx'));
+const AssistPanel = lazy(() => import('./AssistPanel.jsx'));
 
 const narrow = () => innerWidth <= 760;
 const AI_KEY = 'linework:ai-open';
@@ -52,6 +53,10 @@ export default function Editor({ file, files, update, saveState, onBack, onRenam
   let view = file.view || 'both';
   if (isNarrow && view === 'both') view = 'canvas';
   const onCanvas = view === 'canvas' || view === 'both';
+  // The AI panel beside the Sheet, Database, Code, Workflow and App views: the open view describes itself here.
+  const assist = useRef(null);
+  const assistHere = ['sheet', 'db', 'code', 'flow', 'app'].includes(view);
+  const assistPanel = aiOpen && assistHere ? <Suspense fallback={null}><AssistPanel key={view} source={assist} section={{ sheet: 'Sheet', db: 'Database', code: 'Code', flow: 'Workflow', app: 'App' }[view]} onClose={() => setAiOpen(false)} /></Suspense> : null;
   const [codeSeen, setCodeSeen] = useState(view === 'code'); // keep the editor mounted once opened
   useEffect(() => { if (view === 'code') setCodeSeen(true); }, [view]);
   // Spreadsheets: the Sheet view, and canvas blocks that show a sheet (drawn from this registry).
@@ -170,7 +175,7 @@ export default function Editor({ file, files, update, saveState, onBack, onRenam
           <span>{current.label}</span>
           <svg className="caret" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5" /></svg>
         </button>
-        {onCanvas && (
+        {(onCanvas || assistHere) && (
           <button className={'btn ai-toggle' + (aiOpen ? ' on' : '')} aria-pressed={aiOpen} onClick={() => setAiOpen(!aiOpen)}
             title={aiOpen ? 'Close AI chat  Esc' : 'Open AI chat  Ctrl J'}>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 3.5l1.6 4.9 4.9 1.6-4.9 1.6L10 16.5l-1.6-4.9L3.5 10l4.9-1.6z"/><path d="M18 3v4M16 5h4M17.5 15.5v4M15.5 17.5h4"/></svg>
@@ -217,36 +222,41 @@ export default function Editor({ file, files, update, saveState, onBack, onRenam
         {view === 'sheet' && (
           <div className="sheetpane">
             <Suspense fallback={<div className="cw-loading">Loading…</div>}>
-              <SheetView file={file} update={update} visible onAddToCanvas={sheetToCanvas} />
+              <SheetView file={file} update={update} visible onAddToCanvas={sheetToCanvas} assist={assist} />
             </Suspense>
+            {assistPanel}
           </div>
         )}
         {view === 'db' && (
           <div className="dbpane">
             <Suspense fallback={<div className="cw-loading">Loading…</div>}>
-              <DatabaseView file={file} update={update} visible onDiagram={drawLiveSchema} />
+              <DatabaseView file={file} update={update} visible onDiagram={drawLiveSchema} assist={assist} />
             </Suspense>
+            {assistPanel}
           </div>
         )}
         {view === 'flow' && (
           <div className="flowpane">
             <Suspense fallback={<div className="cw-loading">Loading…</div>}>
-              <FlowView file={file} update={update} visible saveState={saveState} onGuide={onGuide} />
+              <FlowView file={file} update={update} visible saveState={saveState} onGuide={onGuide} assist={assist} />
             </Suspense>
+            {assistPanel}
           </div>
         )}
         {view === 'app' && (
           <div className="apppane">
             <Suspense fallback={<div className="cw-loading">Loading…</div>}>
-              <AppBuilder file={file} update={update} files={files} onGuide={onGuide} />
+              <AppBuilder file={file} update={update} files={files} onGuide={onGuide} assist={assist} />
             </Suspense>
+            {assistPanel}
           </div>
         )}
         {codeSeen && (
           <div className="codepane">
             <Suspense fallback={<div className="cw-loading">Loading the code editor…</div>}>
-              <CodeWorkspace file={file} update={update} visible={view === 'code'} />
+              <CodeWorkspace file={file} update={update} visible={view === 'code'} assist={view === 'code' ? assist : null} />
             </Suspense>
+            {view === 'code' && assistPanel}
           </div>
         )}
       </div>
