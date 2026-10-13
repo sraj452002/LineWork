@@ -177,6 +177,17 @@ The **Database** view connects to PostgreSQL, MySQL / MariaDB, SQL Server and Mo
 
 A `.sql` file becomes a database schema diagram without AI: drop it on the canvas, or use **Insert → Database schema from SQL**, **Tools → Open a .sql file**, or a schema's **⋯ → Import SQL**. `frontend/src/lib/sql.js` reads schema files, migrations and dumps from PostgreSQL (`pg_dump`), MySQL (`mysqldump`), SQLite and SQL Server: tables, column types, primary keys (including ones added by `ALTER TABLE`), unique columns and foreign keys, and follows `ALTER TABLE` column changes in order. It also writes a diagram back out as PostgreSQL or MySQL.
 
+## Code and dashboard blocks on the canvas
+
+Every figure has two **connection ports**, shown when you point at it or select it: an output on the right and an input on the left. Drag from an output to another figure to wire them; the wire runs from that output to the other's input, and goes round when the input is behind the output. A **code block** (Insert → Code block) runs its JavaScript or TypeScript with **▶ Run**; the output shows under the block.
+
+A **dashboard block** (Insert → Dashboard block, `frontend/src/lib/dashboard.js`) is HTML with `<style>` and `<script>`, shown live on the canvas in a sandboxed frame (scripts run, with no access to the app, its storage or cookies; they can fetch public URLs and load chart libraries from a CDN). Its script gets `data`, a list, from the block's source:
+
+- **Code blocks**: wire one or more code blocks into it; whatever each returns (or last logs as JSON) is joined into `data`, again whenever the code changes.
+- **This file's workflow**: **↻ Refresh** runs the file's workflow on the server (`POST /api/flows/:fileId/data`, which waits up to a minute) and `data` is everything its last steps output. That data is kept with the file, and it can refresh every 1, 5 or 15 minutes while the canvas is open.
+
+Helpers in the frame: `cards(el, [[label, value], …])`, `bars(el, rows, labelKey, valueKey)`, `line(…)`, `pie(…)` and `table(el, rows)`. **Edit HTML** opens the block's code. Exports show the code rather than the live view.
+
 ## The doc (like Word)
 
 The doc (`frontend/src/components/WordDoc.jsx`, `WordRibbon.jsx`, `lib/word/`) is a TipTap editor laid out like Microsoft Word: a ribbon (File, Home, Insert, Layout, Review, View, and Table / Picture when one is selected), A4 / Letter / Legal pages with margins, header, footer and page numbers (`lib/word/pages.js` moves a block that would run past a page's bottom to the next page), a navigation pane, comments, tracked changes (`lib/word/track.js`), find and replace, comparing with an earlier version, .docx in (mammoth) and out (docx), and printing to PDF. It's saved as HTML in `file.docHtml`; `file.doc` keeps the same text as Markdown for AI, search, exports and the Workline Doc workflow node, and when something else changes that Markdown the editor reads it in again (`file.docSrc` is its hash). Page setup is in `file.docLayout`, comments in `file.docComments`.

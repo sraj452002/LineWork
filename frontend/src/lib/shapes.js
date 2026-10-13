@@ -75,8 +75,31 @@ export const DEVICES = [
   {v:'browser', name:'Browser', w:880, h:560}, {v:'desktop', name:'Desktop', w:900, h:640},
 ];
 const SIZE = {rect:[160,90], ellipse:[140,100], diamond:[150,110], triangle:[140,110], hexagon:[160,96], para:[170,90],
-  cylinder:[120,130], pill:[170,70], trapezoid:[170,96], doc:[160,110], star:[130,124], sticky:[180,160], frame:[480,320], code:[380,210], icon:[56,56], sheet:[440,200]};
+  cylinder:[120,130], pill:[170,70], trapezoid:[170,96], doc:[160,110], star:[130,124], sticky:[180,160], frame:[480,320], code:[380,210], dash:[520,340], icon:[56,56], sheet:[440,200]};
 const CODE_SAMPLE = 'function greet(name) {\n  return `Hello, ${name}`;\n}';
+// A dashboard block is HTML (with <style> and <script>) shown live in a sandboxed frame. `data` holds what its
+// source gave (a workflow's output or a wired code block's result); the helpers come from dashboardDoc().
+export const DASH_SAMPLE = `<div id="cards"></div>
+<div id="chart"></div>
+<div id="rows"></div>
+<script>
+  // \`data\` is the list from this block's data source.
+  // Without one, here's sample data to show the idea.
+  const rows = data.length ? data : [
+    { month: 'Jan', sales: 120 }, { month: 'Feb', sales: 180 },
+    { month: 'Mar', sales: 150 }, { month: 'Apr', sales: 240 },
+  ];
+  // The first text field labels each row; the first number field is charted.
+  const first = rows.find(r => r && typeof r === 'object') || {};
+  const label = Object.keys(first).find(k => typeof first[k] === 'string');
+  const value = Object.keys(first).find(k => typeof first[k] === 'number');
+  if (value) {
+    const vals = rows.map(r => +(r && r[value]) || 0);
+    cards('#cards', [['Total ' + value, vals.reduce((a, b) => a + b, 0)], ['Rows', rows.length], ['Highest', Math.max(...vals)]]);
+    if (label) bars('#chart', rows.slice(0, 24), label, value);
+  }
+  if (!value || !label) table('#rows', rows);
+</script>`;
 
 // c is an index into these names (0 = ink, 1-6 = the diagram palette, 7-8 below) or a custom "#rrggbb".
 export const COLOR_NAMES = ['Ink', 'Blue', 'Green', 'Orange', 'Purple', 'Red', 'Olive', 'Yellow', 'Grey'];
@@ -94,7 +117,9 @@ export const isPath = s => !!s.pts;
 export const BOX_KINDS = ['rect','ellipse','diamond','triangle','pill','para','trapezoid','cylinder','doc','hexagon','star'];
 const BOX = new Set(BOX_KINDS);
 export const isBox = s => BOX.has(s.t);
-const TEXT_KINDS = new Set([...BOX_KINDS, 'sticky','frame','code','text','comment','line','arrow']);
+const TEXT_KINDS = new Set([...BOX_KINDS, 'sticky','frame','code','dash','text','comment','line','arrow']);
+// Blocks whose text is code: edited in a monospace box, with Tab for indents.
+export const isCodeKind = s => s.t === 'code' || s.t === 'dash';
 export const hasText = s => TEXT_KINDS.has(s.t);
 // Resizing these keeps their proportions.
 export const KEEP_RATIO = new Set(['icon','image','text']);
@@ -181,6 +206,8 @@ export function make(t, cx, cy, extra = {}){
   const s = {id, t, x:r0(cx - w / 2), y:r0(cy - h / 2), w, h, ...extra};
   if(t === 'frame' && !s.text) s.text = 'Frame';
   if(t === 'code' && s.text == null) s.text = CODE_SAMPLE;
+  if(t === 'code' && !s.lang) s.lang = 'javascript';
+  if(t === 'dash' && s.text == null) s.text = DASH_SAMPLE;
   return s;
 }
 // A shape dragged out from a to b. Shift keeps squares square and lines on 45° steps.
@@ -369,6 +396,8 @@ function sidePoint(r, to){
     ? {p:[r0(cx + Math.sign(dx || 1) * (r.w / 2 + 6)), r0(cy)], o:'h'}
     : {p:[r0(cx), r0(cy + Math.sign(dy || 1) * (r.h / 2 + 6))], o:'v'};
 }
+// Where a connection port sits on rect r: 'out' is the middle of the right side, 'in' the middle of the left.
+export const portPoint = (r, side) => [r0(side === 'out' ? r.x + r.w : r.x), r0(r.y + r.h / 2)];
 // Returns the shapes with attached ends placed on their targets. nodeRect(id) gives a diagram node's box.
 export function resolveLinks(shapes, nodeRect){
   if(!shapes.some(s => s.a0 || s.a1 || s.bend)) return shapes;
@@ -376,9 +405,9 @@ export function resolveLinks(shapes, nodeRect){
   const byId = new Map(shapes.map(s => [s.id, s]));
   const target = a => {
     if(!a) return null;
-    if(a.s){ const t = byId.get(a.s); return t && attachable(t) ? {r:bbox(t), kind:t.t} : null; }
+    if(a.s){ const t = byId.get(a.s); return t && attachable(t) ? {r:bbox(t), kind:t.t, p:a.p} : null; }
     const r = a.n && nodeRect ? nodeRect(a.n) : null;
-    return r ? {r, kind:'rect'} : null;
+    return r ? {r, kind:'rect', p:a.p} : null;
   };
   const mid = x => [x.r.x + x.r.w / 2, x.r.y + x.r.h / 2];
   return shapes.map(s => {
@@ -388,6 +417,22 @@ export function resolveLinks(shapes, nodeRect){
     const n = s.pts.length, inner = s.pts.slice(1, -1);
     const ref0 = A ? mid(A) : s.pts[0], ref1 = B ? mid(B) : s.pts[n - 1];
     const to0 = inner.length ? inner[0] : ref1, to1 = inner.length ? inner[inner.length - 1] : ref0;
+    // Ends made from a connection port sit exactly on that port: outputs on the right side, inputs on the left.
+    if((A && A.p) || (B && B.p)){
+      const elbow = routeOf(s) === 'elbow', P0 = A && A.p ? portPoint(A.r, A.p) : null, P1 = B && B.p ? portPoint(B.r, B.p) : null;
+      const free = (X, toward, loose) => (!X ? {p:loose} : elbow ? sidePoint(X.r, toward) : {p:edgePoint(X.r, X.kind, toward)});
+      const e0 = P0 ? {p:P0, o:'h'} : free(A, inner.length ? inner[0] : P1 || ref1, s.pts[0]);
+      const e1 = P1 ? {p:P1, o:'h'} : free(B, inner.length ? inner[inner.length - 1] : P0 || ref0, s.pts[n - 1]);
+      // Output to an input that's behind it (to its left): leave rightward, go round between or below
+      // the two figures, and come in from the left, rather than cutting back through them.
+      if(elbow && P0 && P1 && !inner.length && P1[0] < P0[0] + 24){
+        const a = A.r, b = B.r, gap = 24;
+        const y = a.y + a.h + gap <= b.y ? r0((a.y + a.h + b.y) / 2) : b.y + b.h + gap <= a.y ? r0((b.y + b.h + a.y) / 2) : r0(Math.max(a.y + a.h, b.y + b.h) + gap);
+        const x0 = P0[0] + gap, x1 = P1[0] - gap;
+        return {...s, pts:[P0, [x0, P0[1]], [x0, y], [x1, y], [x1, P1[1]], P1], o0:'h', o1:'h'};
+      }
+      return {...s, pts:[e0.p, ...inner, e1.p], ...(elbow ? {o0:e0.o, o1:e1.o} : {})};
+    }
     if(routeOf(s) === 'elbow'){
       // Elbows leave and enter from the middle of a side. o0/o1 are only for drawing, never saved.
       const e0 = A ? sidePoint(A.r, to0) : null, e1 = B ? sidePoint(B.r, to1) : null;
@@ -579,6 +624,15 @@ function one(s, opt){
       m += lines(text.split('\n').slice(0, max).map(l => l.length > cw ? l.slice(0, cw - 1) + '…' : l), {x:12, y:34, fs, fill:C.ink, mono:true});
       break;
     }
+    case 'dash': {
+      // The live dashboard is an HTML frame laid over this (see Canvas); here is its frame, title and code,
+      // which is what exports and the editor show.
+      const fs = 12, max = Math.max(0, Math.floor((h - 40) / (fs * LH))), cw = Math.max(1, Math.floor((w - 24) / (fs * .6)));
+      m = `<rect width="${w}" height="${h}" rx="10" fill="${C.surface}" stroke="${s.c ? col : C.line}" stroke-width="1.2"/><path d="M0 28H${w}" stroke="${C.line}"/>`
+        + `<path d="M12 9h4v10h-4zM18 13h4v6h-4zM24 6h4v13h-4z" fill="${C.ink2}"/><text x="36" y="18.5" font-size="12" font-weight="600" fill="${C.ink2}">${esc(s.title || 'Dashboard')}</text>`;
+      m += lines(text.split('\n').slice(0, max).map(l => l.length > cw ? l.slice(0, cw - 1) + '…' : l), {x:12, y:34, fs, fill:C.ink2, mono:true});
+      break;
+    }
     case 'sheet':
       m = sheetBlock(s, col);
       break;
@@ -669,6 +723,7 @@ export function editBox(s, text){
     case 'comment': { const c = commentCard(s, text || ' '); return {x:s.x + 36, y:s.y - 2, w:COMMENT_W + 20, h:Math.max(40, c.h + COMMENT_FS * LH), fs:COMMENT_FS, align:'left', pad:7, padX:10, card:true}; }
     case 'frame': return {x:s.x, y:s.y - 30, w:Math.max(200, s.w), h:24, fs:13, align:'left', weight:600, color:colorOf(s.c)};
     case 'code': return {x:s.x + 12, y:s.y + 34, w:s.w - 24, h:s.h - 40, fs:12.5, align:'left', mono:true};
+    case 'dash': return {x:s.x + 12, y:s.y + 34, w:s.w - 24, h:s.h - 40, fs:12, align:'left', mono:true};
     case 'sticky': { const t = stickyText(s, text || ' '); return {x:s.x, y:s.y, w:s.w, h:s.h, fs:t.fs, align:taOf(s), pad:Math.max(0, t.top), padX:14, padL:t.left}; }
     case 'line': case 'arrow': { const [mx, my] = pathMid(s); return {x:mx - 90, y:my - 12, w:180, h:Math.max(24, wrap(text, 160, 13).length * 13 * LH + 6), fs:13, align:'center', card:true}; }
     default: { const t = inner(s, text || ' '); return {x:s.x + (s.w - t.full) / 2, y:s.y, w:t.full, h:s.h, fs:t.fs, align:taOf(s), pad:Math.max(0, t.top), padL:t.ip, weight:500}; }

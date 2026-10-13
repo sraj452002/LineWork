@@ -297,7 +297,7 @@ kbd{font-family:var(--ui);font-size:12px;font-weight:500;color:var(--ink2);min-w
 #svg .cv-port-hit{fill:transparent;stroke:none;pointer-events:all}
 #svg .cv-port-dot{fill:var(--surface);stroke:color-mix(in srgb,var(--ink2) 80%,transparent);stroke-width:1.5;pointer-events:none;transition:fill .12s,stroke .12s}
 #svg .cv-port:hover .cv-port-dot{fill:color-mix(in srgb,var(--c-blue) 28%,var(--surface));stroke:var(--c-blue);stroke-width:2}
-.cv-code-ui{position:absolute;z-index:8;pointer-events:none}
+.cv-code-ui{position:absolute;z-index:8;pointer-events:none;transform-origin:0 0}
 .cv-code-actions{height:28px;display:flex;justify-content:flex-end;align-items:center;gap:6px;padding:0 7px;pointer-events:auto}
 .cv-code-actions select,.cv-code-run{height:22px;border:0;border-radius:5px;background:transparent;color:var(--ink);font:600 11px var(--ui);cursor:pointer}
 .cv-code-actions select{max-width:126px;color:var(--c-blue)}
@@ -305,7 +305,7 @@ kbd{font-family:var(--ui);font-size:12px;font-weight:500;color:var(--ink2);min-w
 .cv-code-run{padding:0 8px;color:var(--ink)}
 .cv-code-run:hover:not(:disabled){background:color-mix(in srgb,var(--c-blue) 14%,var(--surface))}
 .cv-code-run:disabled{opacity:.45;cursor:default}
-.cv-code-output{margin-top:8px;max-height:110px;overflow:auto;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);box-shadow:var(--shadow);pointer-events:auto;font-size:11px}
+.cv-code-output{position:absolute;left:0;right:0;max-height:150px;overflow:auto;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);box-shadow:var(--shadow);pointer-events:auto;font-size:11px}
 .cv-code-output b{font:600 10px var(--ui);color:var(--ink2)}
 .cv-code-output pre{margin:4px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;font:11px/1.4 var(--mono)}
 .cv-code-output.err pre{color:var(--err)}
@@ -2490,3 +2490,9 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .fv-np select,.fv-np input:not(.fv-np-head input),.fv-np textarea,.fv-pub select,.fv-pub input{font-weight:400}
 .fv-np .btn,.fv-tabs button{font-weight:500}
 .fv-tabs button[aria-selected="true"]{font-weight:600}
+/* Dashboard blocks: the live frame over the block's body. It takes the pointer only while its block is
+   the one selected, so an unselected block still selects and drags like any other figure. The sides
+   stay clear for the connection ports. */
+.cv-dash{position:absolute;z-index:7;transform-origin:0 0;pointer-events:none;padding:0 8px 6px;box-sizing:border-box}
+.cv-dash iframe{display:block;width:100%;height:100%;border:0;border-radius:0 0 8px 8px;background:transparent}
+.cv-dash.live{pointer-events:auto}

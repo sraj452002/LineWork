@@ -23,6 +23,7 @@ export const IC = {
   device: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 8.5h18M6 6.3h.01M8.5 6.3h.01"/>',
   sheet: '<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17M3.5 14.5h17M9 4.5v15"/>',
   codeblock: '<rect x="3.5" y="3.5" width="17" height="17" rx="2"/><path d="m10 9-3 3 3 3M14 9l3 3-3 3"/>',
+  chart: '<path d="M4 20h16"/><rect x="6" y="11" width="3" height="7" rx=".5"/><rect x="11" y="6" width="3" height="12" rx=".5"/><rect x="16" y="9" width="3" height="9" rx=".5"/>',
   image: '<rect x="3.5" y="4" width="17" height="16" rx="2"/><circle cx="15" cy="9" r="2"/><path d="m3.5 17 5-5.5 4.5 4.5 2.5-2 5 4"/>',
   dFlow: '<rect x="9" y="3" width="6" height="4.5" rx="1"/><rect x="3" y="16.5" width="6" height="4.5" rx="1"/><rect x="15" y="16.5" width="6" height="4.5" rx="1"/><path d="M12 7.5v4.5M6 16.5V12h12v4.5"/>',
   dCloud: '<rect x="8.5" y="3.5" width="9" height="17" rx="1.5"/><path d="M5.5 7v10M3.5 9v6"/><circle cx="13" cy="8" r=".6"/><circle cx="13" cy="12" r=".6"/><circle cx="13" cy="16" r=".6"/>',

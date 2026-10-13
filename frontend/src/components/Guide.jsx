@@ -178,8 +178,9 @@ function appGuide() {
         <li><K>I</K> Icon</li><li><K>F</K> Frame</li><li><K>C</K> Comment</li>
       </ul>
       <ul>
-        <li>Drag an <b>arrow</b> from one box to another and it stays attached when they move.</li>
-        <li><b>+</b> at the top of the toolbar (or <K>/</K>) opens <b>Insert</b>: shapes, 2,000+ icons (general icons, tech logos and cloud provider logos, all searchable), phone/tablet/desktop/browser frames, figures, code blocks, images and the diagram catalogue.</li>
+        <li>Drag an <b>arrow</b> from one box to another and it stays attached when they move. Or point at a figure and drag from the dot on its right (its output) to another figure: the wire runs into the dot on its left (its input).</li>
+        <li>A <b>code block</b> runs its JavaScript with <b>▶ Run</b>. A <b>dashboard block</b> shows live cards, charts and tables from HTML and JavaScript; its <code>data</code> comes from code blocks wired into it, or from this file's workflow (<b>↻ Refresh</b>).</li>
+        <li><b>+</b> at the top of the toolbar (or <K>/</K>) opens <b>Insert</b>: shapes, 2,000+ icons (general icons, tech logos and cloud provider logos, all searchable), phone/tablet/desktop/browser frames, figures, code blocks, dashboard blocks, images and the diagram catalogue.</li>
         <li>Select something to get a toolbar at the bottom. For shapes: <b>Shape</b> swaps between 11 shapes (rectangle, pill, star and so on); <b>Fill and style</b> sets the colour (or a custom one), a tinted, solid or no fill, and a plain, shadow or watercolor look; <b>Stroke</b> sets dashed, the border colour and thickness (S, M, L, XL). For lines: colour, curved/elbow/straight, thickness and arrowheads. <b>⋯</b> copies as PNG or SVG, copies and pastes styles, exports the selection, wraps it in a figure and changes the stacking order.</li>
         <li><b>Group</b> several objects (<K>Ctrl G</K>, or <b>Group</b> in the <b>⋯</b> menu) so they select and move together. Click a group again to pick one object inside it; <K>Ctrl Shift G</K> ungroups.</li>
         <li><b>Text alignment and indent</b> on the toolbar (for shapes, sticky notes and text) aligns text left, center or right, and top, middle or bottom, and indents it a step at a time.</li>

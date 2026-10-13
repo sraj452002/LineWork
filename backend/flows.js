@@ -353,6 +353,27 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
         res.status(202).json({ runId: run.id });
       } catch (e) { res.status(e.code === 'busy' ? 429 : 400).json({ error: e.code || 'flow_error', message: e.message }); }
     });
+    // Run a flow and answer with what its last steps output, in full (a run keeps only a sample of each
+    // step): what a dashboard block on the canvas shows. Waits up to 60 s, then answers with the run id.
+    api.post('/flows/:fileId/data', signedIn, async (req, res) => {
+      if (!ID.test(req.params.fileId)) return res.status(400).json({ error: 'bad_id' });
+      const { flow } = req.body || {};
+      if (!flow || !Array.isArray(flow.nodes) || flow.nodes.length > 300 || !Array.isArray(flow.edges)) return res.status(400).json({ error: 'bad_flow', message: 'That isn’t a workflow.' });
+      const first = flow.nodes.find(n => n.type === 'trigger.manual')?.id || flow.nodes.find(n => n.type?.startsWith('trigger.'))?.id;
+      if (!first) return res.status(400).json({ error: 'no_start', message: 'The workflow needs a trigger: add Run by hand.' });
+      let run;
+      try { run = start(req.user.id, req.params.fileId, flow, first, asItems(), 'dashboard'); }
+      catch (e) { return res.status(e.code === 'busy' ? 429 : 400).json({ error: e.code || 'flow_error', message: e.message }); }
+      const got = await Promise.race([run.done, new Promise(r => setTimeout(() => r(null), 60_000))]);
+      if (!got) return res.status(202).json({ runId: run.id, pending: true });
+      const r = got.result;
+      if (!r || run.status !== 'success') return res.status(422).json({ error: 'flow_error', message: run.error || 'The workflow failed.', runId: run.id });
+      const ok = id => r.nodes[id]?.status === 'success';
+      const ends = flow.nodes.filter(n => ok(n.id) && !flow.edges.some(e => e.from === n.id && ok(e.to)));
+      let items = ends.flatMap(n => r.nodes[n.id].output?.main || []).slice(0, 5000);
+      while (items.length > 1 && JSON.stringify(items).length > 2_000_000) items = items.slice(0, Math.floor(items.length / 2));
+      res.json({ runId: run.id, items });
+    });
     // Run a published app: the saved workflow (so always its latest version), from its chosen trigger,
     // with the form's answers as the one item. Only the inputs the app declares are passed on.
     api.post('/flows/:fileId/app', signedIn, async (req, res) => {
