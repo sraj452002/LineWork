@@ -72,8 +72,8 @@ return [
     await page.getByRole('tab', { name: 'Home' }).click();
     await page.getByRole('button', { name: /^Table table1/ }).click();
     await props.getByRole('button', { name: '+ Add a step' }).click();
-    await props.getByLabel('Step').selectOption('go');
-    await props.getByLabel('Page').selectOption({ label: 'Page 2' });
+    await props.getByLabel('Step', { exact: true }).selectOption('go');
+    await props.getByLabel('Page', { exact: true }).selectOption({ label: 'Page 2' });
 
     // Preview: type, click a row, land on the details page.
     await page.getByRole('button', { name: '▶ Preview' }).click();
