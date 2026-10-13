@@ -16,7 +16,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('every component can be added and drawn, and the inputs hold what is picked', async ({ page }) => {
-  test.setTimeout(240_000);
+  test.setTimeout(480_000);
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   await page.getByRole('button', { name: 'Create a Blank File' }).click();
@@ -42,7 +42,7 @@ test('every component can be added and drawn, and the inputs hold what is picked
   // A text that shows what the inputs hold.
   await page.getByRole('button', { name: 'Add Text', exact: true }).click();
   const props = page.getByRole('complementary', { name: 'Properties' });
-  await props.getByLabel('Text', { exact: true }).fill('switch={{ vars.switch1 }} stars={{ vars.rating1 }} tags={{ (vars.multiselect1 || []).join("+") }} size={{ vars.radio1 }} tab={{ vars.tabs1 }}');
+  await props.getByRole('textbox', { name: 'Text', exact: true }).fill('switch={{ vars.switch1 }} stars={{ vars.rating1 }} tags={{ (vars.multiselect1 || []).join("+") }} size={{ vars.radio1 }} tab={{ vars.tabs1 }}');
 
   // Use them in the preview.
   await page.getByRole('button', { name: '▶ Preview' }).click();

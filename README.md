@@ -177,9 +177,18 @@ For full control of the look, use a custom app (below) instead.
 
 The **App** view starts in **Visual**: build an app for other people by dragging components onto its pages, fill them from your workflows, and **Publish** it for a link. No code needed (**Code** switches to writing the page by hand; see below).
 
-- **Components** (left): Heading, Text, Button, Input, Dropdown, Form, Table, Chart, Number, Cards list, Image, Video, Divider, Custom HTML. Click to add, or drag onto the page. Drag a box to move it on the 12-column grid, its edges or corner to resize; Delete removes, Ctrl+D copies, arrows nudge. **Properties** (right) set what each one shows.
+- **Components** (left, grouped and searchable, 49 of them):
+  - *Basics*: Heading, Text, Button, Link, Image, Divider.
+  - *Inputs*: Input (text, number, email, phone, web address, date, time, password, long text), Search box, Dropdown, Radio buttons, Checkbox, Switch, Tags picker, Slider, Rating, Date picker, Colour picker, File upload, Form.
+  - *Data*: Table, Chart, Number, Cards list, Simple list, Kanban board, Calendar, Details, JSON viewer, Timeline.
+  - *Status*: Badge, Alert, Progress bar, Gauge, Steps, Countdown, Profile.
+  - *Media*: Video, Audio, Slideshow, Embed (YouTube, Maps, Docs, Figma, any page), Map, QR code.
+  - *Layout*: Panel, Spacer, Accordion (FAQ), Tabs, Code block, Custom HTML.
+  - *AI*: an AI chat that sends `{message, history}` to a workflow and shows its answer.
+
+  Click to add, or drag onto the page. Drag a box to move it on the 12-column grid, its edges or corner to resize; Delete removes, Ctrl+D copies, arrows nudge. **Properties** (right) set what each one shows.
 - **Data**: a data source runs a workflow (when the app opens, or from a button) and keeps its output as `data.<name>`. Any text can show data with `{{ … }}`: `{{ data.orders }}` for a table's rows, `{{ data.orders.length }}`, `{{ vars.input1 }}` (what's typed in an input, the row clicked in a table), `{{ user.name }}`.
-- **Steps**: buttons, forms, tables and lists run steps when used: refresh a data source, run a workflow (with the form's answers or the clicked row, keeping the result as `data.<name>`), set a value, go to a page, show a message, open a link, sign out. A table row that opens a details page is two clicks.
+- **Steps**: buttons, forms, tables, lists, kanban cards, calendar days, and inputs when they change (dropdowns, switches, sliders…) run steps: refresh a data source, run a workflow (with the form's answers or the clicked row, keeping the result as `data.<name>`), set a value, go to a page, show a message, open a link, sign out. A table row that opens a details page is two clicks.
 - **Pages**: `+ Page` adds one; each can be in the app's menu (top or side). **App** sets the name, theme (presets, colours, corners, font) and who can use it.
 - **Who can use it**: anyone with the link, people who sign in (anyone can make an account), or only people you invite (a list of emails). Accounts belong to the app, not to Workline; you see them and can remove them under **App**. Each workflow run gets who it's for as `{{ $json.user.email }}`, set by the server, so a workflow can show people only their own data.
 - **Phone**: on a narrow screen the components stack, top to bottom; **Phone** in the builder shows it.
