@@ -5,7 +5,7 @@ import { GROUPS, NODES } from '../lib/flows.js';
 import { NODE_GUIDE } from '../lib/flowguide.js';
 import { NodeCard } from './NodeGuide.jsx';
 import { Brand, useUI } from './ui.jsx';
-import { EASY } from '../lib/readymade.js';
+import { EASY, VIDEO_LIST_URL } from '../lib/readymade.js';
 
 /* ---- examples, kept small so each one teaches one idea ---- */
 const EX = {
@@ -673,6 +673,30 @@ function easyGuide() {
         <li><b>▶ Preview</b> and play. Change the questions in the workflow’s code whenever you like.</li>
       </ol>
     </> },
+    { id: 'ex3', title: 'Example 3: a Video app that fetches videos', body: <>
+      <p><b>What it does:</b> the workflow <b>fetches</b> a list of videos from the internet. The app shows them as cards with a search box and categories, and plays the one you click.</p>
+      <Try k="a-easy-videos">Open Example 3 (ready-made)</Try>
+      <h3>Part 1: the workflow (3 nodes)</h3>
+      <ol>
+        <li><b>Create a Blank File</b>, <b>View → Workflow</b>, and name the file <b>Video app</b>.</li>
+        <li>Add <b>Run by hand</b>.</li>
+        <li>Add an <b>HTTP request</b> node (Nodes → Developer) and join it after the trigger. Name it <i>Fetch videos</i>. Set <b>Method</b> to <code>GET</code> and <b>URL</b> to:
+          <pre className="gpre">{VIDEO_LIST_URL}</pre>
+          Open that link in your browser: it is just a list of videos (title, category, video link, picture). The node downloads it, and <b>each video becomes one item</b>.</li>
+        <li>Add a <b>Code</b> node after it, name it <i>Tidy up</i>, and paste:
+          <pre className="gpre">{EASY.tidy}</pre></li>
+        <li>Press <b>Run</b> on the workflow: you should see the videos come out of each node.</li>
+      </ol>
+      <p><b>Your own videos?</b> Make your own list in the same shape (a Google Sheet, Airtable, or a JSON file on GitHub) and change the URL. The app stays the same.</p>
+      <h3>Part 2: the app</h3>
+      <ol>
+        <li><b>View → App</b>. In the <b>Data</b> tab: <b>+ Add a data source</b>, name <code>videos</code>, workflow <b>Video app</b>, tick <b>Run when the app opens</b>.</li>
+        <li>Add a <b>Cards list</b>. Rows: <code>{'{{ data.videos }}'}</code>, card title <code>{'{{ item.title }}'}</code>, card image <code>{'{{ item.poster }}'}</code>. When someone clicks a card, the list remembers it as <code>vars.list1</code>.</li>
+        <li>Add a <b>Video</b> above it. Video URL: <code>{'{{ (vars.list1 || data.videos[0]).src }}'}</code> — in words: “play the clicked video, or the first one”.</li>
+        <li>Want search? Add a <b>Search box</b> named <code>search</code>, and change the list’s rows to <code>{'{{ data.videos.filter(v => v.title.toLowerCase().includes((vars.search || "").toLowerCase())) }}'}</code>.</li>
+        <li><b>▶ Preview</b>, click a card and press play. 🎬</li>
+      </ol>
+    </> },
     { id: 'share', title: 'Share your app', body: <>
       <ol>
         <li>Open the <b>App</b> tab (on the right) and switch on <b>Publish</b>. You get a link.</li>
@@ -866,7 +890,7 @@ export default function Guide({ which, onWhich, onClose, onTry }) {
           <article className="g-doc">
             <header>
               <h1>{easy ? 'Easy start: make your first app' : which === 'erd' ? 'Database schemas (ERD)' : apps ? 'Custom apps' : flow ? 'Workflows' : 'How to use Workline'}</h1>
-              <p>{easy ? 'No experience needed. First you make a workflow (it does the work), then an app on top of it (what people see). Two complete examples.' : apps ? 'Your own page, in HTML, CSS and JavaScript, on top of your workflows: a form, a dashboard, a chat or a video player, at a link anyone can open.'
+              <p>{easy ? 'No experience needed. First you make a workflow (it does the work), then an app on top of it (what people see). Three complete examples.' : apps ? 'Your own page, in HTML, CSS and JavaScript, on top of your workflows: a form, a dashboard, a chat or a video player, at a link anyone can open.'
                 : which === 'erd'
                 ? 'Describe tables, columns and relationships as text, and Workline draws the entity relationship diagram.'
                 : flow ? 'Automations like n8n: a trigger starts them, nodes do the steps, and they run on the Workline server.'

@@ -786,10 +786,45 @@ const easyQuiz = () => visualApp('Quiz', [
     ] },
   ],
 });
-export const EASY = { report: REPORT, quiz: QUIZ };
+// Example 3: the workflow fetches a list of videos from the internet (an HTTP request), the app plays them.
+export const VIDEO_LIST_URL = 'https://raw.githubusercontent.com/sraj452002/LineWork/master/samples/videos.json';
+const TIDY = `// STEP 2 of the workflow. The HTTP request node fetched the video list from the internet,
+// and each video in it is now one item. Keep the ones that have a link, and tidy them up.
+return items
+  .filter(v => v.src)
+  .map(v => ({
+    id: v.id,
+    title: v.title,
+    category: v.category || 'Other',
+    duration: v.duration || '',
+    src: v.src,
+    poster: v.poster || '',
+  }));`;
+const playing = '(vars.list1 || (data.videos || [])[0] || {})';
+const easyVideos = () => visualApp('Video app', [
+  node('trigger.manual', 'Run by hand', 80),
+  node('core.http', 'Fetch videos', 340, { method: 'GET', url: VIDEO_LIST_URL, query: [], headers: [], bodyType: 'none', body: '', failOnError: true }),
+  node('core.code', 'Tidy up', 600, { language: 'javascript', code: TIDY }),
+], {
+  name: 'Video app', theme: { ...THEMES.midnight, radius: 14, font: 'system' }, nav: 'top',
+  data: [{ id: 's1', name: 'videos', workflow: 'Video app', input: [], auto: true }],
+  pages: [
+    { id: 'home', name: 'Videos', nav: true, components: [
+      C('v1', 'video', 'player', 0, 0, 8, 40, { src: `{{ ${playing}.src }}`, poster: `{{ ${playing}.poster }}` }),
+      C('v2', 'heading', 'playing', 8, 0, 4, 6, { text: `{{ ${playing}.title || "Loading videos…" }}`, size: 'md' }),
+      C('v3', 'text', 'about', 8, 7, 4, 8, { text: `{{ ${playing}.title ? ${playing}.category + " · " + ${playing}.duration : "" }}` }),
+      C('v4', 'text', 'how', 8, 16, 4, 14, { text: 'These videos come from a **workflow**: it fetches a list from the internet. Click a video below to play it.' }),
+      C('v5', 'search', 'search', 0, 41, 4, 6, { placeholder: 'Search videos' }),
+      C('v6', 'radio', 'category', 4, 41, 8, 6, { label: '', options: '{{ ["All", ...new Set((data.videos || []).map(v => v.category))] }}', value: 'All', inline: true }),
+      C('v7', 'list', 'list1', 0, 48, 12, 60, { rows: '{{ (data.videos || []).filter(v => (!vars.category || vars.category === "All" || v.category === vars.category) && (!vars.search || v.title.toLowerCase().includes(vars.search.toLowerCase()))) }}', title: '{{ item.title }}', subtitle: '{{ item.category + " · " + item.duration }}', image: '{{ item.poster }}' }),
+    ] },
+  ],
+});
+export const EASY = { report: REPORT, quiz: QUIZ, tidy: TIDY };
 APPS.unshift(
   { k: 'a-easy-report', name: 'Easy example 1: Report card', note: 'The simplest start: type marks, a workflow works out total, percentage and grade, and the app shows them', make: easyReport },
   { k: 'a-easy-quiz', name: 'Easy example 2: Quiz', note: 'A workflow holds the questions and marks the answers; the app shows them and the score on a second page', make: easyQuiz },
+  { k: 'a-easy-videos', name: 'Easy example 3: Video app (fetches videos)', note: 'A workflow fetches a video list from the internet with an HTTP request; the app plays them, with search and categories', make: easyVideos },
 );
 
 
