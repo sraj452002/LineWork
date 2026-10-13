@@ -52,7 +52,7 @@ const titles = LIST.map(([id, title, kind, genres, language, year, rating, lengt
     kind, id, title, genre: genres.split('|')[0], genres: genres.split('|').join(' | '), language, year, rating, length, score, about,
     poster: art || img(id, 640, 400), backdrop: art || img(id + '-wide', 1280, 640), src: play(i), seasons,
     rows: tags, rank: tags.includes('top10') ? ++rank : 0, progress,
-    left: (seasons ? 'S1 E' + (2 + (i % 4)) + ' · ' : '') + Math.round((100 - progress) / 100 * (parseInt(length, 10) || 40)) + 'm left',
+    left: (seasons ? 'S1 E' + (2 + (i % 4)) + ' · ' : '') + Math.round((100 - progress) / 100 * (seasons ? 40 : /h/.test(length) ? parseInt(length, 10) * 60 + (parseInt(length.split(' ')[1], 10) || 0) : parseInt(length, 10) || 40)) + 'm left',
     cast: ['Aarav Mehta', 'Diya Rao', 'Kabir Singh', 'Meera Iyer', 'Rohan Das'].slice(i % 3, (i % 3) + 3).join(', '),
     episodes: Array.from({ length: seasons * 6 }, (_, n) => ({
       season: Math.floor(n / 6) + 1, number: (n % 6) + 1, name: EPISODES[n % 6],
@@ -96,7 +96,7 @@ const open = [set('title', '{{ item }}'), set('season', '1'), go('title')];
 const watchIt = what => [set('playing', what), set('episode', '{{ null }}'), go('watch')];
 const tray = (id, y, heading, rows, extra = {}) => [
   C(id + 'H', 'heading', id + 'Heading', 0, y, 9, 5, { text: heading, size: 'md' }),
-  C(id + 'A', 'button', id + 'All', 9, y, 3, 5, { label: 'View all ›', look: 'link', steps: [go(extra.all || 'movies')] }),
+  C(id + 'A', 'button', id + 'All', 9, y, 3, 6, { label: 'View all ›', look: 'link', steps: [go(extra.all || 'movies')] }),
   C(id, 'list', id, 0, y + 6, 12, extra.h || 50, { rows, title: extra.title || '{{ item.title }}', subtitle: extra.subtitle || '{{ item.year + " · " + item.length + " · " + item.language }}', image: '{{ item.poster }}', steps: extra.steps || open }),
 ];
 
@@ -113,8 +113,8 @@ export const ottSpec = () => ({
       C('h4', 'text', 'spotMeta', 8, 16, 4, 5, { text: `{{ ${spot}.title ? "**" + ${spot}.year + " · " + ${spot}.length + " · " + ${spot}.language + " · " + ${spot}.rating + "**" : "" }}` }),
       C('h5', 'text', 'spotAbout', 8, 22, 4, 11, { text: `{{ ${spot}.about || "" }}` }),
       C('h6', 'text', 'spotGenres', 8, 33, 4, 4, { text: `{{ ${spot}.genres || "" }}` }),
-      C('h7', 'button', 'watchNow', 8, 38, 3, 6, { label: '▶ Watch Now', look: 'primary', steps: watchIt(`{{ ${spot} }}`) }),
-      C('h8', 'button', 'spotAdd', 11, 38, 1, 6, { label: '+', look: 'secondary', steps: [set('watchlist', `{{ (vars.watchlist || []).some(t => t.id === ${spot}.id) ? vars.watchlist : [...(vars.watchlist || []), ${spot}] }}`), toast('Added to Watchlist')] }),
+      C('h7', 'button', 'watchNow', 8, 38, 3, 7, { label: '▶ Watch Now', look: 'primary', steps: watchIt(`{{ ${spot} }}`) }),
+      C('h8', 'button', 'spotAdd', 11, 38, 1, 7, { label: '+', look: 'secondary', steps: [set('watchlist', `{{ (vars.watchlist || []).some(t => t.id === ${spot}.id) ? vars.watchlist : [...(vars.watchlist || []), ${spot}] }}`), toast('Added to Watchlist')] }),
       ...tray('continue', 46, '{{ "Continue Watching for " + (vars.profile || "Riya") }}', row('continue'), { subtitle: '{{ item.left }}', all: 'myspace', h: 26 }),
       ...tray('top10', 80, 'Top 10 in India Today', `{{ ${all}.filter(t => t.rank).sort((a, b) => a.rank - b.rank).slice(0, 8) }}`, { title: '{{ "#" + item.rank + "  " + item.title }}' }),
       ...tray('live', 138, '🔴 Live Sports', row('live'), { subtitle: '{{ (item.status === "LIVE" ? "● LIVE · " : "UPCOMING · ") + item.score + " · " + item.watching }}', steps: watchIt('{{ item }}'), all: 'sports', h: 26 }),
@@ -159,7 +159,7 @@ export const ottSpec = () => ({
       C('p2', 'radio', 'profile', 4, 0, 8, 8, { label: 'Who’s watching?', options: 'Riya, Dad, Kids', value: 'Riya', inline: true, steps: [toast('{{ "Watching as " + vars.profile }}')] }),
       C('p3', 'box', 'subscribeBox', 0, 10, 12, 16, { title: 'You’re on the free plan', tint: 'linear-gradient(90deg, #1d2440, #16181f)' }),
       C('p4', 'text', 'subscribeText', 0, 16, 8, 8, { text: 'Subscribe to watch the latest releases, live sports in 4K and download to watch offline.' }),
-      C('p5', 'button', 'subscribe', 9, 16, 3, 6, { label: 'Subscribe', look: 'primary', steps: [go('plans')] }),
+      C('p5', 'button', 'subscribe', 9, 16, 3, 7, { label: 'Subscribe', look: 'primary', steps: [go('plans')] }),
       C('p6', 'heading', 'heading1', 0, 28, 12, 5, { text: '{{ "Watchlist (" + (vars.watchlist || []).length + ")" }}', size: 'md' }),
       C('p7', 'list', 'watchlist', 0, 34, 12, 50, { rows: '{{ vars.watchlist || [] }}', title: '{{ item.title }}', subtitle: '{{ item.year + " · " + item.length }}', image: '{{ item.poster }}', steps: open }),
       ...tray('again', 86, 'Continue Watching', row('continue'), { subtitle: '{{ item.left }}', all: 'home', h: 26 }),
@@ -171,7 +171,7 @@ export const ottSpec = () => ({
       C('d3', 'badge', 'genreBadge', 0, 53, 2, 5, { text: '{{ vars.title && vars.title.genre }}', tone: 'blue' }),
       C('d4', 'badge', 'langBadge', 2, 53, 2, 5, { text: '{{ vars.title && vars.title.language }}', tone: 'purple' }),
       C('d5', 'badge', 'scoreBadge', 4, 53, 2, 5, { text: '{{ vars.title ? "★ " + vars.title.score : "" }}', tone: 'amber' }),
-      C('d6', 'button', 'add', 8, 53, 4, 6, { label: '{{ (vars.watchlist || []).some(t => vars.title && t.id === vars.title.id) ? "✓ In Watchlist" : "+ Watchlist" }}', look: 'secondary', steps: [set('watchlist', '{{ (vars.watchlist || []).some(t => t.id === vars.title.id) ? vars.watchlist.filter(t => t.id !== vars.title.id) : [...(vars.watchlist || []), vars.title] }}'), toast('Watchlist updated')] }),
+      C('d6', 'button', 'add', 8, 52, 4, 7, { label: '{{ (vars.watchlist || []).some(t => vars.title && t.id === vars.title.id) ? "✓ In Watchlist" : "+ Watchlist" }}', look: 'secondary', steps: [set('watchlist', '{{ (vars.watchlist || []).some(t => t.id === vars.title.id) ? vars.watchlist.filter(t => t.id !== vars.title.id) : [...(vars.watchlist || []), vars.title] }}'), toast('Watchlist updated')] }),
       C('d7', 'tabs', 'info', 0, 60, 8, 22, { tabs: 'Overview | {{ vars.title ? vars.title.about + " **Genres:** " + vars.title.genres : "" }}\nCast | {{ vars.title ? vars.title.cast : "" }}\nAudio | Hindi, English, Tamil, Telugu · Subtitles: English, Hindi' }),
       C('d8', 'rating', 'myRating', 8, 60, 4, 9, { label: 'Rate this', max: 5, steps: [toast('Thanks! We’ll recommend more like this.')] }),
       C('d9', 'select', 'season', 8, 70, 4, 9, { label: 'Season', options: '{{ vars.title && vars.title.seasons ? Array.from({ length: vars.title.seasons }, (_, i) => ({ label: "Season " + (i + 1), value: i + 1 })) : [{ label: "Movie", value: 1 }] }}', value: '1' }),
@@ -198,9 +198,9 @@ export const ottSpec = () => ({
       C('b2', 'radio', 'period', 0, 8, 12, 6, { label: '', options: 'Monthly, 3 Months, Yearly', value: '3 Months', inline: true }),
       ...['Mobile', 'Super', 'Premium'].map((p, i) => C('b' + (3 + i), 'stat', 'price' + p, i * 4, 15, 4, 14, { label: p + (p === 'Super' ? '  ★ Most popular' : ''), value: `{{ (p => p ? "₹" + (vars.period === "Monthly" ? p.monthly : vars.period === "Yearly" ? p.yearly : p.quarterly) : "–")(${all}.find(t => t.plan === "${p}")) }}`, note: '{{ vars.period === "Monthly" ? "per month" : vars.period === "Yearly" ? "per year" : "per 3 months" }}', card: true })),
       C('b6', 'table', 'compare', 0, 30, 12, 30, { title: 'Compare plans', rows: `{{ ${all}.filter(t => t.kind === "Plan") }}`, columns: 'plan, devices, quality, ads, audio, downloads', search: false, card: true }),
-      C('b7', 'radio', 'chosen', 0, 61, 6, 12, { label: 'Your plan', options: 'Mobile, Super, Premium', value: 'Super' }),
+      C('b7', 'radio', 'chosen', 0, 61, 6, 16, { label: 'Your plan', options: 'Mobile, Super, Premium', value: 'Super' }),
       C('b8', 'form', 'pay', 6, 61, 6, 32, { title: '{{ "Pay for " + (vars.chosen || "Super") + " · " + vars.period }}', fields: 'Name*\nMobile number* (tel)', button: 'Continue to pay', thanks: 'This is a demo. Connect a payment workflow (Razorpay, Stripe) to take real payments.', steps: [toast('Demo: no payment taken')] }),
-      C('b9', 'accordion', 'faq', 0, 74, 6, 26, { items: 'Can I cancel anytime? | Yes. Your plan runs to the end of the period you paid for.\nHow many devices? | Mobile: 1, Super: 2, Premium: 4 at the same time.\nIs live sport included? | Yes, on every plan.', rows: '' }),
+      C('b9', 'accordion', 'faq', 0, 78, 6, 26, { items: 'Can I cancel anytime? | Yes. Your plan runs to the end of the period you paid for.\nHow many devices? | Mobile: 1, Super: 2, Premium: 4 at the same time.\nIs live sport included? | Yes, on every plan.', rows: '' }),
     ] },
   ],
 });
