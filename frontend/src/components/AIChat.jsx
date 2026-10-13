@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { IC, Ico } from './Toolbar.jsx';
 import { useUI } from './ui.jsx';
 import { ago } from '../lib/utils.js';
-import { prepImage } from '../lib/ai.js';
+import { aiProvider, aiProviders, onAIThinking, prepImage, sampleP, setAIProvider } from '../lib/ai.js';
 
 // What the chat can make. `type` is the diagram type it uses; BPMN is a flowchart with swimlanes.
 export const KINDS = [
@@ -24,6 +24,12 @@ export default function AIChat({ chat, chats, busy, status, aiOff, hasDoc, selLa
   const [hint, setHint] = useState('');
   const inputRef = useRef(null), fileRef = useRef(null), imageRef = useRef(null), logRef = useRef(null);
   const msgs = chat ? chat.msgs : [];
+  // The model, when the server offers more than one; and what a reasoning model is thinking, while it works.
+  const [model, setModel] = useState(() => aiProvider()?.id || null);
+  const [models, setModels] = useState(aiProviders);
+  useEffect(() => { sampleP.then(() => { setModels(aiProviders); setModel(aiProvider()?.id || null); }); }, []);
+  const [thinking, setThinking] = useState('');
+  useEffect(() => { setThinking(''); if (!busy) return undefined; return onAIThinking(t => setThinking(t)); }, [busy]);
 
   useEffect(() => { inputRef.current?.focus(); }, [focusKey]);
   useEffect(() => { if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight; }, [msgs.length, busy]);
@@ -69,6 +75,12 @@ export default function AIChat({ chat, chats, busy, status, aiOff, hasDoc, selLa
       onKeyDown={e => { if (e.key === 'Escape' && !document.querySelector('.menu,.modal')) { e.stopPropagation(); onClose(); } }}>
       <header className="ai-head">
         <h2>{chat && chat.title ? chat.title : 'New Chat'}</h2>
+        {models.length > 1 && (
+          <select className="ai-model" aria-label="AI model" title={models.find(m => m.id === model)?.model} value={model || ''}
+            onChange={e => { setAIProvider(e.target.value); setModel(e.target.value); }}>
+            {models.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+          </select>
+        )}
         <button className="ai-ib" aria-label="New chat" title="New chat" onClick={() => { onNew(); setText(''); setKind(null); setFile(null); }}><Ico d={IC.plus} /></button>
         <button className="ai-ib" aria-label="Chat history" title="Chat history" aria-haspopup="menu" onClick={e => history(e.currentTarget)}><Ico d={IC.clock} /></button>
         <button className="ai-ib" aria-label="Close AI chat (Esc)" title="Close  Esc" onClick={onClose}><Ico d={IC.close} /></button>
@@ -110,7 +122,8 @@ export default function AIChat({ chat, chats, busy, status, aiOff, hasDoc, selLa
                 <p>{m.text}</p>
               </div>
             ))}
-            {busy && <div className="ai-msg a"><Ico d={IC.ai} /><p className="busy">{status || 'Working'}</p></div>}
+            {busy && <div className="ai-msg a"><Ico d={IC.ai} /><p className="busy">{thinking ? 'Thinking' : status || 'Working'}</p></div>}
+            {busy && thinking && <details className="ai-think" open><summary>Reasoning</summary><p>{thinking.length > 600 ? '…' + thinking.slice(-600) : thinking}</p></details>}
           </div>
         )}
       </div>

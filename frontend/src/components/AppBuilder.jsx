@@ -11,7 +11,7 @@ import { useUI } from './ui.jsx';
 
 const hasFlow = f => !!(f && f.flow && Array.isArray(f.flow.nodes) && f.flow.nodes.length);
 
-export default function AppBuilder({ file, update, files = [] }) {
+export default function AppBuilder({ file, update, files = [], onGuide }) {
   const { toast, popup } = useUI();
   const ui = file.ui || null;
   // Workflows this app could run: this file's own, and the account's other workflow files.
@@ -82,6 +82,7 @@ export default function AppBuilder({ file, update, files = [] }) {
         </button>
         <button className="btn" aria-haspopup="menu" onClick={e => startFrom(e.currentTarget)}>Start from ▾</button>
         <button className="btn" onClick={() => setReload(n => n + 1)} title="Load the preview again">↻ Reload</button>
+        {onGuide && <button className="btn" onClick={() => onGuide('apps')} title="How custom apps work: workline.run, helpers, publishing">? Guide</button>}
         <span className="ab-sp" />
         {link && <>
           <input className="ab-link" readOnly value={link} aria-label="App link" onFocus={e => e.target.select()} />
@@ -105,7 +106,7 @@ export default function AppBuilder({ file, update, files = [] }) {
           }} />
         <iframe ref={frame} className="ab-preview" title="App preview" sandbox="allow-scripts allow-forms allow-modals" srcDoc={preview} />
       </div>
-      <p className="ab-help">In the page’s script, <code>await workline.run('Workflow name', {'{ … }'})</code> runs one of its workflows with that input and gives back what the workflow’s last steps output (a list). <code>workline.workflows</code> lists them. <code>cards</code>, <code>bars</code>, <code>line</code>, <code>pie</code> and <code>table</code> draw results.</p>
+      <p className="ab-help">In the page’s script, <code>await workline.run('Workflow name', {'{ … }'})</code> runs one of its workflows with that input and gives back what the workflow’s last steps output (a list). <code>workline.workflows</code> lists them. <code>cards</code>, <code>bars</code>, <code>line</code>, <code>pie</code> and <code>table</code> draw results.{onGuide && <> <button className="link" onClick={() => onGuide('apps')}>More in the guide</button></>}</p>
     </div>
   );
 }

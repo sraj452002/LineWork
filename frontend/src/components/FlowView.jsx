@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useUI } from './ui.jsx';
-import { serverInfo } from '../lib/backend.js';
+import { api, serverInfo } from '../lib/backend.js';
 import { clone, rid } from '../lib/utils.js';
 import {
   CRED_TYPES, GROUPS, ICON, NODES, createCredential, deleteCredential, emptyFlow, getRun, inputsOf, listCredentials,
@@ -65,6 +65,13 @@ export default function FlowView({ file, update, visible, saveState = 'Saved', o
   const [credDlg, setCredDlg] = useState(null); // {types, pick?: id => void}
   const [help, setHelp] = useState(null);       // a node type explained in a popup
   const [publish, setPublish] = useState(false);
+  // The page a Page trigger draws, made from the workflow as it is now (no need to save or turn it Active).
+  const [pagePreview, setPagePreview] = useState(null);
+  const previewPage = async nodeId => {
+    setPagePreview({ busy: true });
+    try { const r = await api(`/flows/${encodeURIComponent(file.id)}/page`, { method: 'POST', body: { flow: clone(flow), nodeId } }); setPagePreview({ html: r.html }); }
+    catch (e) { setPagePreview(null); toast(e.message || 'The page couldn’t be made.'); }
+  };
   const [runs, setRuns] = useState([]);
   const stage = useRef(null), runBtn = useRef(null), importRef = useRef(null);
   const pref = (k, d) => { try { const v = localStorage.getItem('linework:flow-' + k); return v == null ? d : v === '1'; } catch (e) { return d; } };
@@ -349,7 +356,8 @@ export default function FlowView({ file, update, visible, saveState = 'Saved', o
         {sideOpen && <aside className="fv-panel">
           {selected ? (
             <NodePanel key={selected.id} node={selected} flow={flow} change={change} creds={creds} tab={tab} setTab={setTab} result={status(selected.id)} active={!!flow.active}
-              onHelp={setHelp} onCred={(types, pick) => setCredDlg({ types, pick })} onRun={() => go(selected.id)} onDelete={() => remove({ kind: 'node', id: selected.id })} canRun={!!server && !busy} />
+              onHelp={setHelp} onCred={(types, pick) => setCredDlg({ types, pick })} onRun={() => go(selected.id)} onDelete={() => remove({ kind: 'node', id: selected.id })} canRun={!!server && !busy}
+              onPreview={server ? () => previewPage(selected.id) : null} />
           ) : (
             <div className="fv-over">
               <h3>Workflow</h3>
@@ -375,6 +383,14 @@ export default function FlowView({ file, update, visible, saveState = 'Saved', o
             <button className="fv-help-x" aria-label="Close" onClick={() => setHelp(null)}>×</button>
             <NodeCard type={help} d={nodeDef(help)} />
             {onGuide && <footer><button className="btn" onClick={() => { const t = help; setHelp(null); onGuide('flow:' + t); }}>Open the full workflows guide</button></footer>}
+          </div>
+        </div>
+      )}
+      {pagePreview && (
+        <div className="modal" onClick={e => { if (e.target === e.currentTarget) setPagePreview(null); }}>
+          <div className="mbox fv-pagebox" role="dialog" aria-modal="true" aria-label="Page preview">
+            <div className="fv-pagehead"><b>Page preview</b><small className="muted">Buttons and forms work at the page’s link (turn the workflow Active).</small><button className="btn" onClick={() => setPagePreview(null)}>Close</button></div>
+            {pagePreview.busy ? <p className="muted">Running the workflow…</p> : <iframe title="Page preview" sandbox="" srcDoc={pagePreview.html} />}
           </div>
         </div>
       )}
@@ -451,7 +467,7 @@ function Palette({ at, view, onPick, onClose }) {
 }
 
 // Settings for one node, and what it produced in the last run.
-function NodePanel({ node, flow, change, creds, tab, setTab, result, active, onCred, onRun, onDelete, canRun, onHelp }) {
+function NodePanel({ node, flow, change, creds, tab, setTab, result, active, onCred, onRun, onDelete, canRun, onHelp, onPreview }) {
   const d = nodeDef(node.type);
   const set = (k, v) => change(f => {
     const n = f.nodes.find(x => x.id === node.id), before = { ...(n.params || {}) };
@@ -499,7 +515,8 @@ function NodePanel({ node, flow, change, creds, tab, setTab, result, active, onC
           {d.hook && (
             <div className="fv-f"><span>{d.hook}</span>
               <div className="fv-row"><input readOnly value={hookUrl} onFocus={e => e.target.select()} /><button type="button" className="btn" onClick={() => { navigator.clipboard?.writeText(hookUrl); }}>Copy</button>
-                {node.type === 'trigger.form' && <a className="btn" href={hookUrl} target="_blank" rel="noreferrer">Open</a>}</div>
+                {(node.type === 'trigger.form' || node.type === 'trigger.page') && <a className="btn" href={hookUrl} target="_blank" rel="noreferrer">Open</a>}</div>
+              {node.type === 'trigger.page' && onPreview && <button type="button" className="btn fv-preview" onClick={onPreview}>Preview page</button>}
               <small className={active ? 'ok' : 'muted'}>{active ? 'Listening. ' : 'Turn the workflow Active (and let it save) to listen. '}{d.hookHelp}</small>
             </div>
           )}

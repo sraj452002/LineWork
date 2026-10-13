@@ -188,6 +188,7 @@ export default function Editor({ file, files, update, saveState, onBack, onRenam
           ...(onDelete ? [{ label: 'Delete file', danger: true, act: onDelete }, '-'] : []),
           { label: 'How to use Workline', note: 'Guide to the whole app', act: () => onGuide('app') },
           { label: 'Workflows guide', note: 'Triggers, expressions and every node', act: () => onGuide('flow') },
+          { label: 'Custom apps guide', note: 'Your own UI on workflows, dashboards, code languages', act: () => onGuide('apps') },
           { label: 'Database schema guide', note: 'Tables, columns, relationships', act: () => onGuide('erd') },
         ])}>⋯</button>
       </div>
@@ -237,7 +238,7 @@ export default function Editor({ file, files, update, saveState, onBack, onRenam
         {view === 'app' && (
           <div className="apppane">
             <Suspense fallback={<div className="cw-loading">Loading…</div>}>
-              <AppBuilder file={file} update={update} files={files} />
+              <AppBuilder file={file} update={update} files={files} onGuide={onGuide} />
             </Suspense>
           </div>
         )}

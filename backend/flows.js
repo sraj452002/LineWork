@@ -7,8 +7,9 @@ import { WORKLINE_NODES } from './flow-workline.js';
 import { POLL_EVERY, TRIGGER_TYPES } from './flow-triggers.js';
 import { WEB_NODES } from './flow-web.js';
 import { EXTRA_NODES } from './flow-extra.js';
+import { UI_NODES, renderPage } from './flow-ui.js';
 
-const TYPES = { ...NODE_TYPES, ...APP_NODES, ...WORKLINE_NODES, ...TRIGGER_TYPES, ...WEB_NODES, ...EXTRA_NODES };
+const TYPES = { ...NODE_TYPES, ...APP_NODES, ...WORKLINE_NODES, ...TRIGGER_TYPES, ...WEB_NODES, ...EXTRA_NODES, ...UI_NODES };
 import { limiter, newToken } from './auth.js';
 
 /* Workflows on the server: credentials, runs, webhooks and schedules. A workflow lives in a file
@@ -161,7 +162,8 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
   const running = uid => [...live.values()].filter(x => x.uid === uid && x.run.status === 'running').length;
   // Start a run in the background. `run.done` (not saved) settles when it ends; `run.reply` when a Respond
   // node answers (or the run ends without one).
-  const start = (uid, fileId, flow, startId, input, trigger) => {
+  // page: for a run that draws a page (the Page trigger), {form} with what was sent; UI nodes add its blocks.
+  const start = (uid, fileId, flow, startId, input, trigger, page = null) => {
     if (running(uid) >= RUNNING_PER_USER) throw new FlowError(`${RUNNING_PER_USER} workflows are already running. Wait for one to finish.`, 'busy');
     const run = { id: newToken().slice(0, 16), fileId, trigger, startId, status: 'running', started: Date.now(), nodes: {} };
     let answered, answer = null;
@@ -169,6 +171,8 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
     live.set(run.id, { uid, run });
     const ctx = ctxFor(uid);
     ctx.respond = r => { if (!answer) { answer = r; answered(r); } };
+    ctx.page = { blocks: [], form: (page && page.form) || {} };
+    Object.defineProperty(run, 'page', { value: ctx.page });
     Object.defineProperty(run, 'done', { value: (async () => {
       let r = null;
       try {
@@ -337,6 +341,30 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
     await sendItems(res, () => runForItems(a.uid, fileId, flow, asItems((req.body || {}).input), 'app'));
   });
 
+  /* ---- pages made of UI nodes (flow-ui.js): the Page trigger's link ----
+     Opening it runs the workflow ({action: 'open'}); a form on it runs it again with the answers. The page
+     is the UI nodes' blocks, drawn as HTML with no scripts and served as a sandbox. */
+  const PAGE_HEADERS = { 'content-security-policy': "sandbox allow-forms allow-popups allow-popups-to-escape-sandbox; default-src 'none'; img-src https: http: data:; media-src https: http:; style-src 'unsafe-inline'; form-action 'self'", 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'cache-control': 'no-store' };
+  const pageInput = req => {
+    const body = req.method === 'POST' && req.body && typeof req.body === 'object' ? req.body : {};
+    const form = Object.fromEntries(Object.entries(body).filter(([k]) => k !== '_action').map(([k, v]) => [k, String(v ?? '').slice(0, 10_000)]).slice(0, 50));
+    const query = Object.fromEntries(Object.entries(req.query || {}).map(([k, v]) => [k, String(v).slice(0, 2000)]).slice(0, 30));
+    return { action: req.method === 'POST' ? String(body._action || 'submit').slice(0, 60) : 'open', query, form };
+  };
+  // Run a flow from its Page trigger and draw what its UI nodes made. Waits up to 25 s.
+  const drawPage = async (uid, fileId, flow, node, input, trigger) => {
+    const run = start(uid, fileId, flow, node.id, [{ json: input }], trigger, { form: input.form });
+    const got = await Promise.race([run.done, new Promise(r => setTimeout(() => r(null), 25_000))]);
+    const p = node.params || {};
+    if (!got) return renderPage(p, run.page.blocks, { query: input.query, error: 'This page is taking too long. Try again in a moment.' });
+    return renderPage(p, run.page.blocks, { query: input.query, error: run.status === 'error' ? `Something went wrong: ${run.error}` : '' });
+  };
+  async function servePage(req, res, h, flow, node) {
+    if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).json({ error: 'method' });
+    try { res.set(PAGE_HEADERS).type('html').send(await drawPage(h.uid, h.fileId, flow, node, pageInput(req), 'page')); }
+    catch (e) { res.status(e.code === 'busy' ? 429 : 500).set(PAGE_HEADERS).type('html').send(renderPage(node.params || {}, [], { error: e.code === 'busy' ? 'Busy right now. Try again in a moment.' : 'This page couldn’t be made.' })); }
+  }
+
   /* ---- webhooks: anyone with the URL, so they're mounted before the API's same-site checks ---- */
   const hooks = express.Router();
   const hits = limiter({ max: 120, windowMs: 60_000 });
@@ -352,6 +380,7 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
     const flow = await savedFlow(h.uid, h.fileId);
     if (!flow || !flow.active) return res.status(404).json({ error: 'not_found' });
     const node = flow.nodes.find(n => n.id === h.nodeId), type = node && TYPES[node.type];
+    if (type?.page) return servePage(req, res, h, flow, node);
     const reply = r => (r.type === 'html' ? res.status(r.status).type('html').send(r.body) : res.status(r.status).json(r.body));
     try {
       if (type?.hook) {
@@ -430,6 +459,17 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
       if (!flow || !Array.isArray(flow.nodes) || flow.nodes.length > 300 || !Array.isArray(flow.edges)) return res.status(400).json({ error: 'bad_flow', message: 'That isn’t a workflow.' });
       const { input, trigger } = req.body;
       await sendItems(res, () => runForItems(req.user.id, req.params.fileId, flow, asItems(input), trigger === 'app' ? 'app' : 'dashboard'));
+    });
+    // The page a flow's Page trigger draws, for the editor's preview (the flow as it is in the editor).
+    api.post('/flows/:fileId/page', signedIn, async (req, res) => {
+      if (!ID.test(req.params.fileId)) return res.status(400).json({ error: 'bad_id' });
+      const { flow, nodeId, input } = req.body || {};
+      if (!flow || !Array.isArray(flow.nodes) || flow.nodes.length > 300 || !Array.isArray(flow.edges)) return res.status(400).json({ error: 'bad_flow', message: 'That isn’t a workflow.' });
+      const node = flow.nodes.find(n => n.id === nodeId) || flow.nodes.find(n => n.type === 'trigger.page');
+      if (!node || node.type !== 'trigger.page') return res.status(400).json({ error: 'no_page', message: 'Add a Page trigger first.' });
+      const i = input && typeof input === 'object' ? input : {};
+      try { res.json({ html: await drawPage(req.user.id, req.params.fileId, flow, node, { action: String(i.action || 'open'), query: i.query && typeof i.query === 'object' ? i.query : {}, form: i.form && typeof i.form === 'object' ? i.form : {} }, 'page') }); }
+      catch (e) { res.status(e.code === 'busy' ? 429 : 400).json({ error: e.code || 'flow_error', message: e.message }); }
     });
     // Run one of the account's saved workflows with some input and answer with its output in full: what a
     // custom app (the App view) does while it's being built.

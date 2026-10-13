@@ -29,6 +29,8 @@ services:
         sync: false
       - key: ANTHROPIC_API_KEY
         sync: false
+      - key: NVIDIA_API_KEY
+        sync: false
       # Encrypts workflow credentials; Render makes a random one once.
       - key: FLOW_SECRET
         generateValue: true

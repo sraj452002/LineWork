@@ -17,6 +17,7 @@ const ID = /^[\w-]{1,80}$/;
 export function createApp(store, opts = {}) {
   const {
     allowSignup = true, aiKey = '', aiModel = 'claude-sonnet-5-5', aiBase = 'https://api.anthropic.com',
+    nvidiaKey = '', nvidiaModel = 'nvidia/nemotron-3.5-lightning-30b-a3b', nvidiaBase = 'https://integrate.api.nvidia.com/v1',
     aiDailyLimit = 50, trustProxy = false,
     mailer = createMailer(), oauth = {}, appUrl = '', allowLocal = false, dbAllowPrivate = false, dbTimeout = 30_000,
   } = opts;
@@ -78,7 +79,7 @@ export function createApp(store, opts = {}) {
   api.get('/server', (req, res) => res.json({
     name: 'linework-server', ...accounts.info(), allowLocal,
     features: ['versions', 'share', 'folders', 'ai-limits', '2fa', 'db', 'flows'],
-    ai: { configured: Boolean(aiKey), dailyLimit: aiDailyLimit },
+    ai: { configured: Boolean(aiKey || nvidiaKey), dailyLimit: aiDailyLimit },
   }));
 
   /* ---- files ---- */
@@ -204,11 +205,18 @@ export function createApp(store, opts = {}) {
     await storing(res, sh.user_id, async () => { await store.saveFile(sh.user_id, sh.file_id, p.text, Number(p.file.updated) || Date.now()); flows.reindex(sh.user_id, sh.file_id, p.file); }, false);
   });
 
-  /* ---- AI, with a daily allowance per account ---- */
+  /* ---- AI, with a daily allowance per account ----
+     Models: Claude (ANTHROPIC_API_KEY) and NVIDIA's (NVIDIA_API_KEY, an OpenAI-style API at
+     integrate.api.nvidia.com). Each request picks one; the answer streams back in Anthropic's event
+     format either way, so the app reads one format. */
+  const providers = [
+    ...(aiKey ? [{ id: 'claude', label: 'Claude', model: aiModel, images: true }] : []),
+    ...(nvidiaKey ? [{ id: 'nvidia', label: 'NVIDIA Nemotron', model: nvidiaModel, images: false, thinking: true }] : []),
+  ];
   api.get('/ai/status', (req, res) => {
     const used = req.user ? store.aiUsed(req.user.id) : 0;
-    const reason = !aiKey ? 'no_key' : !req.user ? 'signed_out' : aiDailyLimit > 0 && used >= aiDailyLimit ? 'daily_limit' : null;
-    res.json({ enabled: !reason, reason, limit: aiDailyLimit, used });
+    const reason = !providers.length ? 'no_key' : !req.user ? 'signed_out' : aiDailyLimit > 0 && used >= aiDailyLimit ? 'daily_limit' : null;
+    res.json({ enabled: !reason, reason, limit: aiDailyLimit, used, providers });
   });
   /* ---- live databases (the Database view): see dbconnect.js ---- */
   api.post('/db', signedIn, async (req, res) => {
@@ -217,8 +225,9 @@ export function createApp(store, opts = {}) {
   });
 
   api.post('/ai', signedIn, async (req, res) => {
-    if (!aiKey) return res.status(503).json({ error: 'not_configured' });
+    if (!providers.length) return res.status(503).json({ error: 'not_configured' });
     const b = req.body || {};
+    const provider = providers.find(p => p.id === b.provider) || providers[0];
     const prompt = typeof b.prompt === 'string' ? b.prompt : '';
     if (!prompt) return res.status(400).json({ error: 'bad_request' });
     if (prompt.length > 400_000) return res.status(413).json({ error: 'too_large' });
@@ -227,6 +236,7 @@ export function createApp(store, opts = {}) {
     if (images.length > 4) return res.status(413).json({ error: 'too_many_images' });
     if (images.some(im => !TYPES.includes(im?.media_type) || typeof im?.data !== 'string')) return res.status(400).json({ error: 'bad_image' });
     if (images.some(im => im.data.length > 6_000_000)) return res.status(413).json({ error: 'too_large' });
+    if (images.length && !provider.images) return res.status(400).json({ error: 'bad_image', message: `${provider.label} doesn't read pictures. Pick Claude for that.` });
     if (!store.useAi(req.user.id, aiDailyLimit)) return res.status(429).json({ error: 'daily_limit', limit: aiDailyLimit });
 
     const content = images.length
@@ -234,6 +244,7 @@ export function createApp(store, opts = {}) {
       : prompt;
     const ctl = new AbortController();
     res.on('close', () => ctl.abort());
+    if (provider.id === 'nvidia') return nvidiaStream(prompt, res, ctl);
     let up;
     try {
       up = await fetch(`${aiBase}/v1/messages`, {
@@ -251,6 +262,56 @@ export function createApp(store, opts = {}) {
     res.set('Content-Type', 'text/event-stream');
     Readable.fromWeb(up.body).on('error', () => res.end()).pipe(res);
   });
+
+  // NVIDIA (OpenAI-style chat completions, streamed). Its chunks carry the answer in delta.content and
+  // the model's reasoning in delta.reasoning_content; they're passed on as Anthropic-style text_delta and
+  // thinking_delta events.
+  async function nvidiaStream(prompt, res, ctl) {
+    let up;
+    try {
+      up = await fetch(`${nvidiaBase.replace(/\/+$/, '')}/chat/completions`, {
+        method: 'POST', signal: ctl.signal,
+        headers: { authorization: `Bearer ${nvidiaKey}`, 'content-type': 'application/json', accept: 'text/event-stream' },
+        body: JSON.stringify({
+          model: nvidiaModel, messages: [{ role: 'user', content: prompt }], stream: true,
+          temperature: 1, top_p: 0.95, max_tokens: 16384, reasoning_budget: 16384, chat_template_kwargs: { enable_thinking: true },
+        }),
+      });
+    } catch (e) {
+      return res.headersSent || res.status(502).json({ error: 'upstream' });
+    }
+    if (!up.ok || !up.body) {
+      console.log('NVIDIA API error', up.status, await up.text().catch(() => ''));
+      return res.status(up.status === 429 ? 429 : 502).json({ error: 'upstream' });
+    }
+    res.set('Content-Type', 'text/event-stream');
+    const send = ev => res.write(`event: ${ev.type}\ndata: ${JSON.stringify(ev)}\n\n`);
+    const reader = up.body.getReader(), dec = new TextDecoder();
+    let buf = '';
+    try {
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let i;
+        while ((i = buf.indexOf('\n')) >= 0) {
+          const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+          if (!line.startsWith('data:')) continue;
+          const data = line.slice(5).trim();
+          if (data === '[DONE]') continue;
+          let chunk; try { chunk = JSON.parse(data); } catch (e) { continue; }
+          if (chunk.error) { send({ type: 'error', error: { type: 'api_error', message: String(chunk.error.message || chunk.error) } }); continue; }
+          const delta = chunk.choices?.[0]?.delta || {};
+          if (delta.reasoning_content) send({ type: 'content_block_delta', index: 0, delta: { type: 'thinking_delta', thinking: delta.reasoning_content } });
+          if (delta.content) send({ type: 'content_block_delta', index: 1, delta: { type: 'text_delta', text: delta.content } });
+        }
+      }
+      send({ type: 'message_stop' });
+    } catch (e) {
+      if (!ctl.signal.aborted) send({ type: 'error', error: { type: 'api_error', message: 'The stream broke off.' } });
+    }
+    res.end();
+  }
 
   api.use((req, res) => res.status(404).json({ error: 'not_found' }));
   // Bad JSON and oversized bodies, as JSON errors.

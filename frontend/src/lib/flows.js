@@ -75,6 +75,10 @@ const I = {
   key: 'M14 10a4 4 0 1 0-3.5 4L9 16l2 2-2 2 1 1 6-6.5A4 4 0 0 0 14 10z',
   graph: 'M12 3l8 4.5v9L12 21l-8-4.5v-9zM12 3v18M4 7.5l16 9M20 7.5l-16 9',
   note: 'M5 4h14v11l-5 5H5zM14 20v-5h5',
+  page: 'M3 4h18v16H3zM3 8.5h18M7 12.5h6M7 16h10',
+  cards: 'M3 5h8v6H3zM13 5h8v6h-8zM3 13h8v6H3zM13 13h8v6h-8z',
+  chart: 'M4 20h16M7 17v-6M12 17V7M17 17v-9',
+  buttons: 'M3 8h8v8H3zM13 8h8v8h-8zM6 12h2M16 12h2',
 };
 export const ICON = I;
 
@@ -104,7 +108,7 @@ const EXTRACT = [
 const EMAIL = [{ k: 'to', label: 'To', kind: 'text' }, { k: 'subject', label: 'Subject', kind: 'text' }, { k: 'text', label: 'Text', kind: 'textarea' }, { k: 'html', label: 'HTML (optional)', kind: 'textarea' }, { k: 'from', label: 'From (blank: the credential’s)', kind: 'text' }];
 const LANGS = [['EN-US', 'English (US)'], ['EN-GB', 'English (UK)'], ['HI', 'Hindi'], ['DE', 'German'], ['FR', 'French'], ['ES', 'Spanish'], ['IT', 'Italian'], ['PT-BR', 'Portuguese (Brazil)'], ['NL', 'Dutch'], ['PL', 'Polish'], ['RU', 'Russian'], ['JA', 'Japanese'], ['KO', 'Korean'], ['ZH', 'Chinese'], ['AR', 'Arabic'], ['TR', 'Turkish'], ['ID', 'Indonesian'], ['UK', 'Ukrainian']];
 
-export const GROUPS = ['Triggers', 'Workline', 'Flow', 'Data', 'Web', 'AI', 'Communication', 'Productivity', 'Developer', 'Sales & payments', 'Storage & feeds'];
+export const GROUPS = ['Triggers', 'Workline', 'Flow', 'Data', 'UI', 'Web', 'AI', 'Communication', 'Productivity', 'Developer', 'Sales & payments', 'Storage & feeds'];
 export const NODES = {
   /* ---- triggers ---- */
   'trigger.manual': { group: 'Triggers', label: 'Run by hand', note: 'Starts when you press Run', icon: I.play, tone: 'green', trigger: true, fields: [] },
@@ -190,6 +194,49 @@ export const NODES = {
     fields: [{ k: 'with', label: 'Answer with', kind: 'select', options: [['first', 'The first item'], ['items', 'All items'], ['json', 'This JSON'], ['text', 'This text']] }, { k: 'body', label: 'Body', kind: 'textarea', ...only('with', 'json', 'text') },
       { k: 'contentType', label: 'Content type', kind: 'text', hint: 'text/plain or text/html', ...only('with', 'text') }, { k: 'status', label: 'Status', kind: 'number' }, { k: 'headers', label: 'Headers', kind: 'pairs' }],
     help: 'Set the Webhook trigger’s Respond to “When the workflow ends”.', defaults: () => ({ with: 'first', status: 200 }) },
+  /* ---- UI: pages made of nodes (backend/flow-ui.js) ---- */
+  'trigger.page': { group: 'Triggers', label: 'Page', note: 'A web page made of UI nodes, at its own link', icon: I.page, tone: 'sky', trigger: true, hook: 'Page link',
+    hookHelp: 'Opening it runs the workflow and shows what its UI nodes draw. A form on it runs the workflow again with the answers.',
+    fields: [
+      { k: 'title', label: 'Title', kind: 'text' }, { k: 'description', label: 'Description', kind: 'textarea' },
+      { k: 'theme', label: 'Look', kind: 'select', options: [['light', 'Light'], ['dark', 'Dark']] },
+      { k: 'width', label: 'Width', kind: 'select', options: [['normal', 'Normal'], ['wide', 'Wide']] },
+    ],
+    help: 'The workflow gets { action, query, form }: action is "open" when the page is opened, or the name of the form that was sent; query is the link’s ?… values (Buttons set them); form is the answers.',
+    defaults: () => ({ path: secretPath(), title: 'My page', theme: 'light', width: 'normal' }) },
+  'ui.text': { group: 'UI', label: 'Text', note: 'A heading, words or a note on the page', icon: I.text, tone: 'sky',
+    fields: [{ k: 'text', label: 'Text', kind: 'textarea', hint: '# A heading\nWords with **bold**, [a link](https://…) and {{ $json.name }}\n- a list' }, { k: 'style', label: 'Style', kind: 'select', options: [['text', 'Text'], ['heading', 'Heading'], ['note', 'Note (in a box)']] }],
+    defaults: () => ({ text: '## Hello\nThis page is made of workflow nodes.', style: 'text' }) },
+  'ui.cards': { group: 'UI', label: 'Cards', note: 'Big numbers: totals, counts, the latest value', icon: I.cards, tone: 'sky',
+    fields: [{ k: 'title', label: 'Title', kind: 'text' }, { k: 'cards', label: 'Cards', kind: 'pairs', hint: 'a label and its value, e.g. Orders and {{ $items.length }}' }],
+    help: 'Values can use {{ $json… }} (the first item) or {{ $items… }} (all of them), e.g. {{ $items.reduce((s, i) => s + i.total, 0) }}.',
+    defaults: () => ({ cards: [{ name: 'Items', value: '{{ $items.length }}' }] }) },
+  'ui.table': { group: 'UI', label: 'Table', note: 'The items as rows', icon: I.table, tone: 'sky',
+    fields: [{ k: 'title', label: 'Title', kind: 'text' }, { k: 'columns', label: 'Columns (blank: all)', kind: 'text', hint: 'name, email, total' }, { k: 'max', label: 'At most this many rows', kind: 'number' }],
+    defaults: () => ({ max: 100 }) },
+  'ui.chart': { group: 'UI', label: 'Chart', note: 'A bar, line or pie chart of the items', icon: I.chart, tone: 'sky',
+    fields: [{ k: 'title', label: 'Title', kind: 'text' }, { k: 'type', label: 'Kind', kind: 'select', options: [['bar', 'Bars'], ['line', 'Line'], ['pie', 'Pie']] }, { k: 'label', label: 'Field for the labels', kind: 'text', hint: 'month' }, { k: 'value', label: 'Field for the numbers', kind: 'text', hint: 'sales' }],
+    defaults: () => ({ type: 'bar' }) },
+  'ui.media': { group: 'UI', label: 'Image or video', note: 'A picture or video player, or a gallery of them', icon: I.image, tone: 'sky',
+    fields: [
+      { k: 'url', label: 'Image or video URL', kind: 'text', hint: '{{ $json.src }}' }, { k: 'caption', label: 'Caption', kind: 'text', hint: '{{ $json.title }}' },
+      { k: 'kind', label: 'It’s', kind: 'select', options: [['auto', 'Work it out from the URL'], ['image', 'An image'], ['video', 'A video']] },
+      { k: 'poster', label: 'Video poster image (optional)', kind: 'text' }, { k: 'link', label: 'Link (optional)', kind: 'text', hint: '?video={{ $json.id }}' },
+      { k: 'layout', label: 'Show', kind: 'select', options: [['one', 'The first item'], ['gallery', 'Every item, as a gallery']] },
+    ],
+    defaults: () => ({ kind: 'auto', layout: 'one' }) },
+  'ui.buttons': { group: 'UI', label: 'Buttons', note: 'Links that reopen the page with choices (filters, tabs)', icon: I.buttons, tone: 'sky',
+    fields: [{ k: 'buttons', label: 'Buttons', kind: 'pairs', hint: 'a label and where it goes: ?category=Film, or a web address' }],
+    help: 'A button like ?category=Film opens the page again with { query: { category: "Film" } }; the button for the page you’re on is highlighted.',
+    defaults: () => ({ buttons: [{ name: 'All', value: '?' }] }) },
+  'ui.form': { group: 'UI', label: 'Form', note: 'Questions on the page; sending them runs the workflow again', icon: I.form, tone: 'sky',
+    fields: [
+      { k: 'title', label: 'Title', kind: 'text' }, { k: 'fields', label: 'Fields, one a line', kind: 'textarea', hint: 'Name\nEmail* (email)\nMessage (long)' },
+      { k: 'button', label: 'Button', kind: 'text', hint: 'Send' }, { k: 'action', label: 'Name it sends as action (blank: the node’s name)', kind: 'text' },
+    ],
+    help: 'When it’s sent, the workflow runs again with { action: this name, form: { answers } }: branch with an IF on {{ $json.action }}. The answers stay filled in.',
+    defaults: () => ({ fields: 'Search', button: 'Search', action: 'search' }) },
+
   'core.note': { group: 'Flow', label: 'Sticky note', note: 'A note on the canvas; does nothing', icon: I.note, tone: 'amber', inputs: [], outputs: [], note_: true,
     fields: [{ k: 'text', label: 'Note', kind: 'textarea' }], defaults: () => ({ text: 'A note about this part of the workflow.' }) },
   'core.code': { group: 'Flow', label: 'Code', note: 'JavaScript, Python, SQL, Go, Java and more over the items', icon: I.code, tone: 'amber',
