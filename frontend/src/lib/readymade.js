@@ -698,6 +698,101 @@ return all.map(o => ({ ...o, customer: who }));` }),
 /* ---- Stylish visual apps, to show what the builder can do ---- */
 const go = page => ({ kind: 'go', page }), set = (name, value) => ({ kind: 'set', name, value }), toast = text => ({ kind: 'toast', text });
 
+/* ---- Two easy examples, for the "Easy start" guide: first a workflow, then an app that uses it ---- */
+const REPORT = `// STEP 1 of the app: the workflow.
+// The app sends us: the student's name and marks in 5 subjects (out of 100 each).
+const s = items[0] || {};
+const subjects = ['maths', 'science', 'english', 'hindi', 'social'];
+const marks = subjects.map(k => Number(s[k]) || 0);
+
+// Add up the marks and work out the percentage.
+const total = marks.reduce((sum, m) => sum + m, 0);
+const percent = Math.round(total / subjects.length * 10) / 10;
+
+// Grade from the percentage. You pass if every subject has 33 or more.
+const grade = percent >= 90 ? 'A+' : percent >= 75 ? 'A' : percent >= 60 ? 'B' : percent >= 45 ? 'C' : percent >= 33 ? 'D' : 'E';
+const passed = marks.every(m => m >= 33);
+const best = subjects[marks.indexOf(Math.max(...marks))];
+
+// What we give back to the app: one row.
+return [{ name: s.name || 'Student', total, percent, grade, result: passed ? 'Pass' : 'Fail', best }];`;
+const mark = (id, name, label, x, y) => C(id, 'input', name, x, y, 4, 9, { label, kind: 'number', placeholder: '0 to 100', value: '' });
+const easyReport = () => visualApp('Report card', [
+  node('trigger.manual', 'Run by hand', 80),
+  node('core.code', 'Work out the result', 340, { language: 'javascript', code: REPORT }),
+], {
+  name: 'Report card', theme: { ...THEMES.ocean, radius: 14, font: 'system' }, nav: 'top', data: [],
+  pages: [
+    { id: 'home', name: 'Report card', nav: true, components: [
+      C('r1', 'heading', 'heading1', 0, 0, 12, 6, { text: 'My report card', size: 'lg' }),
+      C('r2', 'text', 'text1', 0, 6, 12, 5, { text: 'Type your marks (out of 100) and press the button. The **workflow** works out the rest.' }),
+      C('r3', 'input', 'name', 0, 12, 4, 9, { label: 'Your name', placeholder: 'e.g. Riya', value: '' }),
+      mark('r4', 'maths', 'Maths', 4, 12), mark('r5', 'science', 'Science', 8, 12),
+      mark('r6', 'english', 'English', 0, 22), mark('r7', 'hindi', 'Hindi', 4, 22), mark('r8', 'social', 'Social science', 8, 22),
+      C('r9', 'button', 'make', 0, 32, 4, 6, { label: 'Make my report card', look: 'primary', steps: [
+        { kind: 'workflow', workflow: 'Report card', into: 'card', input: ['name', 'maths', 'science', 'english', 'hindi', 'social'].map(k => ({ name: k, value: `{{ vars.${k} }}` })) },
+      ] }),
+      C('r10', 'stat', 'total', 0, 40, 3, 12, { label: 'Total (out of 500)', value: '{{ data.card ? data.card[0].total : "–" }}', note: '' }),
+      C('r11', 'stat', 'percent', 3, 40, 3, 12, { label: 'Percentage', value: '{{ data.card ? data.card[0].percent + "%" : "–" }}', note: '' }),
+      C('r12', 'stat', 'grade', 6, 40, 3, 12, { label: 'Grade', value: '{{ data.card ? data.card[0].grade : "–" }}', note: '' }),
+      C('r13', 'stat', 'result', 9, 40, 3, 12, { label: 'Result', value: '{{ data.card ? data.card[0].result : "–" }}', note: '{{ data.card ? "Best subject: " + data.card[0].best : "" }}' }),
+      C('r14', 'text', 'text2', 0, 53, 12, 5, { text: '{{ data.card ? "Well done, " + data.card[0].name + "!" : "" }}' }),
+    ] },
+  ],
+});
+
+const QUIZ = `// STEP 1 of the app: the workflow.
+// It has the questions and the right answers. The app shows the questions,
+// then sends back what was picked as a1, a2, a3, a4, a5, and we count the right ones.
+const questions = [
+  { q: 'What is 12 × 12?', options: ['124', '144', '154'], answer: '144' },
+  { q: 'Which planet is called the Red Planet?', options: ['Venus', 'Mars', 'Jupiter'], answer: 'Mars' },
+  { q: 'What gas do plants take in?', options: ['Oxygen', 'Carbon dioxide', 'Nitrogen'], answer: 'Carbon dioxide' },
+  { q: 'Who wrote the national anthem of India?', options: ['Rabindranath Tagore', 'Bankim Chandra', 'Sarojini Naidu'], answer: 'Rabindranath Tagore' },
+  { q: 'H₂O is the formula of…', options: ['Salt', 'Water', 'Sugar'], answer: 'Water' },
+];
+const sent = items[0] || {};
+const picked = questions.map((q, i) => sent['a' + (i + 1)] || '');
+const score = picked.filter((p, i) => p === questions[i].answer).length;
+
+// One row per question: the app shows these.
+return questions.map((q, i) => ({
+  number: i + 1, question: q.q, options: q.options,
+  picked: picked[i] || '(none)', correct: q.answer,
+  mark: picked[i] === q.answer ? '✅' : '❌', score,
+}));`;
+const question = (n, y) => C('q' + n, 'radio', 'a' + n, 0, y, 12, 12, { label: `{{ data.quiz ? data.quiz[${n - 1}].number + ". " + data.quiz[${n - 1}].question : "" }}`, options: `{{ data.quiz ? data.quiz[${n - 1}].options : [] }}`, value: '', inline: true });
+const easyQuiz = () => visualApp('Quiz', [
+  node('trigger.manual', 'Run by hand', 80),
+  node('core.code', 'Questions and score', 340, { language: 'javascript', code: QUIZ }),
+], {
+  name: 'Quiz', theme: { ...THEMES.sunset, radius: 14, font: 'system' }, nav: 'top',
+  data: [{ id: 's1', name: 'quiz', workflow: 'Quiz', input: [], auto: true }],
+  pages: [
+    { id: 'home', name: 'Quiz', nav: true, components: [
+      C('h1', 'heading', 'heading1', 0, 0, 12, 6, { text: 'Quick quiz', size: 'lg' }),
+      C('h2', 'text', 'text1', 0, 6, 12, 5, { text: 'Pick one answer for each question, then press **Check my answers**.' }),
+      question(1, 12), question(2, 25), question(3, 38), question(4, 51), question(5, 64),
+      C('h3', 'button', 'check', 0, 77, 4, 6, { label: 'Check my answers', look: 'primary', steps: [
+        { kind: 'workflow', workflow: 'Quiz', into: 'checked', input: [1, 2, 3, 4, 5].map(n => ({ name: 'a' + n, value: `{{ vars.a${n} }}` })) },
+        go('score'),
+      ] }),
+    ] },
+    { id: 'score', name: 'Score', nav: false, components: [
+      C('s1', 'heading', 'heading1', 0, 0, 12, 6, { text: 'Your score', size: 'lg' }),
+      C('s2', 'stat', 'score', 0, 7, 4, 12, { label: 'Right answers', value: '{{ data.checked ? data.checked[0].score + " / 5" : "–" }}', note: '' }),
+      C('s3', 'table', 'answers', 0, 20, 12, 34, { title: '', rows: '{{ data.checked }}', columns: 'number, question, picked, correct, mark', search: false }),
+      C('s4', 'button', 'again', 0, 55, 3, 6, { label: '↺ Try again', look: 'secondary', steps: [go('home')] }),
+    ] },
+  ],
+});
+export const EASY = { report: REPORT, quiz: QUIZ };
+APPS.unshift(
+  { k: 'a-easy-report', name: 'Easy example 1: Report card', note: 'The simplest start: type marks, a workflow works out total, percentage and grade, and the app shows them', make: easyReport },
+  { k: 'a-easy-quiz', name: 'Easy example 2: Quiz', note: 'A workflow holds the questions and marks the answers; the app shows them and the score on a second page', make: easyQuiz },
+);
+
+
 // Sales: a dark dashboard with a side menu, a pipeline board, a calendar and a page for each deal.
 APPS.push({ k: 'a-sales', name: 'Sales command center', note: 'Dark dashboard: KPIs, charts, a gauge, a pipeline board, a calendar and a page per deal', make: () => visualApp('Sales command center', [
   node('trigger.manual', 'Run by hand', 80),

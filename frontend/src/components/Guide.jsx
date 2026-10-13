@@ -5,6 +5,7 @@ import { GROUPS, NODES } from '../lib/flows.js';
 import { NODE_GUIDE } from '../lib/flowguide.js';
 import { NodeCard } from './NodeGuide.jsx';
 import { Brand, useUI } from './ui.jsx';
+import { EASY } from '../lib/readymade.js';
 
 /* ---- examples, kept small so each one teaches one idea ---- */
 const EX = {
@@ -582,6 +583,114 @@ const w = await r.json();
 return [{ city, temp: +w.current_condition[0].temp_C, sky: w.current_condition[0].weatherDesc[0].value }];`,
 };
 
+// The easiest way in: make a workflow, then an app that uses it. Plain words, two worked examples.
+function easyGuide() {
+  const Try = ({ k, children }) => <p><button className="btn primary" data-try={k}>{children}</button></p>;
+  return [
+    { id: 'idea', title: 'The big idea (1 minute)', body: <>
+      <p>An app has two parts. Think of a <b>restaurant</b>:</p>
+      <ul>
+        <li>The <b>workflow</b> is the <b>kitchen</b>. It does the work: it adds numbers, checks answers, looks up data. Nobody sees it.</li>
+        <li>The <b>app</b> is the <b>dining room</b>. It is what people see and touch: boxes to type in, buttons, and the results.</li>
+      </ul>
+      <p>When someone presses a button in the app, the app sends an <b>order</b> to the workflow (what they typed). The workflow cooks it and sends the <b>food</b> back (the answer). The app shows it.</p>
+      <p>So you always build in this order: <b>1. the workflow</b>, then <b>2. the app</b>.</p>
+    </> },
+    { id: 'words', title: 'Five words to know', body: <>
+      <ul>
+        <li><b>File</b>: one project. A file can hold a workflow and an app together.</li>
+        <li><b>Node</b>: one box in a workflow. Each node does one job.</li>
+        <li><b>Trigger</b>: the first node. It says <i>when</i> the workflow starts. <b>Run by hand</b> means “when the app asks”.</li>
+        <li><b>Component</b>: one piece of the app: a heading, an input box, a button, a number card, a table.</li>
+        <li><b>Publish</b>: makes a link, so anyone can open your app on a phone or computer.</li>
+      </ul>
+    </> },
+    { id: 'ex1', title: 'Example 1: a Report card app', body: <>
+      <p><b>What it does:</b> you type your marks in 5 subjects, press a button, and it shows your total, percentage, grade and pass or fail.</p>
+      <Try k="a-easy-report">Open Example 1 (ready-made)</Try>
+      <p>Or build it yourself, step by step:</p>
+      <h3>Part 1: the workflow (the kitchen)</h3>
+      <ol>
+        <li>On the home page press <b>Create a Blank File</b>. At the top, open the <b>View</b> menu and choose <b>Workflow</b>.</li>
+        <li>Add the trigger <b>Run by hand</b> (left side: <b>Nodes → Triggers</b>).</li>
+        <li>Add a <b>Code</b> node and join it to the trigger: drag from the trigger’s right dot to the Code node’s left dot.</li>
+        <li>Click the Code node and paste this. Read the green comments: they explain each line.
+          <pre className="gpre">{EASY.report}</pre></li>
+        <li>Give the file a name: <b>Report card</b> (click the title at the top). The app will call the workflow by this name.</li>
+      </ol>
+      <h3>Part 2: the app (the dining room)</h3>
+      <ol>
+        <li>Open <b>View</b> again and choose <b>App</b>. You are in <b>Visual</b> mode: components on the left, the page in the middle, settings on the right.</li>
+        <li>Click <b>Heading</b>. On the right, set its text to <i>My report card</i>.</li>
+        <li>Click <b>Input</b> six times. Set each one on the right:
+          <ul>
+            <li>First one: <b>Component name</b> <code>name</code>, label <i>Your name</i>.</li>
+            <li>The others: names <code>maths</code>, <code>science</code>, <code>english</code>, <code>hindi</code>, <code>social</code>, and <b>Kind</b> → <i>Number</i>.</li>
+          </ul>
+          The <b>component name</b> is important: whatever someone types is kept as <code>{'{{ vars.maths }}'}</code>, <code>{'{{ vars.name }}'}</code> and so on.</li>
+        <li>Click <b>Button</b>. Label: <i>Make my report card</i>. Under <b>When it’s clicked</b> press <b>+ Add a step</b> → <b>Run a workflow</b>:
+          <ul>
+            <li>Workflow: <b>Report card</b>.</li>
+            <li>Under <b>Send</b>, press <b>+ Add a field</b> six times: <code>name</code> → <code>{'{{ vars.name }}'}</code>, <code>maths</code> → <code>{'{{ vars.maths }}'}</code>, and the same for the other subjects.</li>
+            <li><b>Keep the result as data.</b> <code>card</code></li>
+          </ul></li>
+        <li>Click <b>Number</b> four times to show the answer. Set their <b>Value</b> to:
+          <ul>
+            <li><code>{'{{ data.card ? data.card[0].total : "–" }}'}</code></li>
+            <li><code>{'{{ data.card ? data.card[0].percent + "%" : "–" }}'}</code></li>
+            <li><code>{'{{ data.card ? data.card[0].grade : "–" }}'}</code></li>
+            <li><code>{'{{ data.card ? data.card[0].result : "–" }}'}</code></li>
+          </ul>
+          In plain words: “if the answer has come back, show its total; if not, show a dash”.</li>
+        <li>Press <b>▶ Preview</b>, type some marks and press your button. 🎉</li>
+      </ol>
+    </> },
+    { id: 'ex2', title: 'Example 2: a Quiz app (two pages)', body: <>
+      <p><b>What it does:</b> it shows 5 questions with choices. You pick answers and press <b>Check my answers</b>. A second page shows your score and which ones were right.</p>
+      <Try k="a-easy-quiz">Open Example 2 (ready-made)</Try>
+      <h3>Part 1: the workflow</h3>
+      <ol>
+        <li><b>Create a Blank File</b>, <b>View → Workflow</b>, and name the file <b>Quiz</b>.</li>
+        <li><b>Run by hand</b> → <b>Code</b>, and paste:
+          <pre className="gpre">{EASY.quiz}</pre></li>
+        <li>This one workflow does two jobs: with no answers it just gives the questions; with answers it also counts the score.</li>
+      </ol>
+      <h3>Part 2: the app</h3>
+      <ol>
+        <li><b>View → App</b>. Open the <b>Data</b> tab and press <b>+ Add a data source</b>: name it <code>quiz</code>, pick the workflow <b>Quiz</b>, and tick <b>Run when the app opens</b>. Now <code>{'{{ data.quiz }}'}</code> holds the 5 questions.</li>
+        <li>Add <b>Radio buttons</b> five times, named <code>a1</code> to <code>a5</code>. For the first one:
+          <ul>
+            <li>Label: <code>{'{{ data.quiz ? data.quiz[0].question : "" }}'}</code></li>
+            <li>Options: <code>{'{{ data.quiz ? data.quiz[0].options : [] }}'}</code></li>
+          </ul>
+          For the next ones use <code>[1]</code>, <code>[2]</code>, <code>[3]</code>, <code>[4]</code> (computers count from 0).</li>
+        <li>Press <b>+ Page</b> (above the page) and call it <b>Score</b>. Put a <b>Number</b> on it with value <code>{'{{ data.checked ? data.checked[0].score + " / 5" : "–" }}'}</code>, and a <b>Table</b> with rows <code>{'{{ data.checked }}'}</code>.</li>
+        <li>Back on the first page, add a <b>Button</b> <i>Check my answers</i> with two steps:
+          <ol>
+            <li><b>Run a workflow</b>: Quiz. Send <code>a1</code> → <code>{'{{ vars.a1 }}'}</code> … <code>a5</code> → <code>{'{{ vars.a5 }}'}</code>. Keep the result as data. <code>checked</code></li>
+            <li><b>Go to a page</b>: Score.</li>
+          </ol></li>
+        <li><b>▶ Preview</b> and play. Change the questions in the workflow’s code whenever you like.</li>
+      </ol>
+    </> },
+    { id: 'share', title: 'Share your app', body: <>
+      <ol>
+        <li>Open the <b>App</b> tab (on the right) and switch on <b>Publish</b>. You get a link.</li>
+        <li>Send the link to friends. It opens on any phone or computer, no account needed.</li>
+        <li>Want it on a phone like a real app? <b>Export ▾ → Install on a phone</b>, open the link on the phone, then <b>⋮ → Install app</b> (Android) or <b>Share → Add to Home Screen</b> (iPhone).</li>
+      </ol>
+    </> },
+    { id: 'help', title: 'If something doesn’t work', body: <>
+      <ul>
+        <li><b>The button does nothing:</b> check the step’s workflow name is exactly the file’s name (e.g. <i>Report card</i>).</li>
+        <li><b>It shows a dash (–):</b> the workflow hasn’t answered yet. Press the button, or in the workflow press <b>Run</b> to see if it gives an error.</li>
+        <li><b>Wrong numbers:</b> the component names in the app must match the names the workflow reads (<code>maths</code> in the app ↔ <code>s.maths</code> in the code).</li>
+        <li><b>Stuck?</b> Press <b>AI</b> and ask in your own words, like “add a Computer subject to my report card”.</li>
+      </ul>
+    </> },
+  ];
+}
+
 function appsGuide() {
   return [
     { id: 'what', title: 'What a custom app is', body: <>
@@ -715,8 +824,8 @@ export default function Guide({ which, onWhich, onClose, onTry }) {
   const [q, setQ] = useState('');
   const flow = String(which).startsWith('flow');
   const lit = flow && String(which).includes(':') ? String(which).split(':')[1] : null;
-  const apps = which === 'apps';
-  const sections = which === 'erd' ? erdGuide(onTry, theme) : apps ? appsGuide() : flow ? flowGuide(q, setQ, lit) : appGuide();
+  const apps = which === 'apps', easy = which === 'easy';
+  const sections = easy ? easyGuide() : which === 'erd' ? erdGuide(onTry, theme) : apps ? appsGuide() : flow ? flowGuide(q, setQ, lit) : appGuide();
 
   useEffect(() => {
     if (lit) { setQ(''); setTimeout(() => document.getElementById('g-node-' + lit)?.scrollIntoView({ block: 'start' }), 30); }
@@ -737,14 +846,18 @@ export default function Guide({ which, onWhich, onClose, onTry }) {
         <Brand />
         <span className="grow" />
         <div className="seg" role="group" aria-label="Choose a guide">
-          <button aria-pressed={which !== 'erd' && !flow && !apps} onClick={() => onWhich('app')}>Using Workline</button>
+          <button aria-pressed={easy} onClick={() => onWhich('easy')}>Easy start</button>
+          <button aria-pressed={which !== 'erd' && !flow && !apps && !easy} onClick={() => onWhich('app')}>Using Workline</button>
           <button aria-pressed={flow} onClick={() => onWhich('flow')}>Workflows</button>
           <button aria-pressed={apps} onClick={() => onWhich('apps')}>Custom apps</button>
           <button aria-pressed={which === 'erd'} onClick={() => onWhich('erd')}>Database schemas</button>
         </div>
       </div>
       <div className="g-body" ref={bodyRef}
-        onClick={e => { const a = e.target.closest('[data-guide]'); if (a) { e.preventDefault(); onWhich(a.dataset.guide); } }}>
+        onClick={e => {
+          const a = e.target.closest('[data-guide]'); if (a) { e.preventDefault(); onWhich(a.dataset.guide); }
+          const b = e.target.closest('[data-try]'); if (b) onTry({ ready: b.dataset.try });
+        }}>
         <div className="g-in">
           <nav className="g-toc" aria-label="Contents">
             <h2>Contents</h2>
@@ -752,8 +865,8 @@ export default function Guide({ which, onWhich, onClose, onTry }) {
           </nav>
           <article className="g-doc">
             <header>
-              <h1>{which === 'erd' ? 'Database schemas (ERD)' : apps ? 'Custom apps' : flow ? 'Workflows' : 'How to use Workline'}</h1>
-              <p>{apps ? 'Your own page, in HTML, CSS and JavaScript, on top of your workflows: a form, a dashboard, a chat or a video player, at a link anyone can open.'
+              <h1>{easy ? 'Easy start: make your first app' : which === 'erd' ? 'Database schemas (ERD)' : apps ? 'Custom apps' : flow ? 'Workflows' : 'How to use Workline'}</h1>
+              <p>{easy ? 'No experience needed. First you make a workflow (it does the work), then an app on top of it (what people see). Two complete examples.' : apps ? 'Your own page, in HTML, CSS and JavaScript, on top of your workflows: a form, a dashboard, a chat or a video player, at a link anyone can open.'
                 : which === 'erd'
                 ? 'Describe tables, columns and relationships as text, and Workline draws the entity relationship diagram.'
                 : flow ? 'Automations like n8n: a trigger starts them, nodes do the steps, and they run on the Workline server.'

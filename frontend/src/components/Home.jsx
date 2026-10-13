@@ -400,6 +400,7 @@ Reply with ONLY a JSON object: {"title": "...", "doc": "...", "diagrams": [...]}
           </>)}
         </div>
         <button className="help-fab" aria-label="Help" aria-haspopup="menu" title="Help" onClick={e => popup(e.currentTarget, [
+          { label: 'Easy start: your first app', act: () => onGuide('easy') },
           { label: 'How to use Workline', kbd: 'G', act: () => onGuide('app') },
           { label: 'Workflows guide', act: () => onGuide('flow') },
           { label: 'Custom apps guide', act: () => onGuide('apps') },
