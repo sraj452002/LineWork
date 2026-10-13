@@ -133,6 +133,6 @@ test.describe('pages made of nodes', () => {
     const meal = (await run('foodfood' + 'x'.repeat(24), { action: 'order', cart: [places[0].menu[0]] })).json.items[0];
     expect(meal.total).toBeCloseTo(places[0].menu[0].price + 2.99, 2);
     await publish('a-stream', 'streamin' + 'x'.repeat(24));
-    expect((await run('streamin' + 'x'.repeat(24), {})).json.items[0].src).toMatch(/\.mp4$/);
+    expect((await run('streamin' + 'x'.repeat(24), {})).json.items[0].src).toMatch(/^https:\/\/storage\.googleapis\.com\/.+\.mp4$/);
   });
 });

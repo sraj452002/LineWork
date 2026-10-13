@@ -996,26 +996,21 @@ return [
 APPS.push({ k: 'a-stream', name: 'StreamBox (video streaming)', note: 'A streaming app: featured hero, genre and search filters, a player page with up next, ratings and My list', make: () => visualApp('StreamBox', [
   node('trigger.manual', 'Run by hand', 80),
   node('core.code', 'Catalogue', 340, { language: 'javascript', code: `// The catalogue. Swap for your video host (Mux, Cloudflare Stream, Bunny, S3) or a sheet; MP4 and HLS (.m3u8) play.
-const g = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/';
-const v = (id, file, title, genre, year, duration, about) => ({ id, title, genre, year, duration, about, src: g + file + '.mp4', poster: g + 'images/' + file + '.jpg' });
+const s = 'https://storage.googleapis.com/', p = s + 'shaka-asset-icons/';
+const v = (id, src, poster, title, genre, year, duration, about) => ({ id, title, genre, year, duration, about, src: s + src, poster: p + poster });
 return [
-  v('sintel', 'Sintel', 'Sintel', 'Fantasy', 2010, '14 min', 'A lonely young woman searches for the baby dragon she once raised.'),
-  v('bunny', 'BigBuckBunny', 'Big Buck Bunny', 'Comedy', 2008, '10 min', 'A giant rabbit takes gentle revenge on three bullying rodents.'),
-  v('dream', 'ElephantsDream', 'Elephants Dream', 'Sci-fi', 2006, '11 min', 'Two men explore a strange, ever-changing machine world.'),
-  v('steel', 'TearsOfSteel', 'Tears of Steel', 'Sci-fi', 2012, '12 min', 'Scientists try to save the world from killer robots in Amsterdam.'),
-  v('blazes', 'ForBiggerBlazes', 'For Bigger Blazes', 'Action', 2015, '1 min', 'A burst of fire, speed and colour.'),
-  v('escapes', 'ForBiggerEscapes', 'For Bigger Escapes', 'Travel', 2015, '1 min', 'Wide landscapes and open roads.'),
-  v('fun', 'ForBiggerFun', 'For Bigger Fun', 'Comedy', 2015, '1 min', 'Small moments of big fun.'),
-  v('joyrides', 'ForBiggerJoyrides', 'For Bigger Joyrides', 'Action', 2015, '1 min', 'Thrills on wheels and water.'),
-  v('meltdowns', 'ForBiggerMeltdowns', 'For Bigger Meltdowns', 'Comedy', 2015, '1 min', 'When everything goes wrong, beautifully.'),
-  v('subaru', 'SubaruOutbackOnStreetAndDirt', 'Outback on Street and Dirt', 'Travel', 2014, '9 min', 'A road test from city streets to dirt tracks.'),
+  v('sintel', 'shaka-demo-assets/sintel-mp4-only/v-0576p-1400k-libx264.mp4', 'sintel.png', 'Sintel', 'Fantasy', 2010, '14 min', 'A lonely young woman searches for the baby dragon she once raised.'),
+  v('bunny', 'exoplayer-test-media-0/BigBuckBunny_320x180.mp4', 'big_buck_bunny.png', 'Big Buck Bunny', 'Comedy', 2008, '10 min', 'A giant rabbit takes gentle revenge on three bullying rodents.'),
+  v('steel', 'shaka-demo-assets/tos-ttml/v-0576p-1400k-libx264.mp4', 'tears_of_steel.png', 'Tears of Steel', 'Sci-fi', 2012, '12 min', 'Scientists try to save the world from killer robots in Amsterdam.'),
+  v('angel', 'shaka-demo-assets/angel-one-hls/hls.m3u8', 'angel_one.png', 'Angel One', 'Drama', 2015, '1 min', 'A short scene, streamed in HLS with several languages.'),
+  v('pattern', 'shaka-demo-assets/apple-advanced-stream-ts/master.m3u8', 'apple_test_pattern.png', 'Test pattern', 'Streams', 2017, '10 min', 'An adaptive HLS stream that changes quality with your connection.'),
 ];` }),
 ], {
   name: 'StreamBox', theme: { primary: '#e50914', bg: '#0b0b0f', surface: '#16161d', text: '#f5f5f7', dark: true, radius: 10, font: 'system' }, nav: 'top',
   data: [{ id: 's1', name: 'videos', workflow: 'StreamBox', input: [], auto: true }],
   pages: [
     { id: 'home', name: 'Home', nav: true, components: [
-      C('v1', 'hero', 'hero1', 0, 0, 12, 44, { kicker: 'Featured', title: 'Sintel', subtitle: 'A lonely young woman searches for the dragon she raised. An award-winning fantasy short.', button: '▶ Play', image: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/Sintel.jpg', steps: [set('video', '{{ (data.videos || []).find(v => v.id === "sintel") }}'), go('watch')] }),
+      C('v1', 'hero', 'hero1', 0, 0, 12, 44, { kicker: 'Featured', title: 'Sintel', subtitle: 'A lonely young woman searches for the dragon she raised. An award-winning fantasy short.', button: '▶ Play', image: 'https://storage.googleapis.com/shaka-asset-icons/sintel.png', steps: [set('video', '{{ (data.videos || []).find(v => v.id === "sintel") }}'), go('watch')] }),
       C('v2', 'radio', 'genre', 0, 45, 8, 9, { label: 'Genre', options: '{{ ["All", ...new Set((data.videos || []).map(v => v.genre))] }}', value: 'All', inline: true }),
       C('v3', 'search', 'search1', 8, 46, 4, 6, { placeholder: 'Search titles' }),
       C('v4', 'heading', 'heading1', 0, 55, 12, 6, { text: 'Trending now', size: 'md' }),
