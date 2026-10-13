@@ -8,6 +8,9 @@
 # Bundling Monaco, the diagram engines and the code parsers needs more than Node's default ~2 GB heap.
 [build.environment]
   NODE_OPTIONS = "--max-old-space-size=4096"
+  # BACKEND_URL is a public address that the build writes into dist/_redirects, not a secret: if it's
+  # marked secret in Netlify, its secrets scan would otherwise stop the build.
+  SECRETS_SCAN_OMIT_KEYS = "BACKEND_URL"
 
 # Every page is the app (rules in dist/_redirects, like /api/*, come first).
 [[redirects]]

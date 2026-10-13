@@ -29,6 +29,11 @@ test('a custom app runs its workflow in the preview and at its published link', 
     await page.locator('.tool-card').filter({ hasText: 'Custom app' }).click();
     await expect(page.getByRole('button', { name: 'View: App' })).toBeVisible();
     await expect(page.getByRole('button', { name: /^Workflows: My app/ })).toBeVisible();
+    // It starts in the visual builder; this one is written as code, from the form.
+    await page.getByRole('button', { name: 'Code', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit code' }).click();
+    await page.getByRole('button', { name: 'Start from ▾' }).click();
+    await page.getByRole('menuitem', { name: 'Form → results' }).click();
     await expect(page.getByLabel('App code')).toHaveValue(/workline\.run/);
 
     // The preview runs the workflow through the editor.

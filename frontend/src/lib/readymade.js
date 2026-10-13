@@ -3,6 +3,7 @@ import { rid } from './utils.js';
 import { newSheet } from './sheet.js';
 import { appDoc } from './apphost.js';
 import { secretPath } from './flows.js';
+import { THEMES, builderHtml } from './appbuilder.js';
 
 /* Ready-made templates for every tool (Templates → Ready-made). Each make() gives a new file, opened in the
    view it's for. `tool` groups them: Diagrams, Docs, Sheets, Databases, Code, Workflows, Apps, Pages. */
@@ -649,6 +650,48 @@ const APPS = [
   load(); setInterval(load, 60000);
 </script>`) },
 ];
+
+/* ---- A visual app (App view → Visual): components on pages, people sign in ---- */
+const visualApp = (title, nodes, spec, access = 'public') => {
+  const f = flowFile(title, nodes);
+  f.view = 'app';
+  const html = builderHtml(spec, { access });
+  f.ui = { mode: 'visual', spec, access, allow: [], html, flows: [f.id], published: false, doc: appDoc(html, { workflows: [{ id: f.id, name: title }], title }) };
+  return f;
+};
+const C = (id, type, name, x, y, w, h, props) => ({ id, type, name, x, y, w, h, props });
+APPS.push({ k: 'a-orders', name: 'Order tracker (drag and drop)', note: 'A visual app: people sign in, see only their orders, search and open one; works on phones', make: () => visualApp('Order tracker', [
+  node('trigger.manual', 'Run by hand', 80),
+  node('core.code', 'My orders', 340, { language: 'javascript', code: `// Swap for a database or sheet node, filtered by who's asking: {{ $json.user.email }}.
+const who = items[0] && items[0].user ? items[0].user.email : 'you@example.com';
+const all = [
+  { id: 1041, item: 'Desk lamp', status: 'Delivered', total: 39, placed: '2026-09-28' },
+  { id: 1057, item: 'Office chair', status: 'Shipped', total: 189, placed: '2026-10-06' },
+  { id: 1063, item: 'Monitor arm', status: 'Processing', total: 74, placed: '2026-10-11' },
+];
+return all.map(o => ({ ...o, customer: who }));` }),
+], {
+  name: 'Order tracker', theme: { ...THEMES.light, primary: '#0e7490', radius: 14, font: 'system' }, nav: 'top',
+  data: [{ id: 's1', name: 'orders', workflow: 'Order tracker', input: [], auto: true }],
+  pages: [
+    { id: 'home', name: 'My orders', nav: true, components: [
+      C('c1', 'heading', 'heading1', 0, 0, 12, 6, { text: 'Hi {{ user ? user.name : "there" }}', size: 'lg', align: 'left' }),
+      C('c2', 'text', 'text1', 0, 6, 12, 5, { text: 'Your orders, newest first. Tap one to see it.', align: 'left' }),
+      C('c3', 'stat', 'stat1', 0, 12, 4, 12, { label: 'Orders', value: '{{ (data.orders || []).length }}', note: '', card: true }),
+      C('c4', 'stat', 'stat2', 4, 12, 4, 12, { label: 'Spent', value: '{{ "$" + (data.orders || []).reduce((s, o) => s + o.total, 0) }}', note: '', card: true }),
+      C('c5', 'stat', 'stat3', 8, 12, 4, 12, { label: 'On the way', value: '{{ (data.orders || []).filter(o => o.status !== "Delivered").length }}', note: '', card: true }),
+      C('c6', 'table', 'table1', 0, 25, 12, 34, { title: '', rows: '{{ data.orders }}', columns: 'id, item, status, total, placed', search: true, card: true, steps: [{ kind: 'go', page: 'detail' }] }),
+    ] },
+    { id: 'detail', name: 'Order', nav: false, components: [
+      C('d1', 'button', 'button1', 0, 0, 3, 6, { label: '← All orders', look: 'link', steps: [{ kind: 'go', page: 'home' }] }),
+      C('d2', 'heading', 'heading1', 0, 7, 12, 6, { text: 'Order {{ vars.table1 ? vars.table1.id : "" }}', size: 'lg', align: 'left' }),
+      C('d3', 'stat', 'stat1', 0, 14, 4, 12, { label: 'Item', value: '{{ vars.table1 && vars.table1.item }}', note: '', card: true }),
+      C('d4', 'stat', 'stat2', 4, 14, 4, 12, { label: 'Status', value: '{{ vars.table1 && vars.table1.status }}', note: 'Placed {{ vars.table1 && vars.table1.placed }}', card: true }),
+      C('d5', 'stat', 'stat3', 8, 14, 4, 12, { label: 'Total', value: '{{ vars.table1 && "$" + vars.table1.total }}', note: '', card: true }),
+      C('d6', 'form', 'form1', 0, 27, 6, 34, { title: 'Need help with it?', fields: 'Message* (long)', button: 'Send', thanks: 'Thanks, we’ll get back to you by email.', card: true, steps: [{ kind: 'toast', text: 'Sent' }] }),
+    ] },
+  ],
+}, 'signin') });
 
 /* ---- Pages made of nodes (no code) ---- */
 const PAGES = [

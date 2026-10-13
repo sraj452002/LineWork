@@ -61,7 +61,7 @@ It needs no disk, since the data is in Google Drive. Run **one** instance: it ho
 
 Connect the repository in Netlify and set **Base directory** to `frontend`. [`frontend/netlify.toml`](frontend/netlify.toml) sets the build command (`npm run build`, with a 4 GB Node heap), the publish directory and the headers. Set one environment variable:
 
-- `BACKEND_URL`: the backend's address (e.g. `https://linework-api.onrender.com`). The build writes it into `dist/_redirects` as a proxy rule for `/api/*`; the build stops if it's missing.
+- `BACKEND_URL`: the backend's address (e.g. `https://linework-api.onrender.com`). The build writes it into `dist/_redirects` as a proxy rule for `/api/*`; the build stops if it's missing. It isn't a secret, so leave "Contains secret values" unticked (`netlify.toml` also tells Netlify's secrets scan to skip it).
 
 Netlify's proxy waits at most 26 seconds for a response to start. AI answers stream, so they start in time; a sleeping backend answers 502/504 until it's awake, and the app asks again.
 
@@ -172,6 +172,20 @@ A workflow can draw a web page by itself, without HTML (`backend/flow-ui.js`). S
 - **Preview page** (on the Page trigger) shows it from the workflow as it is in the editor, without saving. **Templates → Ready-made → Video library page (no code UI)** is a whole example.
 
 For full control of the look, use a custom app (below) instead.
+
+## Apps people use (visual builder)
+
+The **App** view starts in **Visual**: build an app for other people by dragging components onto its pages, fill them from your workflows, and **Publish** it for a link. No code needed (**Code** switches to writing the page by hand; see below).
+
+- **Components** (left): Heading, Text, Button, Input, Dropdown, Form, Table, Chart, Number, Cards list, Image, Video, Divider, Custom HTML. Click to add, or drag onto the page. Drag a box to move it on the 12-column grid, its edges or corner to resize; Delete removes, Ctrl+D copies, arrows nudge. **Properties** (right) set what each one shows.
+- **Data**: a data source runs a workflow (when the app opens, or from a button) and keeps its output as `data.<name>`. Any text can show data with `{{ … }}`: `{{ data.orders }}` for a table's rows, `{{ data.orders.length }}`, `{{ vars.input1 }}` (what's typed in an input, the row clicked in a table), `{{ user.name }}`.
+- **Steps**: buttons, forms, tables and lists run steps when used: refresh a data source, run a workflow (with the form's answers or the clicked row, keeping the result as `data.<name>`), set a value, go to a page, show a message, open a link, sign out. A table row that opens a details page is two clicks.
+- **Pages**: `+ Page` adds one; each can be in the app's menu (top or side). **App** sets the name, theme (presets, colours, corners, font) and who can use it.
+- **Who can use it**: anyone with the link, people who sign in (anyone can make an account), or only people you invite (a list of emails). Accounts belong to the app, not to Workline; you see them and can remove them under **App**. Each workflow run gets who it's for as `{{ $json.user.email }}`, set by the server, so a workflow can show people only their own data.
+- **Phone**: on a narrow screen the components stack, top to bottom; **Phone** in the builder shows it.
+- **Preview** runs the app as people will see it (signed in as you). The AI panel can build or change the whole app from a description.
+
+The design is saved in `file.ui.spec`; `frontend/src/lib/appbuilder.js` turns it into the page (a small runtime with the design as JSON), published like any custom app below. Sign-in: `POST /api/ui/<token>/signup`, `/login`, `/me`, `/logout`; sessions last 30 days and live in the page's `window.name` (the sandboxed page has no storage), so they survive reloads in that tab.
 
 ## Custom apps
 

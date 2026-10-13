@@ -23,13 +23,34 @@ const SDK = mode => `window.workline = (() => {
       if (m.error) throw new Error(m.error);
       return m.items;
     }
-    const r = await fetch(location.pathname.replace(/\\/+$/, '') + '/run', { method: 'POST', headers: { 'content-type': 'text/plain' }, body: JSON.stringify({ workflow, input }) }); // text/plain: no preflight
+    const r = await post('run', { workflow, input, session: session() });
     const j = await r.json().catch(() => ({}));
     if (r.status === 202 || j.pending) throw new Error('The workflow is taking more than a minute. Try again in a while.');
+    if (r.status === 401) { setSession(''); dispatchEvent(new Event('workline:signedout')); }
     if (!r.ok) throw new Error(j.message || 'The workflow failed.');
     return j.items;
   }
-  return { run, workflows: [] };
+  // text/plain: a request browsers make without asking first (no preflight).
+  const post = (path, body) => fetch(location.pathname.replace(/\\/+$/, '') + '/' + path, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: JSON.stringify(body) });
+  // The page has no storage of its own (it's a sandbox), so the session lives in window.name: it lasts
+  // while the tab is open, through reloads, and isn't sent anywhere or shown in the address.
+  const session = () => { try { const v = JSON.parse(window.name || '{}'); return v.wlSession || ''; } catch (e) { return ''; } };
+  const setSession = v => { window.name = v ? JSON.stringify({ wlSession: v }) : ''; };
+  // Sign-in for apps that use it. In the editor's preview you're signed in as yourself.
+  const answer = async r => { const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.message || 'That didn’t work.'); if (j.session) setSession(j.session); return j.user; };
+  const auth = {
+    async me() {
+      if (preview) { const m = await new Promise(res => { const id = ++n; waiting[id] = res; parent.postMessage({ workline: 'me', id }, '*'); }); return m.user || null; }
+      if (!session()) return null;
+      const r = await post('me', { session: session() });
+      if (!r.ok) { setSession(''); return null; }
+      return (await r.json()).user;
+    },
+    login: (email, password) => (preview ? auth.me() : post('login', { email, password }).then(answer)),
+    signup: (email, password, name) => (preview ? auth.me() : post('signup', { email, password, name }).then(answer)),
+    async logout() { if (!preview) { const s = session(); setSession(''); if (s) await post('logout', { session: s }).catch(() => {}); } },
+  };
+  return { run, auth, workflows: [] };
 })();`;
 
 const THEME = { ink: '#1f2328', ink2: '#57606a', surface: '#f6f8fa', line: '#d0d7de', bg: '#ffffff' };
