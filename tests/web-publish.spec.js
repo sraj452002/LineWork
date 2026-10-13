@@ -53,6 +53,15 @@ test('a page made of nodes is published as a web app, and unpublished', async ({
     const v = await visitor.newPage();
     await expect.poll(async () => { await v.goto(link); return v.locator('h1').first().textContent(); }, { timeout: 20_000 }).toBe('StarPlay 2');
     await expect(v.getByText('Top 10 in India Today')).toBeVisible();
+    // Videos play on every browser: Safari's own controls need scripts allowed in the sandbox, while
+    // script-src 'none' keeps any script on the page from running.
+    const csp = (await fetch(link)).headers.get('content-security-policy');
+    expect(csp).toContain('sandbox allow-scripts');
+    expect(csp).toContain("script-src 'none'");
+    await v.goto(link + '?page=watch&video=kaveri');
+    await expect(v.locator('video[controls]')).toHaveAttribute('src', /\.mp4$/);
+    expect(await v.evaluate(() => typeof window.ran)).toBe('undefined');
+    await v.goto(link);
     await v.getByRole('link', { name: '🏏 Sports' }).click();
     await expect(v.getByRole('cell', { name: 'India vs Australia' })).toBeVisible();
 

@@ -67,7 +67,10 @@ return all.filter(o => !query.region || o.region === query.region)
     const res = await fetch(`${base}/hook/salespage1234567`);
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toMatch(/text\/html/);
-    expect(res.headers.get('content-security-policy')).toMatch(/^sandbox allow-forms/);
+    // Sandboxed, and no script of the page's own runs (scripts are allowed in the sandbox only for the
+    // browser's video controls).
+    expect(res.headers.get('content-security-policy')).toMatch(/^sandbox allow-scripts allow-forms/);
+    expect(res.headers.get('content-security-policy')).toContain("script-src 'none'");
     const html = await res.text();
     expect(html).toContain('<h3>Hello everyone</h3>');
     expect(html).toMatch(/<span>Orders<\/span><b>3<\/b>/);
