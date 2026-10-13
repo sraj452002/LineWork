@@ -95,12 +95,12 @@ function table(el, rows, cols) {
 function frame(el, height) { const box = $(el); const w = Math.max(160, box.clientWidth || document.body.clientWidth - 24); return { box, w, h: height || 180 }; }
 // bars('#el', rows, 'labelKey', 'valueKey', {height})
 function bars(el, rows, x, y, o) {
-  o = o || {}; const { box, w, h } = frame(el, o.height), vals = rows.map(r => +r[y] || 0), max = Math.max(1, ...vals), bw = Math.min(w / Math.max(1, rows.length), 90);
+  o = o || {}; const { box, w, h } = frame(el, o.height), vals = rows.map(r => +r[y] || 0), max = Math.max(1, ...vals), bw = w / Math.max(1, rows.length), barW = Math.min(bw * .7, 64);
   box.innerHTML = '<svg class="lw-chart" width="' + w + '" height="' + (h + 20) + '">' + rows.map((r, i) => {
-    const bh = (vals[i] / max) * (h - 16), bx = i * bw + bw * .15;
-    return '<rect x="' + bx + '" y="' + (h - bh) + '" width="' + bw * .7 + '" height="' + bh + '" rx="3" fill="' + (o.color || PALETTE[0]) + '"><title>' + escH(r[x]) + ': ' + escH(vals[i]) + '</title></rect>'
-      + '<text x="' + (bx + bw * .35) + '" y="' + (h - bh - 4) + '" text-anchor="middle" class="v">' + escH(vals[i]) + '</text>'
-      + '<text x="' + (bx + bw * .35) + '" y="' + (h + 14) + '" text-anchor="middle">' + escH(r[x]) + '</text>';
+    const bh = (vals[i] / max) * (h - 16), bx = i * bw + (bw - barW) / 2; // each bar centred in its share of the width
+    return '<rect x="' + bx + '" y="' + (h - bh) + '" width="' + barW + '" height="' + bh + '" rx="3" fill="' + (o.color || PALETTE[0]) + '"><title>' + escH(r[x]) + ': ' + escH(vals[i]) + '</title></rect>'
+      + '<text x="' + (bx + barW / 2) + '" y="' + (h - bh - 4) + '" text-anchor="middle" class="v">' + escH(vals[i]) + '</text>'
+      + '<text x="' + (bx + barW / 2) + '" y="' + (h + 14) + '" text-anchor="middle">' + escH(r[x]) + '</text>';
   }).join('') + '</svg>';
 }
 // line('#el', rows, 'labelKey', 'valueKey', {height})
