@@ -35,7 +35,7 @@ test('Ready-made has templates for every tool, filtered by tool and by search', 
   await chips.getByRole('button', { name: /^All/ }).click();
   await expect(ready.locator('.tpl-starter')).toHaveCount(all);
   // The home search box narrows them too; the saved ones (none yet) stay below.
-  await page.getByRole('searchbox').fill('habit');
+  await page.getByRole('searchbox').fill('postmortem');
   await expect(ready.locator('.tpl-starter')).toHaveCount(1);
   await expect(page.getByText('No templates yet')).toBeVisible();
 });
