@@ -75,7 +75,7 @@ export const COMPONENTS = {
     fields: [f('title', 'Title'), f('workflow', 'Workflow that answers', 'workflow'), f('field', 'Field with the answer', 'text', { hint: 'reply (it gets {message, history})' }), f('greeting', 'First message'), f('placeholder', 'Placeholder')] },
 
   /* ---- more to show ---- */
-  badge: { label: 'Badge', w: 2, h: 4, props: { text: 'New', tone: 'blue' },
+  badge: { label: 'Badge', w: 2, h: 5, props: { text: 'New', tone: 'blue' },
     fields: [f('text', 'Text'), f('tone', 'Colour', 'select', { options: [['blue', 'Blue'], ['green', 'Green'], ['amber', 'Amber'], ['red', 'Red'], ['gray', 'Grey'], ['purple', 'Purple']] })] },
   alert: { label: 'Alert', w: 12, h: 9, props: { tone: 'info', title: 'Heads up', text: 'Something you should know.' },
     fields: [f('tone', 'Kind', 'select', { options: [['info', 'Info'], ['success', 'Success'], ['warning', 'Warning'], ['error', 'Error']] }), f('title', 'Title'), f('text', 'Text', 'textarea')] },
@@ -217,7 +217,7 @@ a{color:var(--p)}
 .wl-page{position:relative}
 .wl-c{position:absolute;padding:6px}
 .wl-in{height:100%;overflow:auto;border-radius:var(--r)}
-.wl-in.card{background:var(--sf);border:1px solid var(--ln);padding:14px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+.wl-in.card{background:var(--sf);border:1px solid var(--ln);padding:12px 14px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
 .wl-page.stack{display:flex;flex-direction:column;height:auto!important}
 .wl-page.stack .wl-c{position:static;width:100%!important;height:auto!important}
 .wl-page.stack .wl-c.fixed{height:var(--h)!important}
@@ -242,7 +242,7 @@ a{color:var(--p)}
 .wl-search{margin-bottom:8px;padding:7px 10px}
 .wl-title{font-weight:650;margin:0 0 8px}
 .wl-stat span{display:block;font-size:13px;color:var(--mt);font-weight:600}
-.wl-stat b{display:block;font-size:30px;line-height:1.15;font-weight:700;color:var(--tx)}
+.wl-stat b{display:block;font-size:28px;line-height:1.15;font-weight:700;color:var(--tx);letter-spacing:-.01em}
 .wl-stat small{color:var(--mt)}
 .wl-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
 .wl-card{background:var(--sf);border:1px solid var(--ln);border-radius:var(--r);overflow:hidden}
@@ -260,6 +260,10 @@ a{color:var(--p)}
 .wl-auth .tabs{display:flex;gap:6px}.wl-auth .tabs button{flex:1;font:inherit;padding:7px;border:1px solid var(--ln);background:none;border-radius:8px;color:var(--tx);cursor:pointer}
 .wl-auth .tabs button.on{border-color:var(--p);color:var(--p);font-weight:600}
 .wl-c{z-index:1}.wl-c.behind{z-index:0}
+.wl-in{padding-left:2px;padding-right:2px}
+.wl-c.inpanel .wl-in{padding-left:14px;padding-right:14px}
+.lw-chart text{fill:var(--mt)}.lw-chart text.v{fill:var(--tx)}
+.lw-pie li{color:var(--tx)}
 .wl-in.flush{padding:0;border:0;overflow:hidden}
 .wl-hero{height:100%;min-height:180px;border-radius:var(--r);padding:clamp(20px,4vw,48px);display:flex;flex-direction:column;justify-content:center;align-items:flex-start;gap:10px;color:#fff;background-size:cover;background-position:center;box-sizing:border-box}
 .wl-hero.grad{background:radial-gradient(1200px 400px at 0% 0%,color-mix(in srgb,var(--p) 55%,#fff) 0%,transparent 55%),linear-gradient(135deg,var(--p),color-mix(in srgb,var(--p) 45%,#000))}
@@ -299,7 +303,7 @@ a{color:var(--p)}
 .wl-msg.err{color:#d1242f}.wl-msg.wait{opacity:.6}
 .wl-chatin{display:flex;gap:6px}.wl-chatin input{flex:1;font:inherit;padding:9px 12px;border:1px solid var(--ln);border-radius:999px;background:var(--sf);color:var(--tx)}
 .wl-chatin .wl-btn{width:auto;border-radius:999px}
-.wl-badge{display:inline-block;padding:3px 10px;border-radius:999px;font-size:13px;font-weight:600}
+.wl-badge{display:inline-block;padding:2px 10px;border-radius:999px;font-size:13px;font-weight:600;line-height:1.4}
 .wl-badge.blue{background:#dbeafe;color:#1e40af}.wl-badge.green{background:#dcfce7;color:#166534}.wl-badge.amber{background:#fef3c7;color:#92400e}
 .wl-badge.red{background:#fee2e2;color:#991b1b}.wl-badge.gray{background:#e5e7eb;color:#374151}.wl-badge.purple{background:#ede9fe;color:#5b21b6}
 .wl-alert{border-radius:var(--r);padding:12px 14px;border:1px solid;display:grid;gap:2px}
@@ -944,6 +948,7 @@ function runtime(SPEC, OPT) {
   function paint(keep) {
     if (!pageEl || !S.page) return;
     const comps = [...(S.page.components || [])].sort((a, b) => a.y - b.y || a.x - b.x);
+    const panels = comps.filter(c => c.type === 'box');
     const focused = document.activeElement && document.activeElement.dataset && document.activeElement.dataset.name;
     const caret = focused && document.activeElement.selectionStart;
     pageEl.style.height = (comps.reduce((m, c) => Math.max(m, c.y + c.h), 0) * ROW + 24) + 'px';
@@ -953,7 +958,8 @@ function runtime(SPEC, OPT) {
       let w = have.get(c.id);
       if (!w) { w = el('div', 'wl-c'); w.dataset.c = c.id; }
       have.delete(c.id);
-      w.className = 'wl-c' + (FIXED[c.type] ? ' fixed' : '') + (c.type === 'box' ? ' behind' : '');
+      const inPanel = c.type !== 'box' && panels.some(b => c.x >= b.x && c.x + c.w <= b.x + b.w && c.y >= b.y && c.y + c.h <= b.y + b.h);
+      w.className = 'wl-c' + (FIXED[c.type] ? ' fixed' : '') + (c.type === 'box' ? ' behind' : '') + (inPanel ? ' inpanel' : '');
       Object.assign(w.style, { left: (c.x / 12 * 100) + '%', width: (c.w / 12 * 100) + '%', top: (c.y * ROW) + 'px', height: (c.h * ROW) + 'px' });
       w.style.setProperty('--h', (c.h * ROW) + 'px');
       if (pageEl.children[i] !== w) pageEl.insertBefore(w, pageEl.children[i] || null);

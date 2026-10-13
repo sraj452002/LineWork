@@ -715,7 +715,7 @@ return companies.map((company, i) => ({
   pages: [
     { id: 'overview', name: 'Overview', nav: true, components: [
       C('o1', 'heading', 'heading1', 0, 0, 8, 6, { text: 'Good {{ new Date().getHours() < 12 ? "morning" : "afternoon" }}{{ user ? ", " + user.name : "" }}', size: 'lg' }),
-      C('o2', 'badge', 'badge1', 10, 1, 2, 4, { text: 'Live', tone: 'green' }),
+      C('o2', 'badge', 'badge1', 10, 1, 2, 5, { text: 'Live', tone: 'green' }),
       C('o3', 'text', 'text1', 0, 6, 12, 5, { text: 'Your pipeline at a glance. Click a deal for the details.' }),
       C('o4', 'stat', 'stat1', 0, 12, 3, 12, { label: 'Open pipeline', value: '{{ "$" + fmt((data.deals || []).filter(d => !["Won", "Lost"].includes(d.stage)).reduce((s, d) => s + d.value, 0)) }}', note: 'Lead → Proposal', card: true }),
       C('o5', 'stat', 'stat2', 3, 12, 3, 12, { label: 'Won', value: '{{ "$" + fmt((data.deals || []).filter(d => d.stage === "Won").reduce((s, d) => s + d.value, 0)) }}', note: 'This quarter', card: true }),
@@ -739,7 +739,7 @@ return companies.map((company, i) => ({
     { id: 'deal', name: 'Deal', nav: false, components: [
       C('d1', 'button', 'button1', 0, 0, 2, 6, { label: '← Back', look: 'link', steps: [go('overview')] }),
       C('d2', 'heading', 'heading1', 0, 7, 9, 7, { text: '{{ vars.deal ? vars.deal.company : "Pick a deal on the Overview" }}' }),
-      C('d3', 'badge', 'badge1', 10, 8, 2, 4, { text: '{{ vars.deal && vars.deal.stage }}', tone: 'purple' }),
+      C('d3', 'badge', 'badge1', 10, 8, 2, 5, { text: '{{ vars.deal && vars.deal.stage }}', tone: 'purple' }),
       C('d4', 'stepper', 'stepper1', 0, 15, 12, 10, { stages: 'Lead, Qualified, Proposal, Won', current: '{{ ["Lead", "Qualified", "Proposal", "Won"].indexOf(vars.deal && vars.deal.stage) + 1 }}' }),
       C('d5', 'details', 'details1', 0, 26, 7, 34, { title: 'Details', value: '{{ vars.deal }}', fields: 'company, owner, region, value, close', card: true }),
       C('d6', 'progress', 'progress1', 7, 26, 5, 9, { label: 'Chance to win', value: '{{ ({ Lead: 10, Qualified: 35, Proposal: 60, Won: 100, Lost: 0 })[vars.deal && vars.deal.stage] || 0 }}', max: 100, card: true }),
@@ -787,8 +787,8 @@ return stays.map(([name, city, price, rating, lat, lon, about], i) => ({ id: 'st
       C('t1', 'button', 'button1', 0, 0, 2, 6, { label: '← All stays', look: 'link', steps: [go('stays')] }),
       C('t2', 'carousel', 'carousel1', 0, 7, 7, 44, { images: '{{ vars.stay ? [vars.stay.photo, "https://picsum.photos/seed/" + vars.stay.id + "b/900/560", "https://picsum.photos/seed/" + vars.stay.id + "c/900/560"] : [] }}', every: 0 }),
       C('t3', 'heading', 'heading1', 7, 8, 5, 7, { text: '{{ vars.stay ? vars.stay.name : "Pick a stay" }}', size: 'md' }),
-      C('t4', 'badge', 'badge1', 7, 16, 2, 4, { text: '{{ vars.stay && vars.stay.city }}', tone: 'amber' }),
-      C('t5', 'badge', 'badge2', 9, 16, 2, 4, { text: '{{ vars.stay && "★ " + vars.stay.rating }}', tone: 'green' }),
+      C('t4', 'badge', 'badge1', 7, 16, 2, 5, { text: '{{ vars.stay && vars.stay.city }}', tone: 'amber' }),
+      C('t5', 'badge', 'badge2', 9, 16, 2, 5, { text: '{{ vars.stay && "★ " + vars.stay.rating }}', tone: 'green' }),
       C('t6', 'text', 'text1', 7, 21, 5, 16, { text: '{{ vars.stay ? vars.stay.about : "" }}\n\n**{{ vars.stay ? "$" + vars.stay.price : "" }}** a night · Breakfast · Free Wi-Fi' }),
       C('t7', 'rating', 'rating1', 7, 38, 5, 9, { label: 'Been here? Rate it', max: 5, steps: [toast('Thanks for rating!')] }),
       C('t8', 'map', 'map1', 0, 52, 6, 40, { lat: '{{ vars.stay && vars.stay.lat }}', lon: '{{ vars.stay && vars.stay.lon }}', zoom: 12 }),
