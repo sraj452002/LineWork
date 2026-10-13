@@ -1,4 +1,6 @@
 import { test, expect } from '@playwright/test';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
 import { openStore } from '../backend/store.js';
 import { memoryBackend } from '../backend/drive.js';
 import { createApp } from '../backend/app.js';
@@ -26,6 +28,7 @@ test('build an app visually, publish it behind sign-in, and use it on a phone', 
     await page.getByLabel('Password').fill('a long password');
     await page.getByRole('button', { name: 'Create account' }).click();
 
+    await expect(page.getByRole('button', { name: 'Create a Blank File' })).toBeVisible(); // signed in
     // A workflow with some orders, which says who asked.
     const code = `const who = items[0] && items[0].user ? items[0].user.email : 'nobody';
 return [
@@ -36,9 +39,12 @@ return [
       { id: 't', type: 'trigger.manual', name: 'Run by hand', x: 80, y: 160, params: {} },
       { id: 'c', type: 'core.code', name: 'Orders', x: 340, y: 160, params: { language: 'javascript', code } },
     ], edges: [{ id: 'e', from: 't', fromPort: 'main', to: 'c', toPort: 'main' }] } } });
-    expect(put.ok()).toBe(true);
-    await page.reload();
-    await page.locator('.ftable tbody tr', { hasText: 'Orders' }).click();
+    expect(put.status(), await put.text()).toBe(200);
+    expect((await (await page.request.get('/api/files')).json()).files.map(f => f.id)).toContain('f_orders');
+    // The file list loads from the server; reload until the new file is in it.
+    const row = page.locator('.ftable tbody tr', { hasText: 'Orders' });
+    for (let i = 0; i < 6 && !(await row.count()); i++) { await page.reload(); await row.waitFor({ timeout: 8000 }).catch(() => {}); }
+    await row.click();
 
     // A new app starts in Visual, with a table filled from this file's workflow.
     await expect(page.getByRole('button', { name: 'Visual' }), errors.join('\n')).toHaveAttribute('aria-pressed', 'true', { timeout: 15_000 });
@@ -92,6 +98,19 @@ return [
     await page.getByText('Publish', { exact: true }).click();
     const link = await page.getByLabel('App link').inputValue();
     await expect(page.getByText('Saved')).toBeVisible();
+
+    // Export: a web page, and an Android project (a .zip), each pointing at the published link.
+    await page.getByRole('button', { name: 'Export ▾' }).click();
+    let dl = page.waitForEvent('download');
+    await page.getByRole('menuitem', { name: 'Web page (.html file)' }).click();
+    const html = await dl;
+    expect(html.suggestedFilename()).toBe('orders.html');
+    expect(require('node:fs').readFileSync(await html.path(), 'utf8')).toContain(`window.WORKLINE_BASE = "${link}"`);
+    await page.getByRole('button', { name: 'Export ▾' }).click();
+    dl = page.waitForEvent('download');
+    await page.getByRole('menuitem', { name: 'Android app (project for an .apk)' }).click();
+    expect((await dl).suggestedFilename()).toBe('orders-android.zip');
+    await page.getByRole('button', { name: 'Got it' }).click();
 
     // Someone opens the link on a phone: a sign-in screen, then the app, made for them.
     const phone = await browser.newContext({ viewport: { width: 390, height: 800 } });

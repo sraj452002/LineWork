@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../lib/backend.js';
 import { rid } from '../lib/utils.js';
 import { appDoc } from '../lib/apphost.js';
-import { COLS, COMMON_FIELDS, COMPONENTS, ROW, STEP_KINDS, THEMES, builderHtml, newComponent, newPage } from '../lib/appbuilder.js';
+import { COLS, COMMON_FIELDS, COMPONENTS, GROUPS, ROW, STEP_KINDS, THEMES, builderHtml, eventLabel, newComponent, newPage } from '../lib/appbuilder.js';
 import { useUI } from './ui.jsx';
 
 /* App view → Visual: build an app by placing components on its pages (a 12-column grid), and fill them
@@ -13,7 +13,7 @@ const TOP = 12; // the canvas page's top padding, as in the runtime's design mod
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const copy = v => JSON.parse(JSON.stringify(v));
 
-function Field({ f, value, onChange }) {
+function Field({ f, value, onChange, workflows = [] }) {
   const id = useMemo(() => rid('fld'), []);
   if (f.kind === 'bool') return <label className="vb-check"><input type="checkbox" checked={!!value} onChange={e => onChange(e.target.checked)} /> {f.label}</label>;
   return (
@@ -21,6 +21,15 @@ function Field({ f, value, onChange }) {
       <span>{f.label}</span>
       {f.kind === 'select'
         ? <select id={id} value={value ?? ''} onChange={e => onChange(e.target.value)}>{f.options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
+        : f.kind === 'workflow'
+        ? <select id={id} value={value ?? ''} onChange={e => onChange(e.target.value)}>
+            <option value="">{workflows.length ? 'The app’s first workflow' : 'Pick a workflow…'}</option>
+            {workflows.map(w => <option key={w.id} value={w.name}>{w.name}</option>)}
+          </select>
+        : f.kind === 'number'
+        ? <input id={id} type="number" value={value ?? ''} onChange={e => onChange(e.target.value === '' ? '' : +e.target.value)} />
+        : f.kind === 'color'
+        ? <span className="vb-color"><input id={id} type="color" value={/^#[0-9a-f]{6}$/i.test(value || '') ? value : '#ffffff'} onChange={e => onChange(e.target.value)} /><input aria-label={`${f.label} code`} value={value ?? ''} placeholder="none" onChange={e => onChange(e.target.value)} /></span>
         : f.kind === 'textarea'
           ? <textarea id={id} rows={4} value={value ?? ''} placeholder={f.hint} onChange={e => onChange(e.target.value)} />
           : <input id={id} value={value ?? ''} placeholder={f.hint} onChange={e => onChange(e.target.value)} />}
@@ -119,6 +128,7 @@ export default function VisualBuilder({ spec, onChange, access, allow, onAccess,
   const [phone, setPhone] = useState(false);
   const [drag, setDrag] = useState(null);
   const [tab, setTab] = useState('add');
+  const [find, setFind] = useState('');
   const canvas = useRef(null), frame = useRef(null), dragRef = useRef(null);
   const [W, setW] = useState(900);
   const colW = W / COLS;
@@ -245,10 +255,21 @@ export default function VisualBuilder({ spec, onChange, access, allow, onAccess,
           </div>
           {(tab === 'add' || tab === 'props') && (
             <div className="vb-palette" aria-label="Components">
-              {Object.entries(COMPONENTS).map(([k, d]) => (
-                <button key={k} className="vb-tile" draggable onDragStart={e => { e.dataTransfer.setData('text/x-wl-comp', k); e.dataTransfer.effectAllowed = 'copy'; }}
-                  onClick={() => add(k)} aria-label={`Add ${d.label}`} title="Click to add, or drag onto the page">{d.label}</button>
-              ))}
+              <input className="vb-find" type="search" placeholder={`Find among ${Object.keys(COMPONENTS).length} components`} aria-label="Find a component" value={find} onChange={e => setFind(e.target.value)} />
+              {GROUPS.map(([g, keys]) => {
+                const shown = keys.filter(k => !find.trim() || `${COMPONENTS[k].label} ${k} ${g}`.toLowerCase().includes(find.trim().toLowerCase()));
+                return shown.length > 0 && (
+                  <div key={g} className="vb-group">
+                    <span className="vb-sub">{g}</span>
+                    <div className="vb-tiles">
+                      {shown.map(k => (
+                        <button key={k} className="vb-tile" draggable onDragStart={e => { e.dataTransfer.setData('text/x-wl-comp', k); e.dataTransfer.effectAllowed = 'copy'; }}
+                          onClick={() => add(k)} aria-label={`Add ${COMPONENTS[k].label}`} title="Click to add, or drag onto the page">{COMPONENTS[k].label}</button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
               <p className="vb-hint">Click to add at the bottom, or drag onto the page. Drag a box to move it, its corner to resize. Delete removes, Ctrl+D copies, arrows nudge.</p>
             </div>
           )}
@@ -320,7 +341,7 @@ export default function VisualBuilder({ spec, onChange, access, allow, onAccess,
             <iframe ref={frame} title="App canvas" className="vb-frame" sandbox="allow-scripts allow-forms" srcDoc={doc} onLoad={send} style={{ height }} />
             {!phone && (
               <div className="vb-overlay" onPointerDown={e => { if (e.target === e.currentTarget) setSel(null); }}>
-                {comps.map(c => (
+                {[...comps].sort((a, b) => (COMPONENTS[b.type]?.behind ? 1 : 0) - (COMPONENTS[a.type]?.behind ? 1 : 0)).map(c => (
                   <div key={c.id} className={'vb-box' + (c.id === sel ? ' on' : '')} role="button" tabIndex={0} aria-label={`${COMPONENTS[c.type]?.label || c.type} ${c.name}`}
                     style={{ left: c.x * colW, top: TOP + c.y * ROW, width: c.w * colW, height: c.h * ROW }}
                     onPointerDown={e => pointer(e, c, 'move')} onFocus={() => { setSel(c.id); setTab('props'); }}>
@@ -349,10 +370,11 @@ export default function VisualBuilder({ spec, onChange, access, allow, onAccess,
             <label className="vb-field"><span>Name</span><input aria-label="Component name" value={comp.name} onChange={e => editComp(comp.id, { name: e.target.value.replace(/\W/g, '') || comp.name })} /></label>
             {COMPONENTS[comp.type]?.holds && <p className="vb-hint"><code>vars.{comp.name}</code> holds {COMPONENTS[comp.type].holds}.</p>}
             {[...(COMPONENTS[comp.type]?.fields || []), ...COMMON_FIELDS].map(fl => (
-              <Field key={fl.k} f={fl} value={comp.props[fl.k]} onChange={v => editProps(comp.id, { [fl.k]: v })} />
+              <Field key={fl.k} f={fl} value={comp.props[fl.k]} workflows={workflows.length ? workflows : choices.map(c => ({ id: c.id, name: c.title }))}
+                onChange={v => { if (fl.kind === 'workflow') { const ch = choices.find(c => c.title === v); if (ch) grant(ch.id); } editProps(comp.id, { [fl.k]: v }); }} />
             ))}
             {COMPONENTS[comp.type]?.events && <>
-              <span className="vb-sub">{comp.type === 'form' ? 'When it’s sent' : comp.type === 'button' ? 'When it’s clicked' : 'When a row is clicked'}</span>
+              <span className="vb-sub">{eventLabel(comp.type)}</span>
               <Steps steps={comp.props.steps || []} spec={spec} workflows={workflows.length ? workflows : choices.map(c => ({ id: c.id, name: c.title }))}
                 onChange={v => { for (const s of v) { const ch = s.kind === 'workflow' && choices.find(c => c.title === s.workflow); if (ch) grant(ch.id); } editProps(comp.id, { steps: v }); }} />
             </>}

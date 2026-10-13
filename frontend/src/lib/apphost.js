@@ -31,7 +31,8 @@ const SDK = mode => `window.workline = (() => {
     return j.items;
   }
   // text/plain: a request browsers make without asking first (no preflight).
-  const post = (path, body) => fetch(location.pathname.replace(/\\/+$/, '') + '/' + path, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: JSON.stringify(body) });
+  // An exported app (a file, an Android or desktop app) is told its published link: WORKLINE_BASE.
+  const post = (path, body) => fetch((window.WORKLINE_BASE || location.pathname.replace(/\\/+$/, '')) + '/' + path, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: JSON.stringify(body) });
   // The page has no storage of its own (it's a sandbox), so the session lives in window.name: it lasts
   // while the tab is open, through reloads, and isn't sent anywhere or shown in the address.
   const session = () => { try { const v = JSON.parse(window.name || '{}'); return v.wlSession || ''; } catch (e) { return ''; } };
@@ -55,12 +56,12 @@ const SDK = mode => `window.workline = (() => {
 
 const THEME = { ink: '#1f2328', ink2: '#57606a', surface: '#f6f8fa', line: '#d0d7de', bg: '#ffffff' };
 
-export function appDoc(html, { mode = 'live', workflows = [], title = 'App' } = {}) {
+export function appDoc(html, { mode = 'live', workflows = [], title = 'App', base = '' } = {}) {
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${String(title).replace(/[<&]/g, c => (c === '<' ? '&lt;' : '&amp;'))}</title>
 <style>${widgetStyle(THEME)}</style>
 <script>
-${SDK(mode)}
+${base ? `window.WORKLINE_BASE = ${json(base)};\n` : ''}${SDK(mode)}
 workline.workflows = ${json(workflows)};
 ${HELPERS}
 ${ERRORS}
