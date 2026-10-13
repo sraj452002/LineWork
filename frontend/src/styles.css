@@ -2662,3 +2662,10 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .fv-edge.lit .line{animation:fv-pluck .7s ease-out,lw-march 3s linear .7s infinite}
 @keyframes fv-pluck{0%{stroke-width:6;stroke:#fff}35%{stroke-width:4}100%{stroke-width:2}}
 @media (prefers-reduced-motion:reduce){.fv-node.active,.fv-node.active::before,.fv-node.s-success,.fv-node.s-error,.fv-edge.lit .line{animation:none}.fv-node.active::before{background:var(--c-blue)}}
+
+/* A string's bend handle: shows on hover or when the string is picked; a bent string keeps a small dot. */
+.fv-bend{fill:var(--surface);stroke:var(--c-blue);stroke-width:2;cursor:grab;opacity:0;transition:opacity .15s,r .15s;pointer-events:auto}
+.fv-edge:hover .fv-bend,.fv-edge.on .fv-bend{opacity:1}
+.fv-bend.bent{opacity:.55}
+.fv-bend:hover{r:9}
+.fv-bend:active{cursor:grabbing;fill:var(--c-blue)}
