@@ -123,20 +123,20 @@ test('Example 3: a workflow fetches the video list, and the app shows and plays 
 
     await page.getByRole('button', { name: '▶ Preview' }).click();
     const app = page.frameLocator('iframe[title="App preview"]');
-    await expect(app.locator('.wl-card, .wl-item, .wl-list > *').filter({ hasText: 'Sintel' }).first()).toBeVisible({ timeout: 30_000 });
-    await expect(app.locator('video')).toHaveAttribute('src', /BigBuckBunny_320x180\.mp4$/); // the first one
-    await expect(app.locator('h2, h3, .wl-h').filter({ hasText: 'Big Buck Bunny' }).first()).toBeVisible();
+    await expect(app.locator('.wl-card, .wl-item, .wl-list > *').filter({ hasText: 'Dark Truths' }).first()).toBeVisible({ timeout: 30_000 });
+    await expect(app.locator('video')).toHaveAttribute('src', /stock\.mp4$/); // the first one
+    await expect(app.locator('h2, h3, .wl-h').filter({ hasText: 'City and Nature' }).first()).toBeVisible();
     // Click a card: it plays.
-    await app.getByText('Tears of Steel', { exact: true }).click();
-    await expect(app.locator('video')).toHaveAttribute('src', /tos-ttml/);
+    await app.getByText('Android', { exact: true }).click();
+    await expect(app.locator('video')).toHaveAttribute('src', /android\.mp4$/);
     // Categories and search filter the cards.
     await app.getByLabel('Streams', { exact: true }).check();
     await expect(app.getByText('Angel One', { exact: true })).toBeVisible();
-    await expect(app.getByText('Sintel', { exact: true })).toHaveCount(0);
+    await expect(app.getByText('City and Nature', { exact: true })).toHaveCount(0);
     await app.getByLabel('All', { exact: true }).check();
-    await app.getByPlaceholder('Search videos').fill('sin');
-    await expect(app.getByText('Sintel', { exact: true })).toBeVisible();
-    await expect(app.getByText('Android', { exact: true })).toHaveCount(0);
+    await app.getByPlaceholder('Search videos').fill('dark');
+    await expect(app.getByText('Dark Truths', { exact: true })).toBeVisible();
+    await expect(app.locator('.wl-card', { hasText: 'Android' })).toHaveCount(0);
     expect(errors).toEqual([]);
     await ctx.close();
   } finally {

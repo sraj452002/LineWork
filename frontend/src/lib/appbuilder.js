@@ -41,7 +41,7 @@ export const COMPONENTS = {
     fields: [f('rows', 'Rows', 'text', { hint: '{{ data.products }}' }), f('title', 'Card title', 'text', { hint: '{{ item.name }}' }), f('subtitle', 'Card text', 'text', { hint: '{{ item.price }}' }), f('image', 'Card image', 'text', { hint: '{{ item.photo }}' })] },
   image: { label: 'Image', w: 4, h: 24, props: { src: 'https://picsum.photos/seed/workline/640/400', fit: 'cover', alt: '' },
     fields: [f('src', 'Image URL'), f('fit', 'Fit', 'select', { options: [['cover', 'Fill the box'], ['contain', 'Show all of it']] }), f('alt', 'Description')] },
-  video: { label: 'Video', w: 8, h: 40, props: { src: 'https://storage.googleapis.com/exoplayer-test-media-0/BigBuckBunny_320x180.mp4', poster: '' },
+  video: { label: 'Video', w: 8, h: 40, props: { src: 'https://storage.googleapis.com/gvabox/media/samples/stock.mp4', poster: '' },
     fields: [f('src', 'Video URL (MP4, WebM or HLS .m3u8)'), f('poster', 'Poster image')] },
   divider: { label: 'Divider', w: 12, h: 3, props: {}, fields: [] },
   html: { label: 'Custom HTML', w: 6, h: 20, props: { html: '<p>Your own <b>HTML</b>. {{ vars.x }}</p>' },

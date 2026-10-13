@@ -16,9 +16,13 @@ const num = v => (typeof v === 'number' ? v : Number(String(v ?? '').replace(/[,
 const fmt = v => (typeof v === 'number' ? v.toLocaleString('en-US', { maximumFractionDigits: 2 }) : show(v));
 // Only web addresses and links within the page (?…, #…) become links and media.
 const safeUrl = u => { const s = String(u ?? '').trim(); return /^https?:\/\//i.test(s) || /^[?#]/.test(s) ? s : ''; };
+// Custom looks: CSS on a block (the node's Style field) and on the page (the Page trigger's). It can't
+// break out of its attribute or <style>, and the page runs no scripts, so it only changes the look.
+const cssOf = v => String(v ?? '').replace(/[<>]/g, '').slice(0, 4000);
+const slug = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'block';
 const add = (args, block) => {
   const page = args.ctx && args.ctx.page;
-  if (page && page.blocks.length < MAX_BLOCKS) page.blocks.push({ node: args.node.name, ...block });
+  if (page && page.blocks.length < MAX_BLOCKS) page.blocks.push({ node: args.node.name, css: cssOf(first(args).css), ...block });
   return { main: args.items };
 };
 const first = args => args.params(args.items[0], 0);
@@ -171,11 +175,11 @@ a{color:${t.acc}}code{font:13px ui-monospace,monospace;background:${t.card};bord
 form{display:grid;gap:12px}label{display:grid;gap:5px;font-weight:600;font-size:13px}input,textarea{font:inherit;padding:10px 12px;border:1px solid ${t.line};border-radius:10px;background:${t.bg};color:${t.fg}}textarea{min-height:100px}
 button{justify-self:start;padding:10px 20px;border:0;border-radius:10px;background:${t.acc};color:#fff;font:600 15px system-ui;cursor:pointer}
 .error{border:1px solid #f0b4b4;background:${dark ? '#2a1414' : '#fff1f1'};color:${dark ? '#ffb4b4' : '#a11'};border-radius:12px;padding:12px 16px}
-footer{color:${t.mut};font-size:12px;text-align:center}
-</style></head><body><main>
+footer{color:${t.mut};font-size:12px;text-align:center}.node{min-width:0}
+</style>${params.css ? `<style>${cssOf(params.css)}</style>` : ''}</head><body><main>
 ${params.title || params.description ? `<header>${params.title ? `<h1>${esc(params.title)}</h1>` : ''}${params.description ? `<p>${esc(params.description)}</p>` : ''}</header>` : ''}
 ${error ? `<div class="error">${esc(error)}</div>` : ''}
-${blocks.map(b => block(b, query)).join('\n')}
+${blocks.map(b => { const html = block(b, query); return html ? `<div class="node n-${slug(b.node)}"${b.css ? ` style="${esc(b.css)}"` : ''}>${html}</div>` : ''; }).join('\n')}
 <footer>Made with Workline</footer>
 </main></body></html>`;
 }

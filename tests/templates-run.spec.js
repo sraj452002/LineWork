@@ -113,6 +113,19 @@ test.describe('pages made of nodes', () => {
       for (const h of ['▶ Watch Code Red: Delhi', 'Latest Releases', 'Top 10 in India Today']) expect(home, h).toContain(h);
       for (const h of ['Live Sports', 'Choose your plan', '<video']) expect(home, h).not.toContain(h);
       expect(home).toContain('href="?page=watch&amp;video=code-red"');
+      // Its look: the Page CSS, and each block styled and named after its node.
+      expect(home).toContain('background-clip: text');
+      expect(home).toContain('<div class="node n-menu">');
+      expect(home).toMatch(/<div class="node n-spotlight" style="border-radius: 18px;/);
+      // CSS can't break out into markup: < and > are dropped.
+      const f2 = READY.find(t => t.k === 'p-ott').make();
+      f2.flow.nodes.find(n => n.type === 'core.http').params.url = f.flow.nodes.find(n => n.type === 'core.http').params.url;
+      f2.flow.nodes[0].params.css = 'body{color:red}</style><script>alert(1)</script>';
+      f2.flow.nodes.find(n => n.name === 'Menu').params.css = 'color:red" onmouseover="alert(1)';
+      const r2 = await fetch(`${b2}/flows/${f2.id}/page`, { method: 'POST', headers: { 'content-type': 'application/json', cookie: ck }, body: JSON.stringify({ flow: f2.flow, input: {} }) });
+      const bad = (await r2.json()).html;
+      expect(bad).not.toContain('<script>');
+      expect(bad).toContain('style="color:red&quot; onmouseover=&quot;alert(1)"');
       // Watch: an episode plays (MP4 only: a page has no scripts), with the others below.
       const watch = await open({ query: { page: 'watch', video: 'mumbai-nights', ep: '7' } });
       expect(watch).toMatch(/<video[^>]+src="https:\/\/storage\.googleapis\.com\/[^"]+\.mp4"/);

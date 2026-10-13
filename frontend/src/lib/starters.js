@@ -10,18 +10,18 @@ const FIND = `// The video library. Swap this list for your own: a Google Sheet,
 // video host's API (an HTTP node). Videos live on a CDN or video host (Mux, Cloudflare Stream,
 // Bunny, S3 + CloudFront…), which does the streaming: MP4/WebM, or HLS (.m3u8).
 const videos = [
-  { id: 'bunny', title: 'Big Buck Bunny', category: 'Animation', duration: '9:56', views: 18230,
-    src: 'https://storage.googleapis.com/exoplayer-test-media-0/BigBuckBunny_320x180.mp4',
-    poster: 'https://storage.googleapis.com/shaka-asset-icons/big_buck_bunny.png' },
+  { id: 'stock', title: 'City and Nature', category: 'Clips', duration: '0:30', views: 18230,
+    src: 'https://storage.googleapis.com/gvabox/media/samples/stock.mp4',
+    poster: 'https://picsum.photos/seed/workline-stock/640/360' },
   { id: 'angel', title: 'Angel One (HLS stream)', category: 'Streams', duration: '1:00', views: 9411,
     src: 'https://storage.googleapis.com/shaka-demo-assets/angel-one-hls/hls.m3u8',
     poster: 'https://storage.googleapis.com/shaka-asset-icons/angel_one.png' },
-  { id: 'sintel', title: 'Sintel', category: 'Film', duration: '14:48', views: 26802,
-    src: 'https://storage.googleapis.com/shaka-demo-assets/sintel-mp4-only/v-0576p-1400k-libx264.mp4',
+  { id: 'dark', title: 'Dark Truths', category: 'Film', duration: '6:12', views: 26802,
+    src: 'https://storage.googleapis.com/shaka-demo-assets/bbb-dark-truths-hls/hls.m3u8',
     poster: 'https://storage.googleapis.com/shaka-asset-icons/sintel.png' },
-  { id: 'steel', title: 'Tears of Steel', category: 'Film', duration: '12:14', views: 12077,
-    src: 'https://storage.googleapis.com/shaka-demo-assets/tos-ttml/v-0576p-1400k-libx264.mp4',
-    poster: 'https://storage.googleapis.com/shaka-asset-icons/tears_of_steel.png' },
+  { id: 'android', title: 'Android', category: 'Clips', duration: '0:30', views: 12077,
+    src: 'https://storage.googleapis.com/gvabox/media/samples/android.mp4',
+    poster: 'https://picsum.photos/seed/workline-android/640/360' },
   { id: 'live', title: 'Test pattern (HLS stream)', category: 'Streams', duration: 'HLS', views: 4120,
     src: 'https://storage.googleapis.com/shaka-demo-assets/apple-advanced-stream-ts/master.m3u8',
     poster: 'https://storage.googleapis.com/shaka-asset-icons/apple_test_pattern.png' },
@@ -85,7 +85,7 @@ const PLAYER = `<style>
 <script>
   const state = { search: '', category: 'All', videos: [], current: null };
   const $ = id => document.getElementById(id), player = $('player');
-  const cats = ['All', 'Animation', 'Film', 'Streams'];
+  const cats = ['All', 'Clips', 'Film', 'Streams'];
   let hls;
   // MP4/WebM play as they are; HLS (.m3u8) needs hls.js outside Safari. Either way the CDN streams.
   async function play(v) {
@@ -134,18 +134,12 @@ const PAGE_VIDEOS = `// The videos, picked by the page's buttons (?category=…,
 // Swap this list for a Google Sheet, Airtable or database node: same fields.
 const { query = {}, form = {} } = items[0] || {};
 const videos = [
-  { id: 'bunny', title: 'Big Buck Bunny', category: 'Animation', duration: '9:56',
-    src: 'https://storage.googleapis.com/exoplayer-test-media-0/BigBuckBunny_320x180.mp4',
-    poster: 'https://storage.googleapis.com/shaka-asset-icons/big_buck_bunny.png' },
+  { id: 'stock', title: 'City and Nature', category: 'Clips', duration: '0:30',
+    src: 'https://storage.googleapis.com/gvabox/media/samples/stock.mp4',
+    poster: 'https://picsum.photos/seed/workline-stock/640/360' },
   { id: 'android', title: 'Android', category: 'Clips', duration: '0:30',
     src: 'https://storage.googleapis.com/gvabox/media/samples/android.mp4',
-    poster: 'https://storage.googleapis.com/shaka-asset-icons/apple_test_pattern.png' },
-  { id: 'sintel', title: 'Sintel', category: 'Film', duration: '14:48',
-    src: 'https://storage.googleapis.com/shaka-demo-assets/sintel-mp4-only/v-0576p-1400k-libx264.mp4',
-    poster: 'https://storage.googleapis.com/shaka-asset-icons/sintel.png' },
-  { id: 'steel', title: 'Tears of Steel', category: 'Film', duration: '12:14',
-    src: 'https://storage.googleapis.com/shaka-demo-assets/tos-ttml/v-0576p-1400k-libx264.mp4',
-    poster: 'https://storage.googleapis.com/shaka-asset-icons/tears_of_steel.png' },
+    poster: 'https://picsum.photos/seed/workline-android/640/360' },
 ];
 const search = String(form.search || '').toLowerCase();
 const shown = videos
@@ -162,7 +156,7 @@ export const STARTERS = [
       const nodes = [
         node('trigger.page', 'Page', 80, { path: secretPath(), title: 'WorkTube', description: 'Pick a category, search, or click a video to play it.', theme: 'dark', width: 'wide' }),
         node('core.code', 'Find videos', 340, { language: 'javascript', code: PAGE_VIDEOS }),
-        node('ui.buttons', 'Categories', 600, { buttons: [{ name: 'All', value: '?' }, { name: 'Animation', value: '?category=Animation' }, { name: 'Film', value: '?category=Film' }] }),
+        node('ui.buttons', 'Categories', 600, { buttons: [{ name: 'All', value: '?' }, { name: 'Clips', value: '?category=Clips' }] }),
         node('ui.form', 'Search', 860, { fields: 'Search', button: 'Search', action: 'search' }),
         node('ui.media', 'Player', 1120, { url: '{{ $json.src }}', poster: '{{ $json.poster }}', caption: '{{ $json.title }} · {{ $json.category }} · {{ $json.duration }}', kind: 'video', layout: 'one' }),
         node('ui.text', 'More videos', 1380, { text: '### More videos', style: 'text' }),

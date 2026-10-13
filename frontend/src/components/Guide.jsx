@@ -748,6 +748,7 @@ function appsGuide() {
       </ol>
       <ul>
         <li>The workflow gets <code>{'{ action, query, form }'}</code>: <b>Buttons</b> reopen the page with a choice in <code>query</code> (<code>?category=Film</code>), and a <b>Form</b> reruns it with its answers in <code>form</code> and its name in <code>action</code>. Read them with <code>{'{{ $json.query.category }}'}</code> right after the trigger, or <code>{'{{ $node["Page"].json.form.search }}'}</code> further on.</li>
+        <li><b>Your own look:</b> every UI node has <b>Style (CSS)</b> for its block (e.g. <code>border-radius: 18px; background: #16213e</code>), and the Page trigger has <b>Page CSS</b> for the whole page. Each block is also <code>.n-&lt;node name&gt;</code> (the Menu node is <code>.n-menu</code>), so Page CSS can reach any of them. StarPlay 2 is styled this way.</li>
         <li><b>Cards</b> can count and add up: <code>{'{{ $items.length }}'}</code>, <code>{'{{ $items.reduce((s, i) => s + i.total, 0) }}'}</code>.</li>
         <li>Ready-made example: <b>Templates → Ready-made → Video library page (no code UI)</b>.</li>
       </ul>
