@@ -81,6 +81,24 @@ test('a custom app runs its workflow in the preview and at its published link', 
     await expect(src).toHaveValue(/ipairs\(items\)/);
     await lang.selectOption('sql');
     await expect(src).toHaveValue(/FROM items/);
+
+    // Templates → Ready-made → Video streaming app: the workflow and its player app, working.
+    await page.getByRole('button', { name: 'Files' }).click();
+    await page.getByRole('navigation', { name: 'Files' }).getByRole('button', { name: /^Templates/ }).click();
+    await page.getByRole('button', { name: 'Use the template Video streaming app' }).click();
+    await expect(page.getByRole('button', { name: 'View: App' })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Workflows: Video library/ })).toBeVisible();
+    const player = page.frameLocator('iframe[title="App preview"]');
+    await expect(player.locator('.item')).toHaveCount(5, { timeout: 60_000 }); // Python's first start takes a moment
+    await expect(player.locator('#title')).toHaveText('Big Buck Bunny');
+    await expect(player.locator('#player')).toHaveAttribute('src', /BigBuckBunny\.mp4$/);
+    await player.getByRole('button', { name: 'Streams' }).click();
+    await expect(player.locator('.item')).toHaveCount(1);
+    await player.locator('#q').fill('zzz');
+    await expect(player.getByText('No videos match.')).toBeVisible();
+    await page.getByRole('button', { name: /^View:/ }).click();
+    await page.getByRole('menuitemradio', { name: /^Workflow/ }).click();
+    await expect(page.locator('.fv-node')).toHaveCount(3);
     await ctx.close();
   } finally {
     try { process.kill(-vite.pid); } catch (e) {}

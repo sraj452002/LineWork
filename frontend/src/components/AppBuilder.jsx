@@ -54,13 +54,17 @@ export default function AppBuilder({ file, update, files = [] }) {
       if (!w) return reply({ error: m.workflow ? `This app can’t run “${m.workflow}”. Add it under Workflows.` : 'This app has no workflows yet. Add one under Workflows.' });
       if (!server) return reply({ error: 'Workflows run on the Workline server. Sign in to run them.' });
       try {
-        const got = await api(`/flows/${encodeURIComponent(w.id)}/call`, { method: 'POST', body: { input: m.input } });
+        // The workflow as it is in the editor (saved or not yet), so a new or just-changed one works at once.
+        const f = w.id === file.id ? file : files.find(x => x.id === w.id);
+        const got = f && f.flow
+          ? await api(`/flows/${encodeURIComponent(w.id)}/data`, { method: 'POST', body: { flow: f.flow, input: m.input, trigger: 'app' } })
+          : await api(`/flows/${encodeURIComponent(w.id)}/call`, { method: 'POST', body: { input: m.input } });
         reply(got.pending ? { error: 'The workflow is taking more than a minute. Try again in a while.' } : { items: got.items || [] });
       } catch (err) { reply({ error: err.message || 'The workflow failed.' }); }
     };
     addEventListener('message', on);
     return () => removeEventListener('message', on);
-  }, [workflows, server]);
+  }, [workflows, server, file, files]);
 
   if (!ui) return null;
   const link = ui.published && ui.token ? `${location.origin}/api/ui/${ui.token}` : '';

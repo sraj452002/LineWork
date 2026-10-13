@@ -422,13 +422,14 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
         res.status(202).json({ runId: run.id });
       } catch (e) { res.status(e.code === 'busy' ? 429 : 400).json({ error: e.code || 'flow_error', message: e.message }); }
     });
-    // Run a flow and answer with what its last steps output, in full (a run keeps only a sample of each
-    // step): what a dashboard block on the canvas shows. Waits up to 60 s, then answers with the run id.
+    // Run a flow as it is in the editor (with optional input) and answer with what its last steps output,
+    // in full (a run keeps only a sample of each step): for dashboard blocks and a custom app's preview. Waits up to 60 s, then answers with the run id.
     api.post('/flows/:fileId/data', signedIn, async (req, res) => {
       if (!ID.test(req.params.fileId)) return res.status(400).json({ error: 'bad_id' });
       const { flow } = req.body || {};
       if (!flow || !Array.isArray(flow.nodes) || flow.nodes.length > 300 || !Array.isArray(flow.edges)) return res.status(400).json({ error: 'bad_flow', message: 'That isn’t a workflow.' });
-      await sendItems(res, () => runForItems(req.user.id, req.params.fileId, flow, asItems(), 'dashboard'));
+      const { input, trigger } = req.body;
+      await sendItems(res, () => runForItems(req.user.id, req.params.fileId, flow, asItems(input), trigger === 'app' ? 'app' : 'dashboard'));
     });
     // Run one of the account's saved workflows with some input and answer with its output in full: what a
     // custom app (the App view) does while it's being built.

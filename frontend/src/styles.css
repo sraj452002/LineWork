@@ -2511,3 +2511,10 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .ab-help{margin:0;font-size:12px;color:var(--ink2)}
 .ab-help code{font:11.5px var(--mono)}
 @media (max-width:760px){.ab-main{grid-template-columns:1fr;grid-template-rows:1fr 1fr}}
+/* Templates → Ready-made: a workflow with an app, to start from. */
+.tpl-ready h3{margin:4px 0 10px;font-size:13px;font-weight:650;color:var(--ink2);text-transform:uppercase;letter-spacing:.04em}
+.tpl-ready h3:last-child{margin-top:22px}
+.tpl-starter{display:flex;flex-direction:column;align-items:flex-start;gap:6px;text-align:left;padding:16px;border:1px solid var(--hair);border-radius:14px;background:var(--surface);box-shadow:var(--shadow-sm);color:var(--ink);font:inherit;cursor:pointer;transition:transform .3s var(--ease),box-shadow .3s var(--ease)}
+.tpl-starter:hover{transform:translateY(-2px);box-shadow:var(--shadow)}
+.tpl-starter small{color:var(--ink2);font-size:12.5px}
+.tpl-starter .tpl-kind{margin-top:2px;padding:2px 8px;border-radius:999px;background:color-mix(in srgb,var(--c-blue) 12%,var(--surface));color:var(--c-blue);font-weight:600;font-size:11px}

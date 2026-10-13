@@ -6,6 +6,7 @@ import { readSql } from '../lib/sql.js';
 import { rid } from '../lib/utils.js';
 import { emptyFlow, newNode } from '../lib/flows.js';
 import { importFlow } from '../lib/flowio.js';
+import { STARTERS } from '../lib/starters.js';
 import { useUI } from './ui.jsx';
 
 /* The Tools page: every tool in Workline in one place. Each one makes a new file that opens in that tool. */
@@ -136,6 +137,7 @@ export default function Tools({ q = '', onCreate, onGenerate, busy }) {
       { k: 'auto', view: 'Workflow', name: 'New GitHub issues to Slack', note: 'Post each new issue in a channel', act: () => onCreate(flowFile('GitHub issues to Slack', [['trigger.github', { events: 'issues.opened' }], ['app.slack', { text: 'New issue in {{ $json.repository }}: {{ $json.payload.issue.title }} {{ $json.payload.issue.html_url }}' }]])) },
       { k: 'auto', view: 'Workflow', name: 'Feed to Telegram', note: 'Send each new blog post to a Telegram chat', act: () => onCreate(flowFile('Feed to Telegram', [['trigger.rss'], ['app.telegram', { text: '{{ $json.title }}\n{{ $json.link }}' }]])) },
       { k: 'auto', view: 'App', name: 'Custom app', note: 'Your own page (HTML, CSS, JS) that runs workflows, with a link to share', act: () => onCreate({ ...flowFile('My app', [['trigger.manual'], ['core.code', { language: 'javascript', code: "return items.map(i => ({ question: i.question, answer: 'You asked: ' + (i.question || 'nothing') }));" }]]), view: 'app' }) },
+      ...STARTERS.map(t => ({ k: 'auto', view: 'App', name: t.name, note: t.note, act: () => onCreate(t.make()) })),
       { k: 'auto', view: 'Workflow', name: 'Import a workflow', note: 'Open a .json workflow: Workline’s or n8n’s', act: () => flowRef.current?.click() },
     ] },
     { id: 'code', name: 'Code', k: 'code', note: 'Write, run and understand code, all in the browser.', list: [
