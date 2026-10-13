@@ -8,6 +8,7 @@
    anyone, and it's served as a sandbox (flows.js) on top of that. */
 import { FlowError } from './flow-engine.js';
 import { formFields } from './flow-triggers.js';
+import { randomBytes } from 'node:crypto';
 
 const MAX_BLOCKS = 60, MAX_ROWS = 500;
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -22,10 +23,39 @@ const cssOf = v => String(v ?? '').replace(/[<>]/g, '').slice(0, 4000);
 const slug = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'block';
 const add = (args, block) => {
   const page = args.ctx && args.ctx.page;
-  if (page && page.blocks.length < MAX_BLOCKS) page.blocks.push({ node: args.node.name, css: cssOf(first(args).css), ...block });
+  // (A block that brings its own css (the Code block, whose params aren't expressions) skips filling them in.)
+  if (page && page.blocks.length < MAX_BLOCKS) page.blocks.push({ node: args.node.name, ...block, css: cssOf('css' in block ? block.css : first(args).css) });
   return { main: args.items };
 };
 const first = args => args.params(args.items[0], 0);
+
+/* ---- Code blocks: a part of the page in your own HTML, React or Vue ----
+   The page itself has no scripts, so a code block is a document of its own, kept here for a while and
+   served at /api/hook/code/<id> (flows.js) into a sandboxed frame on the page: scripts run there, from
+   the page's items and React or Vue from a CDN, with no access to the page, its cookies or the person. */
+const CODE = new Map(), CODE_TTL = 60 * 60_000, CODE_MAX = 1000;
+export const codeBlock = id => { const c = CODE.get(String(id)); return c && Date.now() - c.at < CODE_TTL ? c.html : null; };
+const keepCode = html => {
+  const now = Date.now();
+  for (const [k, v] of CODE) if (now - v.at > CODE_TTL || CODE.size >= CODE_MAX) CODE.delete(k); else break;
+  const id = randomBytes(16).toString('hex');
+  CODE.set(id, { html, at: now });
+  return id;
+};
+const jsonIn = v => JSON.stringify(v).replace(/</g, '\\u003c');
+const LIBS = {
+  react: '<script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script><script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script><script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script>',
+  vue: '<script src="https://unpkg.com/vue@3.4.38/dist/vue.global.prod.js"></script>',
+};
+export function codeDoc(framework, code, items) {
+  const src = String(code || '');
+  const head = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html{color-scheme:dark light}body{margin:0;background:transparent;font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}</style><script>window.items=${jsonIn(items)};window.item=window.items[0]||{};addEventListener('error',function(e){var d=document.createElement('pre');d.style.cssText='color:#ff8080;white-space:pre-wrap;font:12px monospace';d.textContent=String(e.message||e);document.body.appendChild(d)});</script>`;
+  if (framework === 'vue') return `${head}${LIBS.vue}</head><body><div id="app"></div><script>${src.replace(/<\/script/gi, '<\\/script')}
+;(function(){var a=Vue.createApp(typeof App!=='undefined'?App:{template:'<p>Name your component App.</p>'});a.config.globalProperties.items=window.items;a.config.globalProperties.item=window.item;a.mount('#app')})();</script></body></html>`;
+  if (framework === 'html') return `${head}</head><body>${src}</body></html>`;
+  return `${head}${LIBS.react}</head><body><div id="root"></div><script type="text/babel" data-presets="react">${src.replace(/<\/script/gi, '<\\/script')}
+;ReactDOM.createRoot(document.getElementById('root')).render(typeof App !== 'undefined' ? <App items={window.items} item={window.item} /> : <p>Name your component App.</p>);</script></body></html>`;
+}
 
 /* ---- a little Markdown: # headings, **bold**, *italic*, `code`, [links](…), - lists, paragraphs ---- */
 function inline(s) {
@@ -122,6 +152,15 @@ export const UI_NODES = {
     const buttons = (Array.isArray(p.buttons) ? p.buttons : []).filter(b => b && String(b.name || '').trim()).slice(0, 20).map(b => ({ label: String(b.name), href: safeUrl(b.value) }));
     return add(args, { kind: 'buttons', buttons });
   } },
+  'ui.code': { run: args => {
+    // The code as written: {{ }} in it is React's and Vue's, not an expression.
+    const raw = args.node.params || {}, p = raw;
+    const fw = ['react', 'vue', 'html'].includes(raw.framework) ? raw.framework : 'react';
+    let items = args.items.slice(0, MAX_ROWS).map(x => x.json);
+    while (items.length > 1 && JSON.stringify(items).length > 400_000) items = items.slice(0, Math.ceil(items.length / 2));
+    const id = keepCode(codeDoc(fw, String(raw.code || '').slice(0, 100_000), items));
+    return add(args, { kind: 'code', id, height: Math.min(4000, Math.max(60, Number(p.height) || 320)), title: String(p.title || args.node.name || 'Code block'), css: p.css || '' });
+  } },
   'ui.form': { run: args => {
     const p = first(args);
     return add(args, { kind: 'form', title: p.title || '', action: String(p.action || args.node.name || 'submit').slice(0, 60), fields: formFields(p.fields), button: p.button || 'Send', values: args.ctx?.page?.form || {} });
@@ -136,6 +175,7 @@ function block(b, query) {
     case 'cards': return `<section>${head}<div class="cards">${b.cards.map(c => `<div class="card"><span>${esc(c.label)}</span><b>${esc(fmt(c.value))}</b></div>`).join('')}</div></section>`;
     case 'table': return `<section>${head}<div class="tablewrap"><table><thead><tr>${b.columns.map(c => `<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${b.rows.length ? b.rows.map(r => `<tr>${b.columns.map(c => `<td>${esc(fmt(r && typeof r === 'object' ? r[c] : r))}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${b.columns.length || 1}" class="muted">No rows.</td></tr>`}</tbody></table></div>${b.more ? `<p class="muted">And ${b.more} more.</p>` : ''}</section>`;
     case 'chart': return `<section class="panel">${head}${b.chart}</section>`;
+    case 'code': return `<section class="code"><iframe class="codeblock" src="/api/hook/code/${esc(b.id)}" sandbox="allow-scripts allow-popups allow-forms allow-modals" style="height:${Number(b.height) || 320}px" title="${esc(b.title)}" loading="lazy"></iframe></section>`;
     case 'media': {
       const one = m => (m.kind === 'video'
         ? `<video controls playsinline preload="metadata" src="${esc(m.url)}"${m.poster ? ` poster="${esc(m.poster)}"` : ''}></video>`
@@ -175,7 +215,7 @@ a{color:${t.acc}}code{font:13px ui-monospace,monospace;background:${t.card};bord
 form{display:grid;gap:12px}label{display:grid;gap:5px;font-weight:600;font-size:13px}input,textarea{font:inherit;padding:10px 12px;border:1px solid ${t.line};border-radius:10px;background:${t.bg};color:${t.fg}}textarea{min-height:100px}
 button{justify-self:start;padding:10px 20px;border:0;border-radius:10px;background:${t.acc};color:#fff;font:600 15px system-ui;cursor:pointer}
 .error{border:1px solid #f0b4b4;background:${dark ? '#2a1414' : '#fff1f1'};color:${dark ? '#ffb4b4' : '#a11'};border-radius:12px;padding:12px 16px}
-footer{color:${t.mut};font-size:12px;text-align:center}.node{min-width:0}
+footer{color:${t.mut};font-size:12px;text-align:center}.node{min-width:0}.codeblock{display:block;width:100%;border:0;border-radius:12px;background:transparent}
 </style>${params.css ? `<style>${cssOf(params.css)}</style>` : ''}</head><body><main>
 ${params.title || params.description ? `<header>${params.title ? `<h1>${esc(params.title)}</h1>` : ''}${params.description ? `<p>${esc(params.description)}</p>` : ''}</header>` : ''}
 ${error ? `<div class="error">${esc(error)}</div>` : ''}

@@ -471,7 +471,7 @@ ${catalog}`;
         <div className="modal" onClick={e => { if (e.target === e.currentTarget) setPagePreview(null); }}>
           <div className="mbox fv-pagebox" role="dialog" aria-modal="true" aria-label="Page preview">
             <div className="fv-pagehead"><b>Page preview</b><small className="muted">Buttons and forms work at the page’s link (turn the workflow Active).</small><button className="btn" onClick={() => setPagePreview(null)}>Close</button></div>
-            {pagePreview.busy ? <p className="muted">Running the workflow…</p> : <iframe title="Page preview" sandbox="" srcDoc={pagePreview.html} />}
+            {pagePreview.busy ? <p className="muted">Running the workflow…</p> : <iframe title="Page preview" sandbox="allow-scripts allow-popups" srcDoc={pagePreview.html} />}
           </div>
         </div>
       )}
