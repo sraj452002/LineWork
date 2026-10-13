@@ -428,7 +428,9 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
   /* ---- pages made of UI nodes (flow-ui.js): the Page trigger's link ----
      Opening it runs the workflow ({action: 'open'}); a form on it runs it again with the answers. The page
      is the UI nodes' blocks, drawn as HTML with no scripts and served as a sandbox. */
-  const PAGE_HEADERS = { 'content-security-policy': "sandbox allow-forms allow-popups allow-popups-to-escape-sandbox; default-src 'none'; img-src https: http: data:; media-src https: http:; style-src 'unsafe-inline'; form-action 'self'", 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'cache-control': 'no-store' };
+  // allow-scripts is only for the browser's own video controls (Safari's are scripts, and a sandbox without
+  // it leaves a video that won't play); script-src 'none' still keeps every script on the page from running.
+  const PAGE_HEADERS = { 'content-security-policy': "sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox; default-src 'none'; script-src 'none'; img-src https: http: data:; media-src https: http:; style-src 'unsafe-inline'; form-action 'self'", 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'cache-control': 'no-store' };
   const pageInput = req => {
     const body = req.method === 'POST' && req.body && typeof req.body === 'object' ? req.body : {};
     const form = Object.fromEntries(Object.entries(body).filter(([k]) => k !== '_action').map(([k, v]) => [k, String(v ?? '').slice(0, 10_000)]).slice(0, 50));
