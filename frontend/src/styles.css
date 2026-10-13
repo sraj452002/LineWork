@@ -2662,31 +2662,3 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .fv-edge.lit .line{animation:fv-pluck .7s ease-out,lw-march 3s linear .7s infinite}
 @keyframes fv-pluck{0%{stroke-width:6;stroke:#fff}35%{stroke-width:4}100%{stroke-width:2}}
 @media (prefers-reduced-motion:reduce){.fv-node.active,.fv-node.active::before,.fv-node.s-success,.fv-node.s-error,.fv-edge.lit .line{animation:none}.fv-node.active::before{background:var(--c-blue)}}
-
-/* ---- 3D nodes (the 3D button in the workflow toolbar): each node a raised tile, lit from above, with a
-   thick edge underneath; it tilts towards the pointer and lifts on hover ---- */
-.fv-3d .fv-layer{perspective:900px}
-.fv-3d .fv-node{transform-style:preserve-3d;transform:rotateX(14deg);transform-origin:50% 100%;
-  background:linear-gradient(160deg,color-mix(in srgb,#fff 70%,var(--surface)) 0%,var(--surface) 45%,color-mix(in srgb,var(--ink) 6%,var(--surface)) 100%);
-  border:1px solid color-mix(in srgb,var(--tone) 35%,var(--line));
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.9),inset 0 -2px 0 color-mix(in srgb,var(--tone) 18%,transparent),
-    0 1px 0 color-mix(in srgb,var(--tone) 40%,#888),0 2px 0 color-mix(in srgb,var(--tone) 38%,#777),0 3px 0 color-mix(in srgb,var(--tone) 36%,#666),
-    0 4px 0 color-mix(in srgb,var(--tone) 34%,#555),0 5px 0 color-mix(in srgb,var(--tone) 32%,#444),
-    0 14px 18px -6px rgba(0,0,0,.45),0 26px 30px -16px rgba(0,0,0,.35);
-  transition:transform .25s cubic-bezier(.3,1.4,.5,1),box-shadow .25s}
-.fv-3d .fv-node:hover{transform:rotateX(4deg) scale(1.03);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.9),inset 0 -2px 0 color-mix(in srgb,var(--tone) 18%,transparent),
-    0 1px 0 color-mix(in srgb,var(--tone) 40%,#888),0 2px 0 color-mix(in srgb,var(--tone) 38%,#777),0 3px 0 color-mix(in srgb,var(--tone) 36%,#666),
-    0 4px 0 color-mix(in srgb,var(--tone) 34%,#555),0 5px 0 color-mix(in srgb,var(--tone) 32%,#444),0 6px 0 color-mix(in srgb,var(--tone) 30%,#333),
-    0 24px 26px -8px rgba(0,0,0,.45),0 40px 40px -22px rgba(0,0,0,.35)}
-.fv-3d .fv-node.on{outline:2px solid var(--tone);outline-offset:3px}
-.fv-3d .fv-node .fv-badge{transform:translateZ(14px);
-  background:radial-gradient(circle at 30% 25%,rgba(255,255,255,.85),transparent 45%),linear-gradient(160deg,color-mix(in srgb,var(--tone) 22%,#fff),color-mix(in srgb,var(--tone) 34%,transparent));
-  box-shadow:inset 0 -3px 6px color-mix(in srgb,var(--tone) 25%,transparent),0 4px 8px -3px color-mix(in srgb,var(--tone) 55%,transparent)}
-.fv-3d .fv-node .fv-label{transform:translateX(-50%) rotateX(-14deg)}
-.fv-3d .fv-node .fv-st{transform:translateZ(20px)}
-.fv-3d .fv-port{transform:translateZ(6px)}
-:root[data-theme="dark"] .fv-3d .fv-node{background:linear-gradient(160deg,color-mix(in srgb,#fff 12%,var(--surface)) 0%,var(--surface) 50%,color-mix(in srgb,#000 30%,var(--surface)) 100%)}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .fv-3d .fv-node{background:linear-gradient(160deg,color-mix(in srgb,#fff 12%,var(--surface)) 0%,var(--surface) 50%,color-mix(in srgb,#000 30%,var(--surface)) 100%)}}
-.fv-3d .fv-node.fv-note{transform:rotateX(10deg)}
-@media (prefers-reduced-motion:reduce){.fv-3d .fv-node,.fv-3d .fv-node:hover{transition:none}}
