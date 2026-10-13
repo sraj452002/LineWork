@@ -65,6 +65,9 @@ export default function FlowView({ file, update, visible, saveState = 'Saved', o
   const [credDlg, setCredDlg] = useState(null); // {types, pick?: id => void}
   const [help, setHelp] = useState(null);       // a node type explained in a popup
   const [publish, setPublish] = useState(false);
+  const [webPub, setWebPub] = useState(false);
+  // A workflow that starts with a Page trigger is a web app: Publish puts its page on the web.
+  const pageNode = (flow.nodes || []).find(n => n.type === 'trigger.page');
   // The page a Page trigger draws, made from the workflow as it is now (no need to save or turn it Active).
   const [pagePreview, setPagePreview] = useState(null);
   const previewPage = async nodeId => {
@@ -337,9 +340,15 @@ ${catalog}`;
         <button className="fv-tool" onClick={saveTemplate} title="Keep this workflow as a template in Tools">
           <Ico d="M6 3h12v18l-6-4-6 4z" size={15} />Template
         </button>
-        <button className={'fv-tool' + (flow.app?.published ? ' fv-save done' : '')} onClick={() => setPublish(true)} title="Turn this workflow into an app with a simple form, in Home → Apps">
-          <Ico d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM16.5 13v7M13 16.5h7" size={15} />{flow.app?.published ? 'Published' : 'Publish'}
-        </button>
+        {pageNode ? (
+          <button className={'fv-tool' + (flow.active ? ' fv-save done' : '')} onClick={() => setWebPub(true)} title="Put this page on the web at its own link, for anyone to open">
+            <Ico d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c2.5 2.6 2.5 15.4 0 18M12 3c-2.5 2.6-2.5 15.4 0 18" size={15} />{flow.active ? 'Live on the web' : 'Publish web app'}
+          </button>
+        ) : (
+          <button className={'fv-tool' + (flow.app?.published ? ' fv-save done' : '')} onClick={() => setPublish(true)} title="Turn this workflow into an app with a simple form, in Home → Apps">
+            <Ico d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM16.5 13v7M13 16.5h7" size={15} />{flow.app?.published ? 'Published' : 'Publish'}
+          </button>
+        )}
         <input ref={importRef} type="file" accept=".json,application/json" hidden onChange={e => { doImport(e.target.files[0]); e.target.value = ''; }} />
         <span className="grow" />
         {onGuide && <button className="fv-tool" onClick={() => onGuide('flow')} title="How workflows work, and every node explained">
@@ -467,6 +476,7 @@ ${catalog}`;
         </div>
       )}
       {publish && <PublishDialog file={file} flow={flow} change={change} onClose={() => setPublish(false)} />}
+      {webPub && pageNode && <WebPublishDialog flow={flow} node={pageNode} server={server} change={change} onForm={() => { setWebPub(false); setPublish(true); }} onClose={() => setWebPub(false)} />}
       {credDlg && <Credentials types={credDlg.types} creds={creds} onChanged={loadCreds} onPick={credDlg.pick} onClose={() => setCredDlg(null)} ask={ask} toast={toast} />}
     </div>
   );
@@ -691,6 +701,41 @@ function Field({ f, value, onChange }) {
 }
 
 // The account's credentials: add, change (secrets left empty are kept) and remove.
+// Publish a page made of nodes as a web app: turning it on makes the Page trigger's link answer (it's the
+// workflow's Active switch, saved with it); the dialog hands out the link and how to put it on a phone.
+function WebPublishDialog({ flow, node, server, change, onForm, onClose }) {
+  const { toast } = useUI();
+  const link = `${location.origin}/api/hook/${(node.params || {}).path}`;
+  const live = !!flow.active;
+  const turn = on => {
+    change(f => { f.active = on; });
+    dispatchEvent(new Event('workline:save'));
+    toast(on ? 'Published: the link works now' : 'Unpublished: the link stops working');
+  };
+  return (
+    <div className="modal" onPointerDown={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="mbox fv-pub" role="dialog" aria-modal="true" aria-label="Publish as a web app">
+        <h3>Publish as a web app</h3>
+        <p className="muted">This workflow draws a page (it starts with a <b>Page</b> trigger). Publish it and the page is a web app at its own link: anyone can open it on a phone or computer, no account needed. It always runs the saved workflow.</p>
+        {!server && <p className="err">Sign in to the Workline server to publish: the server is what answers the link.</p>}
+        <label className={'fv-active' + (live ? ' on' : '')}><input type="checkbox" checked={live} disabled={!server} onChange={e => turn(e.target.checked)} /><i />{live ? 'Live: anyone with the link can use it' : 'Not published'}</label>
+        <h4>Its link</h4>
+        <div className="fv-row"><input readOnly aria-label="Web app link" value={link} onFocus={e => e.target.select()} />
+          <button type="button" className="btn" onClick={() => { navigator.clipboard?.writeText(link); toast('Link copied'); }}>Copy</button>
+          {live && <a className="btn" href={link} target="_blank" rel="noreferrer">Open</a>}</div>
+        <h4>On a phone</h4>
+        <p className="muted">Open the link, then <b>Share → Add to Home Screen</b> on iPhone, or <b>⋮ → Add to home screen</b> on Android. It gets an icon like any app.</p>
+        <p className="muted">Want a form in <b>Home → Apps</b> instead? <button type="button" className="link" onClick={onForm}>Publish as a form app</button></p>
+        <div className="mact">
+          {!live && server && <button className="btn dark" onClick={() => turn(true)}>Publish</button>}
+          {live && <button className="btn danger-text" onClick={() => turn(false)}>Unpublish</button>}
+          <button className={'btn' + (live ? ' dark' : '')} onClick={onClose}>{live ? 'Done' : 'Close'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Publish as an app: how it looks in Home → Apps, what it asks for, where it starts and what it shows.
 // Changes go straight into flow.app (saved with the workflow); the app always runs the saved version.
 const TONES = ['blue', 'violet', 'green', 'amber', 'pink', 'sky', 'orange', 'slate'];

@@ -744,7 +744,7 @@ function appsGuide() {
       <ol>
         <li>Start the workflow with the <b>Page</b> trigger (Nodes → Triggers). Give it a title, and a light or dark look.</li>
         <li>Add the nodes that get your data (a database, a sheet, an HTTP call, AI…), then <b>UI</b> nodes in the order they should appear: <b>Text</b>, <b>Cards</b>, <b>Table</b>, <b>Chart</b>, <b>Image or video</b>, <b>Buttons</b>, <b>Form</b>. Each one shows the items reaching it and passes them on.</li>
-        <li>Press <b>Preview page</b> on the Page trigger to see it. Turn the workflow <b>Active</b>, then <b>Open</b> or <b>Copy</b> its link.</li>
+        <li>Press <b>Preview page</b> on the Page trigger to see it. Then <b>Publish web app</b> (in the workflow’s toolbar): it goes live at its own link, with <b>Copy</b> and <b>Open</b>, and can be added to a phone’s home screen. <b>Unpublish</b> takes it off again.</li>
       </ol>
       <ul>
         <li>The workflow gets <code>{'{ action, query, form }'}</code>: <b>Buttons</b> reopen the page with a choice in <code>query</code> (<code>?category=Film</code>), and a <b>Form</b> reruns it with its answers in <code>form</code> and its name in <code>action</code>. Read them with <code>{'{{ $json.query.category }}'}</code> right after the trigger, or <code>{'{{ $node["Page"].json.form.search }}'}</code> further on.</li>
