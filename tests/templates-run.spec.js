@@ -91,6 +91,46 @@ test.describe('pages made of nodes', () => {
     expect(r.json.html).toMatch(/name="message"/);
   });
 
+  test('StarPlay 2: a streaming page made only of nodes', async () => {
+    const { createServer } = await import('node:http');
+    const { readFileSync } = await import('node:fs');
+    const list = createServer((req, res) => { res.writeHead(200, { 'content-type': 'text/plain' }); res.end(readFileSync('samples/videos.json')); }).listen(0);
+    const app2 = createApp(await openStore(memoryBackend()), { requireVerified: false, dbAllowPrivate: true }), srv2 = app2.listen(0);
+    try {
+      const b2 = `http://localhost:${srv2.address().port}/api`;
+      const up = await fetch(`${b2}/auth/signup`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'sp2@example.com', password: 'a long password' }) });
+      const ck = up.headers.get('set-cookie').split(';')[0];
+      const f = READY.find(t => t.k === 'p-ott').make();
+      expect(f.flow.nodes.every(n => n.type.startsWith('trigger.') || n.type.startsWith('core.') || n.type.startsWith('ui.'))).toBe(true);
+      f.flow.nodes.find(n => n.type === 'core.http').params.url = `http://localhost:${list.address().port}/samples/videos.json`;
+      const open = async input => {
+        const r = await fetch(`${b2}/flows/${f.id}/page`, { method: 'POST', headers: { 'content-type': 'application/json', cookie: ck }, body: JSON.stringify({ flow: f.flow, input }) });
+        const j = await r.json(); expect(r.status, JSON.stringify(j).slice(0, 300)).toBe(200); return j.html;
+      };
+      const home = await open({});
+      expect(home).toContain('<h1>StarPlay 2</h1>');
+      expect(home).toMatch(/<video[^>]+src="https:\/\/storage\.googleapis\.com\/[^"]+\.mp4"/); // MP4 only: no scripts on a page
+      expect(home).toContain('Code Red: Delhi');
+      for (const h of ['Episodes', 'Latest Releases', 'Top 10 in India Today', '🔴 Live Sports', 'Choose your plan']) expect(home, h).toContain(h);
+      expect(home).toContain('href="?video=code-red&amp;ep=1"');
+      expect(home).toMatch(/<span>Super<\/span><b>₹149 \/ month<\/b>/);
+      expect(home).toContain('<td>India vs Australia</td>');
+      expect(home).toContain('<svg class="chart"');
+      expect(home).toContain('name="_action" value="subscribe"');
+      // A movie, from a tab: it plays, with more like it.
+      const movie = await open({ query: { tab: 'movies', video: 'kaveri' } });
+      expect(movie).toMatch(/<h3>Kaveri Blues<\/h3>/);
+      expect(movie).toContain('More Like This');
+      const movies = await open({ query: { tab: 'movies' } });
+      expect(movies).toContain('<a class="btn on" href="?tab=movies">');
+      expect(movies).toContain('href="?video=kaveri&amp;tab=movies"');
+      // An episode, a search, and the subscribe form's answer.
+      expect(await open({ query: { video: 'mumbai-nights', ep: '7' } })).toContain('Mumbai Nights · S2 E2 · The Offer');
+      expect(await open({ action: 'search', form: { search: 'kaveri' } })).toContain('1 results for “kaveri”');
+      expect(await open({ action: 'subscribe', form: { name: 'Riya', mobileNumber: '9999999999', plan: 'Super' } })).toContain('Thanks, Riya!');
+    } finally { srv2.close(); app2.flows.close(); list.close(); }
+  });
+
   // The app templates' workflows, run as their published apps run them.
   const publish = async (k, token, access = 'public') => {
     const f = READY.find(t => t.k === k).make();
