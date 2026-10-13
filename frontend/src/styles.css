@@ -2635,3 +2635,7 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .vb-none{display:grid;gap:8px}
 .ab-preview.full{flex:1;width:100%;min-height:0;border:0}
 @media (max-width: 900px){.vb-main{flex-direction:column}.vb-left,.vb-right{width:auto;border:0;border-bottom:1px solid var(--hair);max-height:240px}}
+.ab-live{font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;white-space:nowrap}
+.ab-live.live{color:#15803d;background:color-mix(in srgb,#22c55e 14%,var(--surface))}
+.ab-live.checking,.ab-live.waking{color:#a16207;background:color-mix(in srgb,#eab308 14%,var(--surface))}
+.ab-live.missing{color:#b91c1c;background:color-mix(in srgb,#ef4444 12%,var(--surface))}

@@ -15,6 +15,8 @@ const VisualBuilder = lazy(() => import('./VisualBuilder.jsx'));
    design in file.ui.spec, made into html by lib/appbuilder.js), or Code, by writing it. A visual app can
    ask people to sign in first (file.ui.access, file.ui.allow). */
 
+const LIVE_TEXT = { checking: '● Checking…', live: '● Live', waking: '● Server waking up…', missing: '● Not live' };
+const LIVE_HELP = { checking: 'Checking that the link works', live: 'The link works: anyone with it can use the app', waking: 'The Workline server is starting (a free server sleeps when idle); the link will work in a minute', missing: 'The link isn’t answering yet: wait for “Saved”, or reload' };
 const hasFlow = f => !!(f && f.flow && Array.isArray(f.flow.nodes) && f.flow.nodes.length);
 
 export default function AppBuilder({ file, update, files = [], onGuide, assist }) {
@@ -42,6 +44,26 @@ export default function AppBuilder({ file, update, files = [], onGuide, assist }
   useEffect(() => { if (!file.ui) write({ mode: 'visual', spec: newVisualApp(file.title || 'My app', hasFlow(file) ? file.title : ''), flows: hasFlow(file) ? [file.id] : [] }); }, [file.ui]); // eslint-disable-line react-hooks/exhaustive-deps
   const visual = !!(file.ui && file.ui.mode === 'visual' && file.ui.spec);
   const [previewing, setPreviewing] = useState(false);
+  // Is the published link answering? Checked when the app opens published, and after publishing.
+  const [live, setLive] = useState(null), [liveCheck, setLiveCheck] = useState(0);
+  const liveLink = file.ui && file.ui.published && file.ui.token ? `${location.origin}/api/ui/${file.ui.token}` : '';
+  useEffect(() => {
+    if (!liveLink) { setLive(null); return undefined; }
+    let stop = false, tries = 0;
+    setLive('checking');
+    const check = async () => {
+      if (stop) return;
+      try {
+        const r = await fetch(liveLink, { method: 'GET', cache: 'no-store' });
+        if (stop) return;
+        if (r.ok) return setLive('live');
+        if (++tries < 12) return setTimeout(check, 2500); // still saving
+        setLive('missing');
+      } catch (e) { if (!stop) { setLive('waking'); if (++tries < 30) setTimeout(check, 4000); } }
+    };
+    check();
+    return () => { stop = true; };
+  }, [liveLink, liveCheck]);
 
   const [server, setServer] = useState(undefined);
   useEffect(() => { hasFeature('flows').then(setServer); }, []);
@@ -143,6 +165,13 @@ ${ui ? ui.html : ''}`,
   };
   if (!ui) return null;
   const link = ui.published && ui.token ? `${location.origin}/api/ui/${ui.token}` : '';
+  // Publishing saves at once, so the link works straight away; it stays published, at the same link, until
+  // it's turned off here (which asks first).
+  const setPublished = async on => {
+    if (!on && !await ask({ title: 'Stop publishing this app?', text: 'Its link stops working for everyone, and exported apps stop reaching their workflows. Turn Publish on again and the same link works again.', input: false, ok: 'Unpublish' })) return;
+    write({ published: on, token: ui.token || secretPath() + secretPath().slice(0, 8) });
+    if (on) { setTimeout(() => dispatchEvent(new Event('workline:save')), 60); setLiveCheck(n => n + 1); }
+  };
   const toggle = id => write({ flows: granted.includes(id) ? granted.filter(x => x !== id) : [...granted, id] });
   const pickFlows = el => popup(el, choices.length
     ? choices.map(c => ({ label: c.name, on: granted.includes(c.id), act: () => toggle(c.id) }))
@@ -168,6 +197,8 @@ ${ui ? ui.html : ''}`,
       if (!await ask({ title: 'Publish the app first?', text: 'An exported app runs its workflows through the app’s published link, so it needs to be published. Anyone with the link (or the exported app) can use it.', input: false, ok: 'Publish and export' })) return;
       token = token || secretPath() + secretPath().slice(0, 8);
       write({ published: true, token });
+      setTimeout(() => dispatchEvent(new Event('workline:save')), 60);
+      setLiveCheck(n => n + 1);
     }
     const opts = { title, workflows, base: `${location.origin}/api/ui/${token}` };
     const ex = await import('../lib/appexport.js');
@@ -208,8 +239,9 @@ ${ui ? ui.html : ''}`,
           <button className="btn" onClick={() => { navigator.clipboard?.writeText(link); toast('Link copied'); }}>Copy</button>
           <a className="btn" href={link} target="_blank" rel="noreferrer">Open</a>
         </>}
-        <label className={'fv-active' + (ui.published ? ' on' : '')} title="Anyone with the link can use the app, and run its workflows with your credentials">
-          <input type="checkbox" checked={!!ui.published} disabled={server === false} onChange={e => write({ published: e.target.checked, token: ui.token || secretPath() + secretPath().slice(0, 8) })} />
+        {ui.published && live && <span className={'ab-live ' + live} role="status" title={LIVE_HELP[live]}>{LIVE_TEXT[live]}</span>}
+        <label className={'fv-active' + (ui.published ? ' on' : '')} title="Stays published, at the same link, until you turn it off. Anyone with the link can use the app, and run its workflows with your credentials">
+          <input type="checkbox" checked={!!ui.published} disabled={server === false} onChange={e => setPublished(e.target.checked)} />
           <i />{ui.published ? 'Published' : 'Publish'}
         </label>
       </div>

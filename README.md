@@ -201,7 +201,7 @@ The **App** view starts in **Visual**: build an app for other people by dragging
 
   A browser can't compile an `.apk` or `.exe` itself, hence the projects with a cloud build; each has a README (`frontend/src/lib/appexport.js`).
 
-The design is saved in `file.ui.spec`; `frontend/src/lib/appbuilder.js` turns it into the page (a small runtime with the design as JSON), published like any custom app below. Sign-in: `POST /api/ui/<token>/signup`, `/login`, `/me`, `/logout`; sessions last 30 days and live in the page's `window.name` (the sandboxed page has no storage), so they survive reloads in that tab.
+The design is saved in `file.ui.spec`; `frontend/src/lib/appbuilder.js` turns it into the page (a small runtime with the design as JSON), published like any custom app below. **Publish** keeps the app published, at the same link, until you turn it off (which asks first): the link is saved with the file on the server and survives restarts and edits. Publishing saves at once and checks the link (● Live). On a free Render server the first visit after it has slept takes about a minute. Sign-in: `POST /api/ui/<token>/signup`, `/login`, `/me`, `/logout`; a session lasts a year from its last use and lives in the page's `window.name` (the sandboxed page has no storage), so they survive reloads in that tab.
 
 ## Custom apps
 

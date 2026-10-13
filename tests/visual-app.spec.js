@@ -97,6 +97,7 @@ return [
     await expect(page.getByText('No accounts yet')).toBeVisible();
     await page.getByText('Publish', { exact: true }).click();
     const link = await page.getByLabel('App link').inputValue();
+    await expect(page.locator('.ab-live')).toHaveText('● Live', { timeout: 30_000 }); // saved at once, and answering
     await expect(page.getByText('Saved')).toBeVisible();
 
     // Export: a web page, and an Android project (a .zip), each pointing at the published link.
@@ -137,6 +138,12 @@ return [
     await page.getByRole('tab', { name: 'Data' }).click();
     await page.getByRole('tab', { name: 'App' }).click();
     await expect(page.getByRole('list', { name: 'People with an account' })).toContainText('pat@example.com');
+    // Turning Publish off asks first; saying no keeps it published.
+    await page.getByText('Published', { exact: true }).click();
+    await expect(page.getByRole('dialog')).toContainText('Stop publishing this app?');
+    await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
+    await expect(page.getByText('Published', { exact: true })).toBeVisible();
+    expect((await fetch(link.replace(url, `http://localhost:${srv.address().port}`))).status).toBe(200);
     expect(errors).toEqual([]);
     await ctx.close();
   } finally {
