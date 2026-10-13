@@ -664,7 +664,7 @@ function appsGuide() {
         <tr><th>Databases</th><td>Online shop, Blog, SaaS accounts and billing: schemas, drawn. Connect a live database in the Database view.</td></tr>
         <tr><th>Code</th><td>Node.js REST API, Python data analysis, Landing page, TypeScript utility with tests</td></tr>
         <tr><th>Workflows</th><td>Daily AI news digest, Lead capture with AI, Support ticket triage, Weekly sales report, Failure alerts</td></tr>
-        <tr><th>Apps</th><td>Feedback analyzer, KPI dashboard, Video streaming app</td></tr>
+        <tr><th>Apps</th><td>Sales command center, Stay finder, Fitness journal, AI help center and Order tracker (all drag and drop, ready to restyle), Feedback analyzer, KPI dashboard, Video streaming app</td></tr>
         <tr><th>Pages</th><td>Sales dashboard page, Feedback form page, Video library page: made only of nodes</td></tr>
       </tbody></table>
       <p>Where a template sends to Slack or email, reads a database or adds rows to a sheet, the node is there and named: pick your credential, connection or file on it, then turn the workflow <b>Active</b>.</p>

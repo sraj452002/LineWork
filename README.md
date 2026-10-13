@@ -228,7 +228,7 @@ The Code view's **Run** button, **Terminal** and **Python** prompt run code in t
 | Databases | Online shop, Blog, SaaS accounts and billing (schemas, drawn) |
 | Code | Node.js REST API, Python data analysis, Landing page, TypeScript utility with tests |
 | Workflows | Daily AI news digest, Lead capture with AI, Support ticket triage, Weekly sales report, Failure alerts |
-| Apps | Feedback analyzer, KPI dashboard, Video streaming app |
+| Apps | Sales command center (dark dashboard, pipeline board, calendar), Stay finder (travel site with filters, map and booking), Fitness journal (gauges, habits, countdown), AI help center (Claude chat, FAQ, guides), Order tracker (sign-in), Feedback analyzer, KPI dashboard, Video streaming app |
 | Pages | Sales dashboard page, Feedback form page, Video library page |
 
 Templates that need an account of yours (Slack, email, a database connection, a sheet to add rows to) are wired up and named; pick the credential or file on the node. Below them are the workflows you saved with **Template**.
