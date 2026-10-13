@@ -26,6 +26,7 @@ test('build an app visually, publish it behind sign-in, and use it on a phone', 
     await page.getByLabel('Password').fill('a long password');
     await page.getByRole('button', { name: 'Create account' }).click();
 
+    await expect(page.getByRole('button', { name: 'Create a Blank File' })).toBeVisible(); // signed in
     // A workflow with some orders, which says who asked.
     const code = `const who = items[0] && items[0].user ? items[0].user.email : 'nobody';
 return [
@@ -36,7 +37,8 @@ return [
       { id: 't', type: 'trigger.manual', name: 'Run by hand', x: 80, y: 160, params: {} },
       { id: 'c', type: 'core.code', name: 'Orders', x: 340, y: 160, params: { language: 'javascript', code } },
     ], edges: [{ id: 'e', from: 't', fromPort: 'main', to: 'c', toPort: 'main' }] } } });
-    expect(put.ok()).toBe(true);
+    expect(put.status(), await put.text()).toBe(200);
+    expect((await (await page.request.get('/api/files')).json()).files.map(f => f.id)).toContain('f_orders');
     // The file list loads from the server; reload until the new file is in it.
     const row = page.locator('.ftable tbody tr', { hasText: 'Orders' });
     for (let i = 0; i < 6 && !(await row.count()); i++) { await page.reload(); await row.waitFor({ timeout: 8000 }).catch(() => {}); }

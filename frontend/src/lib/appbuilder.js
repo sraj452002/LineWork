@@ -47,6 +47,9 @@ export const COMPONENTS = {
   html: { label: 'Custom HTML', w: 6, h: 20, props: { html: '<p>Your own <b>HTML</b>. {{ vars.x }}</p>' },
     fields: [f('html', 'HTML', 'textarea')] },
 
+  hero: { label: 'Hero banner', w: 12, h: 30, props: { kicker: 'New', title: 'A big, bold headline', subtitle: 'One line about what this app does and who it’s for.', button: 'Get started', image: '', align: 'left', steps: [] }, events: 'steps',
+    fields: [f('kicker', 'Small label above'), f('title', 'Headline'), f('subtitle', 'Below it', 'textarea'), f('button', 'Button (blank: none)'), f('image', 'Background photo URL (blank: a gradient)'), f('align', 'Align', 'select', { options: [['left', 'Left'], ['center', 'Center']] })] },
+
   /* ---- more inputs ---- */
   checkbox: { label: 'Checkbox', w: 4, h: 5, props: { label: 'I agree', value: false, steps: [] }, events: 'steps', holds: 'true or false',
     fields: [f('label', 'Label'), f('value', 'Ticked at first', 'bool')] },
@@ -129,7 +132,7 @@ export const COMPONENTS = {
 
 // Where each sits in the palette.
 export const GROUPS = [
-  ['Basics', ['heading', 'text', 'button', 'link', 'image', 'divider']],
+  ['Basics', ['hero', 'heading', 'text', 'button', 'link', 'image', 'divider']],
   ['Inputs', ['input', 'search', 'select', 'radio', 'checkbox', 'switch', 'multiselect', 'slider', 'rating', 'date', 'color', 'file', 'form']],
   ['Data', ['table', 'chart', 'stat', 'list', 'items', 'kanban', 'calendar', 'details', 'json', 'timeline']],
   ['Status', ['badge', 'alert', 'progress', 'gauge', 'stepper', 'countdown', 'avatar']],
@@ -137,7 +140,7 @@ export const GROUPS = [
   ['Layout', ['box', 'spacer', 'accordion', 'tabs', 'code', 'html']],
   ['AI', ['chat']],
 ];
-const EVENT_LABEL = { button: 'When it’s clicked', form: 'When it’s sent', table: 'When a row is clicked', list: 'When a card is clicked', items: 'When an item is clicked', kanban: 'When a card is clicked', calendar: 'When an event or day is clicked', search: 'When Enter is pressed' };
+const EVENT_LABEL = { hero: 'When its button is clicked', button: 'When it’s clicked', form: 'When it’s sent', table: 'When a row is clicked', list: 'When a card is clicked', items: 'When an item is clicked', kanban: 'When a card is clicked', calendar: 'When an event or day is clicked', search: 'When Enter is pressed' };
 export const eventLabel = type => EVENT_LABEL[type] || 'When it changes';
 // Every component can sit in a card.
 export const COMMON_FIELDS = [f('card', 'In a card', 'bool')];
@@ -152,6 +155,9 @@ export const THEMES = {
   dark: { primary: '#8b8cf8', bg: '#0f1117', surface: '#181b24', text: '#e7e9ee', dark: true },
   ocean: { primary: '#0e7490', bg: '#ecfeff', surface: '#ffffff', text: '#083344', dark: false },
   sunset: { primary: '#ea580c', bg: '#fff7ed', surface: '#ffffff', text: '#431407', dark: false },
+  midnight: { primary: '#a78bfa', bg: '#0b0b14', surface: '#151527', text: '#ecebff', dark: true },
+  forest: { primary: '#15803d', bg: '#f3f7f2', surface: '#ffffff', text: '#14261a', dark: false },
+  rose: { primary: '#e11d48', bg: '#fff5f7', surface: '#ffffff', text: '#3b0a17', dark: false },
 };
 
 export const newComponent = (type, comps, at = {}) => {
@@ -254,6 +260,14 @@ a{color:var(--p)}
 .wl-auth .tabs{display:flex;gap:6px}.wl-auth .tabs button{flex:1;font:inherit;padding:7px;border:1px solid var(--ln);background:none;border-radius:8px;color:var(--tx);cursor:pointer}
 .wl-auth .tabs button.on{border-color:var(--p);color:var(--p);font-weight:600}
 .wl-c{z-index:1}.wl-c.behind{z-index:0}
+.wl-in.flush{padding:0;border:0;overflow:hidden}
+.wl-hero{height:100%;min-height:180px;border-radius:var(--r);padding:clamp(20px,4vw,48px);display:flex;flex-direction:column;justify-content:center;align-items:flex-start;gap:10px;color:#fff;background-size:cover;background-position:center;box-sizing:border-box}
+.wl-hero.grad{background:radial-gradient(1200px 400px at 0% 0%,color-mix(in srgb,var(--p) 55%,#fff) 0%,transparent 55%),linear-gradient(135deg,var(--p),color-mix(in srgb,var(--p) 45%,#000))}
+.wl-hero.center{align-items:center;text-align:center}
+.wl-hero h1{margin:0;font-size:clamp(26px,4vw,46px);line-height:1.08;letter-spacing:-.02em;max-width:22ch}
+.wl-hero p{margin:0;font-size:clamp(15px,1.6vw,19px);opacity:.92;max-width:52ch}
+.wl-kicker{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;background:rgba(255,255,255,.18);padding:4px 10px;border-radius:999px;backdrop-filter:blur(4px)}
+.wl-btn.hero-b{width:auto;background:#fff;color:#111;border-color:#fff;margin-top:6px;padding:11px 22px}
 .wl-panel{background:var(--sf);border:1px solid var(--ln);padding:14px}
 .wl-check{display:flex;align-items:center;gap:10px;font-size:15px;cursor:pointer;min-height:36px}
 .wl-check input{width:18px;height:18px;accent-color:var(--p)}
@@ -353,7 +367,7 @@ a{color:var(--p)}
 
 /* The app itself, run in the page (its source is copied there, so it uses nothing from this module). */
 function runtime(SPEC, OPT) {
-  const ROW = 8, FIXED = { table: 1, chart: 1, image: 1, video: 1, html: 1, list: 1, chat: 1, kanban: 1, calendar: 1, embed: 1, map: 1, carousel: 1, json: 1, items: 1, box: 1, spacer: 1, gauge: 1, qr: 1 };
+  const ROW = 8, FIXED = { hero: 1, table: 1, chart: 1, image: 1, video: 1, html: 1, list: 1, chat: 1, kanban: 1, calendar: 1, embed: 1, map: 1, carousel: 1, json: 1, items: 1, box: 1, spacer: 1, gauge: 1, qr: 1 };
   const root = document.getElementById('wl-root');
   const S = { data: {}, vars: {}, errors: {}, loading: {}, user: null, page: null, spec: SPEC, stack: false, selected: {} };
   const fns = {};
@@ -582,6 +596,18 @@ function runtime(SPEC, OPT) {
         } else v.src = u;
         box.appendChild(v); break;
       }
+      case 'hero': {
+        const h = el('section', 'wl-hero ' + (p.align === 'center' ? 'center' : ''));
+        const img = safeUrl(txt(p.image));
+        if (img) h.style.backgroundImage = 'linear-gradient(90deg, rgba(0,0,0,.62), rgba(0,0,0,.18)), url("' + img.replace(/"/g, '%22') + '")';
+        else h.classList.add('grad');
+        if (p.kicker) h.appendChild(el('span', 'wl-kicker', txt(p.kicker)));
+        h.appendChild(el('h1', '', txt(p.title)));
+        if (p.subtitle) h.appendChild(el('p', '', txt(p.subtitle)));
+        if (p.button) { const b = el('button', 'wl-btn hero-b', txt(p.button)); b.onclick = () => steps(p.steps); h.appendChild(b); }
+        box.appendChild(h); box.classList.add('flush'); break;
+      }
+
       /* ---- inputs that hold a value, and run their steps when it changes ---- */
       case 'checkbox': case 'switch': {
         if (!(c.name in S.vars)) S.vars[c.name] = !!val(p.value);
