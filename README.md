@@ -61,7 +61,7 @@ It needs no disk, since the data is in Google Drive. Run **one** instance: it ho
 
 Connect the repository in Netlify and set **Base directory** to `frontend`. [`frontend/netlify.toml`](frontend/netlify.toml) sets the build command (`npm run build`, with a 4 GB Node heap), the publish directory and the headers. Set one environment variable:
 
-- `BACKEND_URL`: the backend's address (e.g. `https://linework-api.onrender.com`). The build writes it into `dist/_redirects` as a proxy rule for `/api/*`; the build stops if it's missing.
+- `BACKEND_URL`: the backend's address (e.g. `https://linework-api.onrender.com`). The build writes it into `dist/_redirects` as a proxy rule for `/api/*`; the build stops if it's missing. It isn't a secret, so leave "Contains secret values" unticked (`netlify.toml` also tells Netlify's secrets scan to skip it).
 
 Netlify's proxy waits at most 26 seconds for a response to start. AI answers stream, so they start in time; a sleeping backend answers 502/504 until it's awake, and the app asks again.
 
