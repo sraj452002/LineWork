@@ -585,13 +585,24 @@ return [{ city, temp: +w.current_condition[0].temp_C, sky: w.current_condition[0
 function appsGuide() {
   return [
     { id: 'what', title: 'What a custom app is', body: <>
-      <p>There are two ways to put a UI on your workflows: a <b>page made of nodes</b>, built in the workflow itself with no code (next section), or a <b>custom app</b> with your own HTML.</p>
+      <p>Three ways to put a UI on your workflows: the <b>visual builder</b> (drag and drop, with pages and sign-in: next section), a <b>page made of nodes</b> built in the workflow itself, or a <b>custom app</b> with your own HTML.</p>
       <p>A <b>custom app</b> is a web page of your own, made in HTML, CSS and JavaScript, that runs your <b>workflows</b> and shows what they give back however you like: a form, a dashboard, a chat, a video player. Publish it and it gets <b>a link of its own</b> that anyone can open, outside Workline, without an account.</p>
       <ul>
         <li>The <b>workflow</b> is the back end: it fetches data, calls APIs and AI, reads your sheets and databases, with your credentials.</li>
         <li>The <b>app</b> is the front end: one line, <code>await workline.run('Workflow name', input)</code>, runs a workflow and gives you its result.</li>
         <li>Compared with <a href="#" data-guide="flow">published workflow apps</a> (a ready-made form in Home → Apps), a custom app looks and behaves exactly as you write it.</li>
       </ul>
+    </> },
+    { id: 'visual', title: 'Visual builder: drag and drop an app', body: <>
+      <p>The easiest way to make an app for other people. Open a workflow, then <b>View → App</b> (or Tools → Custom app): it starts in <b>Visual</b>, already showing that workflow’s results in a table.</p>
+      <ol>
+        <li><b>Add components</b> from the left (Heading, Text, Button, Input, Dropdown, Form, Table, Chart, Number, Cards list, Image, Video…): click one, or drag it onto the page. Drag a box to move it, its edge or corner to resize. On the right, set what it shows.</li>
+        <li><b>Data</b> tab: each data source runs a workflow and keeps its output as <code>data.name</code>. Point a table at it with <code>{'{{ data.orders }}'}</code>; show a count with <code>{'{{ data.orders.length }}'}</code>. Send what people typed with <code>{'{{ vars.input1 }}'}</code>.</li>
+        <li><b>Steps</b>: a button, form, table row or card can refresh data, run a workflow, set a value, go to a page, show a message, open a link or sign out. For a details page: add a page, then give the table the step <i>Go to a page</i>; on that page show <code>{'{{ vars.table1.name }}'}</code>.</li>
+        <li><b>App</b> tab: name, menu (top or side), theme, and <b>who can use it</b>: anyone with the link, anyone who signs in, or only emails you invite. Signed-in people are <code>{'{{ user.email }}'}</code> in the app and <code>{'{{ $json.user.email }}'}</code> in the workflow, so each person can see only their own data.</li>
+        <li><b>Preview</b> to try it; <b>Phone</b> to see it on a small screen (components stack top to bottom). Then <b>Publish</b> and share the link.</li>
+      </ol>
+      <p>The <b>AI</b> button can build or change the whole app from a description. Prefer code? <b>Code</b> gives you the page to write by hand (next sections).</p>
     </> },
     { id: 'nodes', title: 'No code: a page made of nodes', body: <>
       <p>Don’t want to write HTML? A workflow can draw a page by itself from <b>UI nodes</b>:</p>

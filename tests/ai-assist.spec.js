@@ -108,6 +108,9 @@ test('the AI panel helps in the Sheet, Database, Code, Workflow and App views', 
     await page.getByRole('menuitemradio', { name: /^App/ }).click();
     panel = page.getByRole('complementary', { name: 'AI for the App' });
     await expect(panel).toBeVisible(); // still open, now for the App
+    // A new app starts in Visual; here, its code.
+    await page.getByRole('button', { name: 'Code', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit code' }).click();
     await ask(panel, 'Make a simple heading');
     await panel.getByRole('button', { name: 'Replace the page code' }).click();
     await expect(page.getByLabel('App code')).toHaveValue('<h1>Made by AI</h1>');

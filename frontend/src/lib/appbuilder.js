@@ -321,7 +321,7 @@ function runtime(SPEC, OPT) {
         if (q) rows = rows.filter(r => JSON.stringify(r).toLowerCase().includes(q.toLowerCase()));
         const cols = String(txt(p.columns) || '').split(',').map(s => s.trim()).filter(Boolean);
         const keys = cols.length ? cols : [...new Set(rows.flatMap(r => (r && typeof r === 'object' ? Object.keys(r) : ['value'])))].slice(0, 12);
-        if (!rows.length) return note('wl-note', q ? 'Nothing matches.' : 'Nothing to show yet.');
+        if (!rows.length || !keys.length) return note('wl-note', q ? 'Nothing matches.' : 'Nothing to show yet.');
         const t = el('table', 'wl-tbl'), hr = el('tr');
         for (const k of keys) hr.appendChild(el('th', '', k));
         const th = el('thead'); th.appendChild(hr); t.appendChild(th);
@@ -459,7 +459,8 @@ function runtime(SPEC, OPT) {
     applyTheme();
     const pages = S.spec.pages || [];
     if (!S.page || !pages.includes(S.page)) S.page = pages.find(p => S.page && p.id === S.page.id) || pages[0];
-    const narrow = OPT.design ? S.stack : window.innerWidth < 720;
+    const narrow = OPT.design ? S.stack : isNarrow();
+    S.narrow = narrow;
     const nav = OPT.design ? 'none' : S.spec.nav || 'top';
     const shell = el('div', 'wl-shell' + (nav === 'side' && !narrow ? ' side' : ''));
     if (nav !== 'none') {
@@ -527,8 +528,16 @@ function runtime(SPEC, OPT) {
   }
 
   addEventListener('workline:signedout', () => { if (OPT.access !== 'public' && !OPT.design) { S.user = null; signInScreen('in', 'Please sign in again.'); } });
-  let resizeT;
-  addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(() => { if (!OPT.design && pageEl) layout(); }, 150); });
+  // Phone or not, by the page's own width (a frame may get its size after the page starts).
+  function isNarrow() { return (document.documentElement.clientWidth || window.innerWidth) < 720; }
+  let resizeT, lastW = 0;
+  new ResizeObserver(() => {
+    const w = document.documentElement.clientWidth;
+    if (w === lastW) return; // only the width matters (the page's own height changes as it's drawn)
+    lastW = w;
+    clearTimeout(resizeT);
+    resizeT = setTimeout(() => { if (!pageEl) return; if (!OPT.design && isNarrow() !== S.narrow) layout(); else paint(); }, 120);
+  }).observe(document.documentElement);
   // The editor's canvas: it sends the app as it changes, the page to show, and whether it's a phone.
   if (OPT.design) {
     document.documentElement.classList.add('wl-design');
