@@ -91,7 +91,7 @@ test.describe('pages made of nodes', () => {
     expect(r.json.html).toMatch(/name="message"/);
   });
 
-  test('StarPlay 2: a streaming page made only of nodes', async () => {
+  test('StarPlay 2: a streaming app made only of nodes, on five pages', async () => {
     const { createServer } = await import('node:http');
     const { readFileSync } = await import('node:fs');
     const list = createServer((req, res) => { res.writeHead(200, { 'content-type': 'text/plain' }); res.end(readFileSync('samples/videos.json')); }).listen(0);
@@ -107,27 +107,33 @@ test.describe('pages made of nodes', () => {
         const r = await fetch(`${b2}/flows/${f.id}/page`, { method: 'POST', headers: { 'content-type': 'application/json', cookie: ck }, body: JSON.stringify({ flow: f.flow, input }) });
         const j = await r.json(); expect(r.status, JSON.stringify(j).slice(0, 300)).toBe(200); return j.html;
       };
+      // Home: the menu and search on top, then the spotlight and rows. The other pages' nodes don't draw.
       const home = await open({});
       expect(home).toContain('<h1>StarPlay 2</h1>');
-      expect(home).toMatch(/<video[^>]+src="https:\/\/storage\.googleapis\.com\/[^"]+\.mp4"/); // MP4 only: no scripts on a page
-      expect(home).toContain('Code Red: Delhi');
-      for (const h of ['Episodes', 'Latest Releases', 'Top 10 in India Today', '🔴 Live Sports', 'Choose your plan']) expect(home, h).toContain(h);
-      expect(home).toContain('href="?video=code-red&amp;ep=1"');
-      expect(home).toMatch(/<span>Super<\/span><b>₹149 \/ month<\/b>/);
-      expect(home).toContain('<td>India vs Australia</td>');
-      expect(home).toContain('<svg class="chart"');
-      expect(home).toContain('name="_action" value="subscribe"');
-      // A movie, from a tab: it plays, with more like it.
-      const movie = await open({ query: { tab: 'movies', video: 'kaveri' } });
-      expect(movie).toMatch(/<h3>Kaveri Blues<\/h3>/);
-      expect(movie).toContain('More Like This');
-      const movies = await open({ query: { tab: 'movies' } });
-      expect(movies).toContain('<a class="btn on" href="?tab=movies">');
-      expect(movies).toContain('href="?video=kaveri&amp;tab=movies"');
-      // An episode, a search, and the subscribe form's answer.
-      expect(await open({ query: { video: 'mumbai-nights', ep: '7' } })).toContain('Mumbai Nights · S2 E2 · The Offer');
+      for (const h of ['▶ Watch Code Red: Delhi', 'Latest Releases', 'Top 10 in India Today']) expect(home, h).toContain(h);
+      for (const h of ['Live Sports', 'Choose your plan', '<video']) expect(home, h).not.toContain(h);
+      expect(home).toContain('href="?page=watch&amp;video=code-red"');
+      // Watch: an episode plays (MP4 only: a page has no scripts), with the others below.
+      const watch = await open({ query: { page: 'watch', video: 'mumbai-nights', ep: '7' } });
+      expect(watch).toMatch(/<video[^>]+src="https:\/\/storage\.googleapis\.com\/[^"]+\.mp4"/);
+      expect(watch).toContain('Mumbai Nights · S2 E2 · The Offer');
+      expect(watch).toContain('href="?page=watch&amp;video=mumbai-nights&amp;ep=1"');
+      expect(await open({ query: { page: 'watch', video: 'kaveri' } })).toContain('More Like This');
+      // Browse: a menu tab (its button lit), and search results.
+      const kids = await open({ query: { page: 'browse', tab: 'kids' } });
+      expect(kids).toContain('<a class="btn on" href="?page=browse&amp;tab=kids">');
+      expect(kids).toContain('Little Rangers');
+      expect(kids).not.toContain('Neon Bazaar');
       expect(await open({ action: 'search', form: { search: 'kaveri' } })).toContain('1 results for “kaveri”');
-      expect(await open({ action: 'subscribe', form: { name: 'Riya', mobileNumber: '9999999999', plan: 'Super' } })).toContain('Thanks, Riya!');
+      // Sports and plans.
+      const sports = await open({ query: { page: 'sports' } });
+      expect(sports).toContain('<td>India vs Australia</td>');
+      expect(sports).not.toContain('Latest Releases');
+      const plans = await open({ query: { page: 'plans' } });
+      expect(plans).toMatch(/<span>Super<\/span><b>₹149 \/ month<\/b>/);
+      expect(plans).toContain('<svg class="chart"');
+      expect(plans).toContain('name="_action" value="subscribe"');
+      expect(await open({ action: 'subscribe', form: { name: 'Riya', mobileNumber: '9999999999', plan: 'Super' } })).toContain('✅ Thanks, Riya!');
     } finally { srv2.close(); app2.flows.close(); list.close(); }
   });
 

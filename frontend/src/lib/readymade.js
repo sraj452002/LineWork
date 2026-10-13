@@ -759,47 +759,61 @@ APPS.unshift(
 
 /* ---- Pages made of nodes (no code) ---- */
 const PAGES = [
-  // StarPlay 2: the streaming service as one workflow, only nodes. Each section is a UI node; the Pick
-  // nodes before them choose what it shows.
-  { k: 'p-ott', name: 'StarPlay 2: OTT app made only of nodes', note: 'One workflow, no app: menu, search, a player, episodes, rows, Top 10, live scores and plans with a chart and a form', make: () => {
-    const code = (name, x, c) => node('core.code', name, x, { language: 'javascript', code: c });
-    const text = (name, x, t, style = 'text') => node('ui.text', name, x, { text: t, style });
-    const gallery = (name, x, caption) => node('ui.media', name, x, { url: '{{ $json.poster }}', caption, kind: 'image', link: '{{ $json._link }}', poster: '', layout: 'gallery' });
-    const nodes = [
+  // StarPlay 2: the streaming service as one workflow, only nodes, on five pages. The menu and search
+  // sit on every page; a Switch sends the run down one page's nodes (the others get no items, so they
+  // don't draw). Pick nodes choose what each section shows.
+  { k: 'p-ott', name: 'StarPlay 2: OTT app made only of nodes', note: 'One workflow, no app, five pages (Home, Watch, Browse, Sports, Plans) picked by a Switch: menu, search, player, episodes, rows, Top 10, live scores and plans', make: () => {
+    const code = (name, c) => node('core.code', name, 0, { language: 'javascript', code: c });
+    const text = (name, t) => node('ui.text', name, 0, { text: t, style: 'text' });
+    const gallery = (name, caption) => node('ui.media', name, 0, { url: '{{ $json.poster }}', caption, kind: 'image', link: '{{ $json._link }}', poster: '', layout: 'gallery' });
+    const head = [
       node('trigger.page', 'Page', 0, { path: secretPath(), title: 'StarPlay 2', description: 'Movies, shows and live sports. This whole app is one workflow made of nodes.', theme: 'dark', width: 'wide' }),
-      node('core.http', 'Fetch video files', 260, { method: 'GET', url: VIDEO_LIST_URL, query: [], headers: [], bodyType: 'none', body: '', failOnError: true }),
-      node('core.set', 'Remember the choice', 520, { fields: [
+      node('core.http', 'Fetch video files', 0, { method: 'GET', url: VIDEO_LIST_URL, query: [], headers: [], bodyType: 'none', body: '', failOnError: true }),
+      node('core.set', 'Remember the choice', 0, { fields: [
         { name: 'q', value: '{{ $node["Page"].json.query || {} }}' }, { name: 'search', value: '{{ ($node["Page"].json.form || {}).search || "" }}' },
         { name: 'action', value: '{{ $node["Page"].json.action || "" }}' }, { name: 'form', value: '{{ $node["Page"].json.form || {} }}' },
       ], keep: true }),
-      code('Build the catalogue', 780, OTT2_FIRST),
-      node('ui.buttons', 'Menu', 1040, { buttons: [{ name: '🏠 Home', value: '?' }, { name: '🎬 Movies', value: '?tab=movies' }, { name: '📺 TV Shows', value: '?tab=shows' }, { name: '🏏 Sports', value: '?tab=sports' }, { name: '🧸 Kids', value: '?tab=kids' }] }),
-      node('ui.form', 'Search', 1300, { title: '', fields: 'Search', button: 'Search', action: 'search' }),
-      node('ui.media', 'Player', 1560, { url: '{{ $json.src }}', caption: '', kind: 'video', poster: '{{ $json.backdrop }}', link: '', layout: 'one' }),
-      text('About', 1820, '{{ $json._thanks }}## {{ $json.title }}\n**{{ $json.year }} · {{ $json.length }} · {{ $json.language }} · {{ $json.rating }}** · ★ {{ $json.score }}\n\n{{ $json.about }}\n\n{{ $json.genres }}'),
-      code('Pick episodes or more', 2080, OTT2_EPISODES),
-      text('Episodes heading', 2340, '### {{ $json._heading }}'),
-      gallery('Episodes', 2600, '{{ $json.title }}'),
-      code('Pick the row', 2860, OTT2_ROW),
-      text('Row heading', 3120, '### {{ $json._heading }}'),
-      gallery('Row', 3380, '{{ $json.title }} · {{ $json.year }}'),
-      code('Pick the Top 10', 3640, OTT2_TOP10),
-      text('Top 10 heading', 3900, '### Top 10 in India Today'),
-      gallery('Top 10', 4160, '#{{ $json.rank }} {{ $json.title }}'),
-      code('Pick live sports', 4420, OTT2_LIVE),
-      text('Live heading', 4680, '### 🔴 Live Sports'),
-      node('ui.table', 'Live scores', 4940, { title: '', columns: 'match, sport, score, status, watching', max: 10 }),
-      gallery('Live', 5200, '{{ $json.status === "LIVE" ? "● LIVE · " : "" }}{{ $json.title }}'),
-      code('Pick the plans', 5460, OTT2_PLANS),
-      text('Plans heading', 5720, '### Choose your plan'),
-      node('ui.cards', 'Prices', 5980, { title: '', cards: ['Mobile', 'Super', 'Premium'].map(p => ({ name: p, value: `{{ "₹" + $items.find(i => i.plan === "${p}").monthly + " / month" }}` })) }),
-      node('ui.table', 'Compare plans', 6240, { title: '', columns: 'plan, monthly, quarterly, yearly, devices, quality, ads, audio, downloads', max: 10 }),
-      node('ui.chart', 'Price per year', 6500, { title: 'Price per year (₹)', type: 'bar', label: 'plan', value: 'yearly' }),
-      node('ui.form', 'Subscribe', 6760, { title: 'Subscribe', fields: 'Name*\nMobile number* (tel)\nPlan', button: 'Continue', action: 'subscribe' }),
+      code('Build the catalogue', OTT2_FIRST),
+      node('ui.buttons', 'Menu', 0, { buttons: [{ name: '🏠 Home', value: '?' }, { name: '🎬 Movies', value: '?page=browse&tab=movies' }, { name: '📺 TV Shows', value: '?page=browse&tab=shows' }, { name: '🧸 Kids', value: '?page=browse&tab=kids' }, { name: '🏏 Sports', value: '?page=sports' }, { name: '⭐ Plans', value: '?page=plans' }] }),
+      node('ui.form', 'Search', 0, { title: '', fields: 'Search', button: 'Search', action: 'search' }),
+      node('core.switch', 'Which page?', 0, { value: '{{ $json._page }}', rule1: 'watch', rule2: 'browse', rule3: 'sports', rule4: 'plans' }),
     ];
-    // Seven to a row, so the whole workflow fits on the canvas.
-    nodes.forEach((n, i) => { n.x = 80 + (i % 7) * 240; n.y = 100 + Math.floor(i / 7) * 190; });
-    return flowFile('StarPlay 2', nodes);
+    const pages = {
+      other: [ // Home
+        node('ui.media', 'Spotlight', 0, { url: '{{ $json.backdrop }}', caption: '▶ Watch {{ $json.title }}', kind: 'image', poster: '', link: '?page=watch&video={{ $json.id }}', layout: 'one' }),
+        text('Spotlight info', '## {{ $json.title }}\n**{{ $json.year }} · {{ $json.length }} · {{ $json.language }} · {{ $json.rating }}** · ★ {{ $json.score }}\n\n{{ $json.about }}'),
+        code('Pick latest', OTT2_ROW), text('Latest heading', '### {{ $json._heading }}'), gallery('Latest', '{{ $json.title }} · {{ $json.year }}'),
+        code('Pick the Top 10', OTT2_TOP10), text('Top 10 heading', '### Top 10 in India Today'), gallery('Top 10', '#{{ $json.rank }} {{ $json.title }}'),
+      ],
+      0: [ // Watch
+        node('ui.media', 'Player', 0, { url: '{{ $json.src }}', caption: '', kind: 'video', poster: '{{ $json.backdrop }}', link: '', layout: 'one' }),
+        text('About', '## {{ $json.title }}\n**{{ $json.year }} · {{ $json.length }} · {{ $json.language }} · {{ $json.rating }}** · ★ {{ $json.score }}\n\n{{ $json.about }}\n\n{{ $json.genres }}'),
+        code('Pick episodes or more', OTT2_EPISODES), text('Episodes heading', '### {{ $json._heading }}'), gallery('Episodes', '{{ $json.title }}'),
+      ],
+      1: [ // Browse: a menu tab, or search results
+        code('Pick the titles', OTT2_ROW), text('Browse heading', '## {{ $json._heading }}'), gallery('Titles', '{{ $json.title }} · {{ $json.year }} · {{ $json.language }}'),
+      ],
+      2: [ // Sports
+        code('Pick live sports', OTT2_LIVE), text('Sports heading', '## 🔴 Live Sports'), node('ui.table', 'Live scores', 0, { title: '', columns: 'match, sport, score, status, watching', max: 10 }),
+        gallery('Matches', '{{ $json.status === "LIVE" ? "● LIVE · " : "" }}{{ $json.title }}'),
+      ],
+      3: [ // Plans
+        code('Pick the plans', OTT2_PLANS), text('Plans heading', '{{ $json._thanks }}## Choose your plan'),
+        node('ui.cards', 'Prices', 0, { title: '', cards: ['Mobile', 'Super', 'Premium'].map(p => ({ name: p, value: `{{ "₹" + $items.find(i => i.plan === "${p}").monthly + " / month" }}` })) }),
+        node('ui.table', 'Compare plans', 0, { title: '', columns: 'plan, monthly, quarterly, yearly, devices, quality, ads, audio, downloads', max: 10 }),
+        node('ui.chart', 'Price per year', 0, { title: 'Price per year (₹)', type: 'bar', label: 'plan', value: 'yearly' }),
+        node('ui.form', 'Subscribe', 0, { title: 'Subscribe', fields: 'Name*\nMobile number* (tel)\nPlan', button: 'Continue', action: 'subscribe' }),
+      ],
+    };
+    // The shared part across the top; each page on a row of its own under it.
+    head.forEach((n, i) => { n.x = 80 + i * 240; n.y = 80; });
+    const sw = head[head.length - 1], edges = chain(head);
+    ['other', 0, 1, 2, 3].forEach((port, row) => {
+      const list = pages[port];
+      list.forEach((n, i) => { n.x = 80 + (i + 2) * 240; n.y = 280 + row * 190; });
+      edges.push({ id: rid('e'), from: sw.id, fromPort: String(port), to: list[0].id, toPort: 'main' }, ...chain(list));
+    });
+    return flowFile('StarPlay 2', [...head, ...Object.values(pages).flat()], edges);
   } },
   { k: 'p-sales', name: 'Sales dashboard page', note: 'Cards, a chart, region buttons and a table, built only from nodes', make: () => {
     const nodes = [

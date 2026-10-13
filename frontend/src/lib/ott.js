@@ -208,15 +208,16 @@ export const ottSpec = () => ({
 /* StarPlay 2: the same service as one workflow made only of nodes (Page trigger and UI nodes, no app).
    The page runs the workflow top to bottom: each UI node draws the items reaching it, so "Pick" Code
    nodes in between choose what the next section shows; the catalogue rides along on every item as _cat. */
-const KEEP = String.raw`const { _cat: cat = [], _q: q = {}, _search: search = '' } = items[0] || {};
+const KEEP = String.raw`const { _cat: cat = [], _q: q = {}, _search: search = '', _thanks: thanks = '' } = items[0] || {};
 const titles = cat.filter(t => t.kind !== 'Plan' && t.kind !== 'Live');
 // Each item keeps the catalogue and the page's choice for the nodes after it, and a link to play it.
-const keep = list => list.map(t => ({ ...t, _cat: cat, _q: q, _search: search, _link: '?video=' + t.id + (q.tab ? '&tab=' + q.tab : '') }));
+const keep = list => list.map(t => ({ ...t, _cat: cat, _q: q, _search: search, _thanks: thanks, _link: '?page=watch&video=' + t.id }));
 `;
 
 export const OTT2_FIRST = String.raw`// STEP 4. "Fetch video files" got the videos; "Remember the choice" added what the page asked for:
-// q (from the buttons and links: ?tab=…&video=…&ep=…), search (the search box), action and form.
-// Here: build the catalogue, then pick what plays. A page made of nodes plays MP4 (HLS needs a script).
+// q (from the menu and links: ?page=…&tab=…&video=…&ep=…), search (the search box), action and form.
+// Here: build the catalogue, work out which page to show (_page, for the Switch), and what's featured
+// or playing. A page made of nodes plays MP4 (HLS needs a script).
 const cat = (items => {
 ` + OTT_CATALOGUE + String.raw`
 })(items.filter(v => /\.mp4(\?|$)/.test(v.src)));
@@ -228,13 +229,15 @@ let playing = cat.find(t => t.id === q.video) || titles.find(t => t.rows.include
 const ep = playing.episodes && playing.episodes[Number(q.ep) || 0];
 if (ep && q.ep !== undefined) playing = { ...playing, src: ep.src, backdrop: ep.still, title: playing.title + ' · ' + ep.label };
 const thanks = first.action === 'subscribe' && first.form && first.form.name
-  ? '> **Thanks, ' + first.form.name + '!** This is a demo: add a payment node (Razorpay, Stripe) to take real payments.\n\n' : '';
-return [{ ...playing, _thanks: thanks, _cat: cat, _q: q, _search: search }];`;
+  ? '**✅ Thanks, ' + first.form.name + '!** This is a demo: add a payment node (Razorpay, Stripe) to take real payments.\n\n' : '';
+// Which page: a search shows results (browse), the subscribe form comes back to plans, else ?page=….
+const page = first.action === 'search' && search ? 'browse' : first.action === 'subscribe' ? 'plans' : ['watch', 'browse', 'sports', 'plans'].includes(q.page) ? q.page : 'home';
+return [{ ...playing, _page: page, _thanks: thanks, _cat: cat, _q: q, _search: search }];`;
 
 export const OTT2_EPISODES = KEEP + String.raw`
 // A show: its episodes. A movie: more like it.
 const playing = cat.find(t => t.id === q.video) || titles.find(t => t.rows.includes('spotlight'));
-if (playing.seasons) return keep(playing.episodes).map((e, n) => ({ ...e, title: e.label, poster: e.still, _heading: 'Episodes', _link: '?video=' + playing.id + '&ep=' + n }));
+if (playing.seasons) return keep(playing.episodes).map((e, n) => ({ ...e, title: e.label, poster: e.still, _heading: 'Episodes', _link: '?page=watch&video=' + playing.id + '&ep=' + n }));
 return keep(titles.filter(t => t.id !== playing.id && (t.genre === playing.genre || t.language === playing.language)).slice(0, 8)).map(t => ({ ...t, _heading: 'More Like This' }));`;
 
 export const OTT2_ROW = KEEP + String.raw`
