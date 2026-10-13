@@ -143,7 +143,7 @@ function appGuide() {
         <li><b>Files</b> takes you back home.</li>
         <li>The <b>file name</b> is editable in place.</li>
         <li><b>Saved / Saving</b> shows that changes are stored. There's no save button.</li>
-        <li>The <b>View</b> menu at the top (it shows the view you're in, like <b>Canvas</b>) switches between <b>Canvas</b> (diagrams), <b>Doc</b>, <b>Doc + Canvas</b> side by side, <b>Sheet</b> (spreadsheets) and <b>Code</b>. On a phone there's no side-by-side view.</li>
+        <li>The <b>View</b> menu at the top (it shows the view you're in, like <b>Canvas</b>) switches between <b>Canvas</b> (diagrams), <b>Doc</b>, <b>Doc + Canvas</b> side by side, <b>Sheet</b> (spreadsheets), <b>Database</b>, <b>Code</b>, <b>App</b> (your own page on your workflows: see <a href="#" data-guide="apps">the Custom apps guide</a>) and <b>Workflow</b>. On a phone there's no side-by-side view.</li>
         <li><b>Export</b> and <b>⋯</b> (rename, duplicate, delete, this guide).</li>
       </ul>
       <h4>Diagram tabs</h4>
@@ -535,13 +535,134 @@ function flowGuide(q, setQ, lit) {
   ];
 }
 
+
+/* ---- the Custom apps guide: your own UI on your workflows, dashboards, and code in many languages ---- */
+const APP_EX = {
+  run: `<input id="city" placeholder="City">
+<button id="go">Check</button>
+<div id="out"></div>
+
+<script>
+  document.getElementById('go').onclick = async () => {
+    const out = document.getElementById('out');
+    out.textContent = 'Running…';
+    try {
+      // Runs the workflow "Weather" with { city }; gives back its output.
+      const items = await workline.run('Weather', {
+        city: document.getElementById('city').value,
+      });
+      table(out, items);
+    } catch (err) {
+      out.textContent = err.message;
+    }
+  };
+</script>`,
+  helpers: `cards('#kpis', [['Orders', 128], ['Revenue', '$4,210']]);
+bars('#chart', rows, 'month', 'sales');     // label field, number field
+line('#trend', rows, 'day', 'visits');
+pie('#split', rows, 'region', 'sales');
+table('#rows', rows);                        // all fields, or table(el, rows, ['a', 'b'])`,
+  workflow: `// In the workflow: a Code node right after "Run by hand".
+// The app's input is the first item.
+const { city } = items[0];
+const r = await fetch('https://wttr.in/' + encodeURIComponent(city) + '?format=j1');
+const w = await r.json();
+return [{ city, temp: +w.current_condition[0].temp_C, sky: w.current_condition[0].weatherDesc[0].value }];`,
+};
+
+function appsGuide() {
+  return [
+    { id: 'what', title: 'What a custom app is', body: <>
+      <p>A <b>custom app</b> is a web page of your own, made in HTML, CSS and JavaScript, that runs your <b>workflows</b> and shows what they give back however you like: a form, a dashboard, a chat, a video player. Publish it and it gets <b>a link of its own</b> that anyone can open, outside Workline, without an account.</p>
+      <ul>
+        <li>The <b>workflow</b> is the back end: it fetches data, calls APIs and AI, reads your sheets and databases, with your credentials.</li>
+        <li>The <b>app</b> is the front end: one line, <code>await workline.run('Workflow name', input)</code>, runs a workflow and gives you its result.</li>
+        <li>Compared with <a href="#" data-guide="flow">published workflow apps</a> (a ready-made form in Home → Apps), a custom app looks and behaves exactly as you write it.</li>
+      </ul>
+    </> },
+    { id: 'first', title: 'Your first app', body: <>
+      <ol>
+        <li><b>Tools → Automation → Custom app.</b> You get a file with a small workflow (<i>Run by hand → Code</i>) and the <b>App</b> view open.</li>
+        <li>The App view has the page’s <b>code</b> on the left and a <b>live preview</b> on the right. Type in the preview’s form and press <b>Run</b>: it runs the workflow and shows the answer.</li>
+        <li>Change the code; the preview follows a moment after you stop typing. <b>↻ Reload</b> starts it again.</li>
+        <li><b>Workflows ▾</b> chooses which of your workflows the app may run: this file’s own, or any other workflow file of yours.</li>
+        <li><b>Start from ▾</b> swaps the page for a starter: a <i>form</i>, a <i>dashboard</i> that refreshes every minute, or a <i>chat</i>.</li>
+        <li>When it works, switch on <b>Publish</b>. Copy the link, or <b>Open</b> it.</li>
+      </ol>
+      <p>An App view can be added to any file: <b>View → App</b>.</p>
+    </> },
+    { id: 'run', title: 'Running a workflow from the page', body: <>
+      <p><code>workline.run(workflow, input)</code> runs one of the app’s workflows and resolves to what its <b>last steps</b> output, as a list of objects. It throws (rejects) with a readable message if the workflow fails.</p>
+      <pre className="gpre">{APP_EX.run}</pre>
+      <ul>
+        <li><b>workflow</b>: its name (the file’s title) or id. Leave it out to run the app’s first workflow: <code>workline.run({'{ city }'})</code>.</li>
+        <li><b>input</b>: an object (one item) or a list of them. The workflow starts from its <b>Run by hand</b> trigger with that as its items, so nodes read it as <code>{'{{ $json.city }}'}</code> and Code reads <code>items[0].city</code>.</li>
+        <li><code>workline.workflows</code> lists the app’s workflows as <code>{'{ id, name }'}</code>.</li>
+        <li>It always runs the workflow as last <b>saved</b> (in the preview: as it is in the editor). A run may wait up to a minute for its result.</li>
+      </ul>
+      <p>The matching workflow, for the example above:</p>
+      <pre className="gpre">{APP_EX.workflow}</pre>
+    </> },
+    { id: 'draw', title: 'Showing results', body: <>
+      <p>Use any HTML and CSS, or load a library from a CDN (<code>{'<script src="https://cdn.jsdelivr.net/…">'}</code>) such as Chart.js or a map. A few helpers are built in; each takes an element (or a CSS selector) and the rows:</p>
+      <pre className="gpre">{APP_EX.helpers}</pre>
+      <p>An error in the page’s script shows in red at the bottom of the page, so it doesn’t fail silently.</p>
+    </> },
+    { id: 'publish', title: 'Publishing and sharing', body: <>
+      <ul>
+        <li><b>Publish</b> gives the app a long, unguessable link. Anyone with the link can use the app; nobody needs an account.</li>
+        <li>The app runs its workflows with <b>your credentials</b>, like a webhook. People using it never see them, but they can run the workflows as often as the rate limit allows (60 runs a minute per app), so only give an app the workflows it needs.</li>
+        <li>An app can only run the workflows ticked under <b>Workflows ▾</b>; asking for any other is refused.</li>
+        <li>The page runs <b>apart from Workline</b> (a sandbox): it can’t see your Workline sign-in, files or storage, and <code>localStorage</code> isn’t available to it.</li>
+        <li>Changes go live as soon as the file saves. Switch <b>Publish</b> off and the link stops working; switch it on again and the same link works again.</li>
+      </ul>
+    </> },
+    { id: 'templates', title: 'Ready-made: Video streaming app', body: <>
+      <p><b>Templates → Ready-made → Video streaming app</b> (also in Tools) makes a whole app to start from: a <i>Video library</i> workflow and a player around it, with search, categories, a playlist, MP4 and HLS (<code>.m3u8</code>) streams.</p>
+      <ol>
+        <li><b>Find videos</b> (JavaScript) holds the list of videos and filters it by the search and category the app sends. Replace the list with your own, or with a <b>Google Sheet</b>, <b>Airtable</b>, a database or your video host’s API (an HTTP node).</li>
+        <li><b>Playback links</b> (Python) hands out the links. With your own CDN, put its signing secret in <code>SECRET</code> and links stop working after 10 minutes; the player gets fresh ones by itself.</li>
+        <li>Put the videos on a video host or CDN (Cloudflare Stream, Mux, Bunny, S3 with CloudFront, …). It does the streaming; the workflow only decides <i>what</i> plays and <i>who</i> gets a link. A workflow doesn’t send the video itself.</li>
+      </ol>
+    </> },
+    { id: 'code', title: 'Code in many languages', body: <>
+      <p>The workflow’s <b>Code</b> node has a <b>Language</b>. Picking one brings a small example to change.</p>
+      <table className="gtable"><tbody>
+        <tr><th>Runs on Workline</th><td><b>JavaScript</b>, <b>TypeScript</b>, <b>Python</b> (numpy, pandas and other packages load on first import), <b>Lua</b>, <b>SQL</b> (SQLite; the items are a table called <code>items</code>). <code>items</code> is the list of items; <code>return</code> the new list. Printed lines show in the output as <code>_logs</code>.</td></tr>
+        <tr><th>Runs on your code runner</th><td><b>Go, Java, C, C++, C#, Rust, Ruby, PHP, Kotlin, Swift, Bash, R, Perl, Scala, Haskell, Dart, Elixir.</b> The program reads the items as JSON on standard input and prints the new items as JSON (the last line it prints).</td></tr>
+      </tbody></table>
+      <p>For the second group, add a <b>Code runner</b> credential and pick it on the node: a <b>Piston</b> server you run yourself (Service <code>piston</code>, its URL), or <b>Judge0</b> (Service <code>judge0</code>; on RapidAPI, URL <code>https://judge0-ce.p.rapidapi.com</code> and your RapidAPI key).</p>
+      <p>Code runs in a locked-down sandbox: it can use the internet (<code>fetch</code>, <code>requests</code>-style calls), but not the server’s files or secrets. It stops after 10 seconds (Python: 60).</p>
+    </> },
+    { id: 'dash', title: 'Dashboards on the canvas', body: <>
+      <p>For a dashboard inside a file rather than at its own link, use <b>Insert → Dashboard block</b> on the canvas: the same HTML and helpers, shown live on the canvas. Its <code>data</code> comes from:</p>
+      <ul>
+        <li><b>Code blocks</b>: point at a code block, drag from the dot on its right to the dashboard. Whatever the code returns becomes <code>data</code>, again whenever the code changes.</li>
+        <li><b>This file’s workflow</b>: press <b>↻ Refresh</b> (or have it refresh every 1, 5 or 15 minutes). The last result is kept with the file.</li>
+      </ul>
+      <p><b>Edit HTML</b> on the block opens its code.</p>
+    </> },
+    { id: 'tips', title: 'Tips and troubleshooting', body: <>
+      <table className="gtable"><tbody>
+        <tr><td>“This app can’t run …”</td><td>Tick that workflow under <b>Workflows ▾</b>, and check the name matches the workflow file’s title.</td></tr>
+        <tr><td>“Workflows run on the Workline server. Sign in…”</td><td>Apps need the server: sign in. Without an account, files stay in this browser and workflows can’t run.</td></tr>
+        <tr><td>“The workflow needs a trigger”</td><td>Add a <b>Run by hand</b> trigger at the start of the workflow.</td></tr>
+        <tr><td>“…taking more than a minute”</td><td>The workflow is slow. Make it quicker, or have it save its result (a sheet, the key-value store) and let the app read that.</td></tr>
+        <tr><td>The result looks wrong</td><td>Open the workflow, <b>Run workflow</b>, and look at each node’s <b>Output</b>: the app gets what the last nodes give.</td></tr>
+        <tr><td>A video won’t play</td><td>Open its link on its own. A <code>403</code> means the signed link expired or the secret doesn’t match the CDN’s.</td></tr>
+      </tbody></table>
+    </> },
+  ];
+}
+
 export default function Guide({ which, onWhich, onClose, onTry }) {
   const { theme } = useUI();
   const bodyRef = useRef(null);
   const [q, setQ] = useState('');
   const flow = String(which).startsWith('flow');
   const lit = flow && String(which).includes(':') ? String(which).split(':')[1] : null;
-  const sections = which === 'erd' ? erdGuide(onTry, theme) : flow ? flowGuide(q, setQ, lit) : appGuide();
+  const apps = which === 'apps';
+  const sections = which === 'erd' ? erdGuide(onTry, theme) : apps ? appsGuide() : flow ? flowGuide(q, setQ, lit) : appGuide();
 
   useEffect(() => {
     if (lit) { setQ(''); setTimeout(() => document.getElementById('g-node-' + lit)?.scrollIntoView({ block: 'start' }), 30); }
@@ -562,8 +683,9 @@ export default function Guide({ which, onWhich, onClose, onTry }) {
         <Brand />
         <span className="grow" />
         <div className="seg" role="group" aria-label="Choose a guide">
-          <button aria-pressed={which !== 'erd' && !flow} onClick={() => onWhich('app')}>Using Workline</button>
+          <button aria-pressed={which !== 'erd' && !flow && !apps} onClick={() => onWhich('app')}>Using Workline</button>
           <button aria-pressed={flow} onClick={() => onWhich('flow')}>Workflows</button>
+          <button aria-pressed={apps} onClick={() => onWhich('apps')}>Custom apps</button>
           <button aria-pressed={which === 'erd'} onClick={() => onWhich('erd')}>Database schemas</button>
         </div>
       </div>
@@ -576,8 +698,9 @@ export default function Guide({ which, onWhich, onClose, onTry }) {
           </nav>
           <article className="g-doc">
             <header>
-              <h1>{which === 'erd' ? 'Database schemas (ERD)' : flow ? 'Workflows' : 'How to use Workline'}</h1>
-              <p>{which === 'erd'
+              <h1>{which === 'erd' ? 'Database schemas (ERD)' : apps ? 'Custom apps' : flow ? 'Workflows' : 'How to use Workline'}</h1>
+              <p>{apps ? 'Your own page, in HTML, CSS and JavaScript, on top of your workflows: a form, a dashboard, a chat or a video player, at a link anyone can open.'
+                : which === 'erd'
                 ? 'Describe tables, columns and relationships as text, and Workline draws the entity relationship diagram.'
                 : flow ? 'Automations like n8n: a trigger starts them, nodes do the steps, and they run on the Workline server.'
                 : 'Everything you need to go from an idea to a design doc with diagrams.'}</p>

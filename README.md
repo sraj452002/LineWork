@@ -152,7 +152,7 @@ Workflows run on the backend (`backend/flows.js`, `flow-engine.js`, `flow-nodes.
 
 ## Custom apps
 
-The **App** view (Tools → Custom app, or View → App) makes an app with a UI of your own around your workflows: write its page in HTML, CSS and JavaScript with a live preview beside the code, choose which of your workflows it may run (**Workflows ▾**), and **Publish** it for a link anyone can open, outside Workline: `/api/ui/<token>`. In its script:
+The **App** view (Tools → Custom app, or View → App; the in-app guide has a **Custom apps** tab) makes an app with a UI of your own around your workflows: write its page in HTML, CSS and JavaScript with a live preview beside the code, choose which of your workflows it may run (**Workflows ▾**), and **Publish** it for a link anyone can open, outside Workline: `/api/ui/<token>`. In its script:
 
 - `await workline.run('Workflow name', { … })` runs one of those workflows (the saved version, from its Run by hand trigger) with that input and resolves to what its last steps output, as a list. With no name, the app's first workflow.
 - `workline.workflows` lists them; `cards`, `bars`, `line`, `pie` and `table` draw results (as in dashboard blocks).
