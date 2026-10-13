@@ -38,6 +38,15 @@ test('every template makes a well-formed file', () => {
     const reached = new Set(f.flow.edges.map(e => e.to));
     for (const n of f.flow.nodes) if (!NODES[n.type].trigger) expect(reached.has(n.id), `${t.k}: ${n.name} is connected`).toBe(true);
     if (f.ui) expect(f.ui.flows, t.k).toEqual([f.id]);
+    // A visual app: its steps go to pages it has, and read data sources it has.
+    if (f.ui && f.ui.mode === 'visual') {
+      const pages = new Set(f.ui.spec.pages.map(p => p.id)), sources = new Set(f.ui.spec.data.map(d => d.name));
+      for (const pg of f.ui.spec.pages) for (const c of pg.components) for (const st of c.props.steps || []) {
+        if (st.kind === 'go') expect(pages.has(st.page), `${t.k}: ${c.name} goes to ${st.page}`).toBe(true);
+        if (st.kind === 'run') expect(sources.has(st.source), `${t.k}: ${c.name} runs ${st.source}`).toBe(true);
+      }
+      expect(f.ui.html, t.k).toContain('wl-root');
+    }
   }
 });
 
