@@ -187,7 +187,7 @@ The **App** view starts in **Visual**: build an app for other people by dragging
   - *AI*: an AI chat that sends `{message, history}` to a workflow and shows its answer.
 
   Click to add, or drag onto the page. Drag a box to move it on the 12-column grid, its edges or corner to resize; Delete removes, Ctrl+D copies, arrows nudge. **Properties** (right) set what each one shows.
-- **Data**: a data source runs a workflow (when the app opens, or from a button) and keeps its output as `data.<name>`. Any text can show data with `{{ … }}`: `{{ data.orders }}` for a table's rows, `{{ data.orders.length }}`, `{{ vars.input1 }}` (what's typed in an input, the row clicked in a table), `{{ user.name }}`.
+- **Data**: a data source runs a workflow (when the app opens, from a button, or every few seconds for live data like a chat) and keeps its output as `data.<name>`. Any text can show data with `{{ … }}`: `{{ data.orders }}` for a table's rows, `{{ data.orders.length }}`, `{{ vars.input1 }}` (what's typed in an input, the row clicked in a table), `{{ user.name }}`.
 - **Steps**: buttons, forms, tables, lists, kanban cards, calendar days, and inputs when they change (dropdowns, switches, sliders…) run steps: refresh a data source, run a workflow (with the form's answers or the clicked row, keeping the result as `data.<name>`), set a value, go to a page, show a message, open a link, sign out. A table row that opens a details page is two clicks.
 - **Pages**: `+ Page` adds one; each can be in the app's menu (top or side). **App** sets the name, theme (presets, colours, corners, font) and who can use it.
 - **Who can use it**: anyone with the link, people who sign in (anyone can make an account), or only people you invite (a list of emails). Accounts belong to the app, not to Workline; you see them and can remove them under **App**. Each workflow run gets who it's for as `{{ $json.user.email }}`, set by the server, so a workflow can show people only their own data.
@@ -235,7 +235,7 @@ The Code view's **Run** button, **Terminal** and **Python** prompt run code in t
 | Databases | Online shop, Blog, SaaS accounts and billing (schemas, drawn) |
 | Code | Node.js REST API, Python data analysis, Landing page, TypeScript utility with tests |
 | Workflows | Daily AI news digest, Lead capture with AI, Support ticket triage, Weekly sales report, Failure alerts |
-| Apps | Sales command center (dark dashboard, pipeline board, calendar), Stay finder (travel site with filters, map and booking), Fitness journal (gauges, habits, countdown), AI help center (Claude chat, FAQ, guides), Order tracker (sign-in), Feedback analyzer, KPI dashboard, Video streaming app |
+| Apps | Ecommerce store (catalogue, product pages, cart, checkout), Food ordering app (restaurants, menus, cart, order tracking), StreamBox (video streaming with My list), Chat app (sign-in, rooms, live messages), Sales command center, Stay finder, Fitness journal, AI help center, Order tracker, Feedback analyzer, KPI dashboard, Video streaming app (code) |
 | Pages | Sales dashboard page, Feedback form page, Video library page |
 
 Templates that need an account of yours (Slack, email, a database connection, a sheet to add rows to) are wired up and named; pick the credential or file on the node. Below them are the workflows you saved with **Template**.

@@ -228,7 +228,7 @@ a{color:var(--p)}
 .wl-page.stack .wl-c.fixed .wl-in{height:100%}
 .wl-h{margin:0;line-height:1.2}.wl-h.lg{font-size:30px}.wl-h.md{font-size:22px}.wl-h.sm{font-size:17px}
 .wl-t p{margin:0 0 8px}.wl-t ul{margin:0 0 8px;padding-left:20px}
-.wl-btn{font:inherit;font-weight:600;padding:9px 16px;border-radius:calc(var(--r) * .75);border:1.5px solid var(--p);background:var(--p);color:#fff;cursor:pointer;width:100%;min-height:40px}
+.wl-btn{font:inherit;font-weight:600;padding:9px 16px;border-radius:calc(var(--r) * .75);border:1.5px solid var(--p);background:var(--p);color:#fff;cursor:pointer;width:100%;min-height:36px}
 .wl-btn.secondary{background:transparent;color:var(--p)}
 .wl-btn.link{background:none;border-color:transparent;color:var(--p);text-decoration:underline}
 .wl-btn:disabled{opacity:.6;cursor:default}
@@ -502,7 +502,10 @@ function runtime(SPEC, OPT) {
         i.value = S.vars[c.name] ?? '';
         i.dataset.name = c.name;
         const set = () => { S.vars[c.name] = p.kind === 'number' && i.value !== '' ? +i.value : i.value; paint(c.id); };
-        i.oninput = set; i.onchange = () => { set(); if (c.type === 'select') steps(p.steps, S.vars[c.name]); };
+        // Typing redraws the rest of the page as it goes; leaving the box mustn't redraw again, or a click on
+        // a button next to it (Send) would land on a button that has just been replaced.
+        i.oninput = set;
+        if (c.type === 'select') i.onchange = () => { S.vars[c.name] = i.value; steps(p.steps, S.vars[c.name]); };
         if (c.type === 'input' && p.kind !== 'long') i.onkeydown = e => { if (e.key === 'Enter' && p.steps && p.steps.length) { e.preventDefault(); set(); steps(p.steps, S.vars[c.name]); } };
         l.appendChild(i); box.appendChild(l); break;
       }
