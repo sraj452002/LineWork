@@ -808,9 +808,10 @@ const PAGES = [
     // The shared part across the top; each page on a row of its own under it.
     head.forEach((n, i) => { n.x = 80 + i * 240; n.y = 80; });
     const sw = head[head.length - 1], edges = chain(head);
-    ['other', 0, 1, 2, 3].forEach((port, row) => {
+    Object.assign(sw, { x: 80, y: 660 }); // the Switch at the left, facing the five pages
+    [0, 1, 2, 3, 'other'].forEach((port, row) => { // in the Switch's port order, so no lines cross
       const list = pages[port];
-      list.forEach((n, i) => { n.x = 80 + (i + 2) * 240; n.y = 280 + row * 190; });
+      list.forEach((n, i) => { n.x = 400 + i * 240; n.y = 280 + row * 190; });
       edges.push({ id: rid('e'), from: sw.id, fromPort: String(port), to: list[0].id, toPort: 'main' }, ...chain(list));
     });
     return flowFile('StarPlay 2', [...head, ...Object.values(pages).flat()], edges);
