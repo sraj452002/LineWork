@@ -601,6 +601,7 @@ function appsGuide() {
         <li><b>Steps</b>: a button, form, table row or card can refresh data, run a workflow, set a value, go to a page, show a message, open a link or sign out. For a details page: add a page, then give the table the step <i>Go to a page</i>; on that page show <code>{'{{ vars.table1.name }}'}</code>.</li>
         <li><b>App</b> tab: name, menu (top or side), theme, and <b>who can use it</b>: anyone with the link, anyone who signs in, or only emails you invite. Signed-in people are <code>{'{{ user.email }}'}</code> in the app and <code>{'{{ $json.user.email }}'}</code> in the workflow, so each person can see only their own data.</li>
         <li><b>Preview</b> to try it; <b>Phone</b> to see it on a small screen (components stack top to bottom). Then <b>Publish</b> and share the link.</li>
+        <li><b>Export ▾</b> makes it an <b>Android app</b>, a <b>Windows, Mac &amp; Linux app</b> or a <b>web page</b>. The Android and desktop downloads are projects: upload the folder to a GitHub repository and GitHub builds the <code>.apk</code> or <code>.exe</code> for you (Actions → the latest run → Artifacts); the README inside has the steps. The app keeps running its workflows through its published link, so keep it published.</li>
       </ol>
       <p>The <b>AI</b> button can build or change the whole app from a description. Prefer code? <b>Code</b> gives you the page to write by hand (next sections).</p>
     </> },

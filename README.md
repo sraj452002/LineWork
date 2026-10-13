@@ -194,6 +194,13 @@ The **App** view starts in **Visual**: build an app for other people by dragging
 - **Phone**: on a narrow screen the components stack, top to bottom; **Phone** in the builder shows it.
 - **Preview** runs the app as people will see it (signed in as you). The AI panel can build or change the whole app from a description.
 
+- **Export ▾** (visual or code apps) downloads the app to run outside Workline. It still runs its workflows through its published link (`window.WORKLINE_BASE`), so the app is published first:
+  - *Android app*: a Gradle project, the page in a full-screen WebView, with a GitHub Actions workflow (`.github/workflows/build-android.yml`) that builds the `.apk`: upload the folder to a GitHub repository and download the APK from the run's Artifacts. Or open it in Android Studio.
+  - *Windows, Mac & Linux app*: an Electron project; its workflow builds a Windows installer and portable `.exe`, a Mac `.dmg` and a Linux `.AppImage`. Or `npm install && npm run dist`.
+  - *Web page*: one `.html` file to host anywhere.
+
+  A browser can't compile an `.apk` or `.exe` itself, hence the projects with a cloud build; each has a README (`frontend/src/lib/appexport.js`).
+
 The design is saved in `file.ui.spec`; `frontend/src/lib/appbuilder.js` turns it into the page (a small runtime with the design as JSON), published like any custom app below. Sign-in: `POST /api/ui/<token>/signup`, `/login`, `/me`, `/logout`; sessions last 30 days and live in the page's `window.name` (the sandboxed page has no storage), so they survive reloads in that tab.
 
 ## Custom apps

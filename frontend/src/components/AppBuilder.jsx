@@ -160,6 +160,30 @@ ${ui ? ui.html : ''}`,
     if (!await ask({ title: 'Edit the code instead?', text: 'You get the page’s code (made from the design) to change by hand. Going back to Visual later replaces code changes with the design.', input: false, ok: 'Edit code' })) return;
     write({ mode: 'code' }); setShown(ui.html);
   };
+  // Export: the app's page, standalone, calling its workflows at its published link.
+  const exportAs = async kind => {
+    let token = ui.token;
+    if (!ui.published) {
+      if (server === false) { toast('Sign in to Workline to publish and export the app.'); return; }
+      if (!await ask({ title: 'Publish the app first?', text: 'An exported app runs its workflows through the app’s published link, so it needs to be published. Anyone with the link (or the exported app) can use it.', input: false, ok: 'Publish and export' })) return;
+      token = token || secretPath() + secretPath().slice(0, 8);
+      write({ published: true, token });
+    }
+    const opts = { title, workflows, base: `${location.origin}/api/ui/${token}` };
+    const ex = await import('../lib/appexport.js');
+    const name = ex.slugOf(title);
+    if (kind === 'html') { ex.exportHtml(ui, opts); toast('Web page downloaded'); return; }
+    await ex.exportZip(kind === 'android' ? ex.androidFiles(ui, opts) : ex.desktopFiles(ui, opts), kind === 'android' ? `${name}-android` : `${name}-desktop`);
+    await ask({
+      title: kind === 'android' ? 'Android project downloaded' : 'Desktop project downloaded', input: false, ok: 'Got it',
+      text: `To get the ${kind === 'android' ? '.apk' : '.exe (and Mac .dmg, Linux .AppImage)'} without installing anything: unzip it, upload the folder to a new GitHub repository, then open Actions → ${kind === 'android' ? 'Build Android app' : 'Build desktop app'} → the latest run → Artifacts. Its README has the steps, and how to build it on your computer instead. Keep the app published: the ${kind === 'android' ? 'phone' : 'desktop'} app runs its workflows through its link.`,
+    });
+  };
+  const exportMenu = el => popup(el, [
+    { label: 'Android app (project for an .apk)', act: () => exportAs('android') },
+    { label: 'Windows, Mac & Linux app (project for an .exe)', act: () => exportAs('desktop') },
+    { label: 'Web page (.html file)', act: () => exportAs('html') },
+  ]);
   const startFrom = el => popup(el, APP_STARTERS.map(s => ({ label: s.label, act: () => { write({ html: s.html }); setShown(s.html); } })));
 
   return (
@@ -176,6 +200,7 @@ ${ui ? ui.html : ''}`,
           ? <button className={'btn' + (previewing ? ' dark' : '')} aria-pressed={previewing} onClick={() => { setShown(ui.html); setPreviewing(v => !v); setReload(n => n + 1); }}>{previewing ? '✎ Edit' : '▶ Preview'}</button>
           : <button className="btn" aria-haspopup="menu" onClick={e => startFrom(e.currentTarget)}>Start from ▾</button>}
         <button className="btn" onClick={() => setReload(n => n + 1)} title="Load the preview again">↻ Reload</button>
+        <button className="btn" aria-haspopup="menu" onClick={e => exportMenu(e.currentTarget)} title="Download the app as a web page, an Android app or a desktop app">Export ▾</button>
         {onGuide && <button className="btn" onClick={() => onGuide('apps')} title="How custom apps work: workline.run, helpers, publishing">? Guide</button>}
         <span className="ab-sp" />
         {link && <>

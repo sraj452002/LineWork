@@ -1,4 +1,6 @@
 import { test, expect } from '@playwright/test';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
 import { openStore } from '../backend/store.js';
 import { memoryBackend } from '../backend/drive.js';
 import { createApp } from '../backend/app.js';
@@ -96,6 +98,19 @@ return [
     await page.getByText('Publish', { exact: true }).click();
     const link = await page.getByLabel('App link').inputValue();
     await expect(page.getByText('Saved')).toBeVisible();
+
+    // Export: a web page, and an Android project (a .zip), each pointing at the published link.
+    await page.getByRole('button', { name: 'Export ▾' }).click();
+    let dl = page.waitForEvent('download');
+    await page.getByRole('menuitem', { name: 'Web page (.html file)' }).click();
+    const html = await dl;
+    expect(html.suggestedFilename()).toBe('orders.html');
+    expect(require('node:fs').readFileSync(await html.path(), 'utf8')).toContain(`window.WORKLINE_BASE = "${link}"`);
+    await page.getByRole('button', { name: 'Export ▾' }).click();
+    dl = page.waitForEvent('download');
+    await page.getByRole('menuitem', { name: 'Android app (project for an .apk)' }).click();
+    expect((await dl).suggestedFilename()).toBe('orders-android.zip');
+    await page.getByRole('button', { name: 'Got it' }).click();
 
     // Someone opens the link on a phone: a sign-in screen, then the app, made for them.
     const phone = await browser.newContext({ viewport: { width: 390, height: 800 } });
