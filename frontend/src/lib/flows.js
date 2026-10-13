@@ -1,5 +1,6 @@
 import { api } from './backend.js';
 import { rid } from './utils.js';
+import { CODE_LANGS, codeLang } from './codelangs.js';
 
 /* Workflows in the app: what each kind of node looks like and asks for (the server runs them: see
    backend/flow-nodes.js and flow-apps.js, which read the same param names), the kinds of credentials,
@@ -191,9 +192,16 @@ export const NODES = {
     help: 'Set the Webhook trigger’s Respond to “When the workflow ends”.', defaults: () => ({ with: 'first', status: 200 }) },
   'core.note': { group: 'Flow', label: 'Sticky note', note: 'A note on the canvas; does nothing', icon: I.note, tone: 'amber', inputs: [], outputs: [], note_: true,
     fields: [{ k: 'text', label: 'Note', kind: 'textarea' }], defaults: () => ({ text: 'A note about this part of the workflow.' }) },
-  'core.code': { group: 'Flow', label: 'Code', note: 'JavaScript over the items', icon: I.code, tone: 'amber',
-    fields: [{ k: 'code', label: 'JavaScript', kind: 'code', hint: '`items` is the list of item objects; return a list. await and fetch work.' }],
-    defaults: () => ({ code: 'return items.map(item => ({ ...item, checked: true }));' }) },
+  'core.code': { group: 'Flow', label: 'Code', note: 'JavaScript, Python, SQL, Go, Java and more over the items', icon: I.code, tone: 'amber',
+    credential: ['coderunner'], optionalCredential: true,
+    fields: [
+      { k: 'language', label: 'Language', kind: 'select', options: CODE_LANGS.map(l => [l.k, l.runner ? `${l.label} (on a code runner)` : l.label]) },
+      { k: 'code', label: 'Code', kind: 'code', hintFor: p => codeLang(p.language).hint },
+    ],
+    help: 'JavaScript, TypeScript, Python, Lua and SQL run on the Workline server. The other languages run on a code runner you connect: pick a Code runner credential (a Piston or Judge0 server).',
+    // A new language brings its starter code, unless the code has been changed.
+    onSet: (k, v, before) => (k === 'language' && (!String(before.code || '').trim() || before.code === codeLang(before.language).starter) ? { code: codeLang(v).starter } : null),
+    defaults: () => ({ language: 'javascript', code: codeLang('javascript').starter }) },
 
   /* ---- data ---- */
   'core.set': { group: 'Data', label: 'Set fields', note: 'Adds or changes fields on each item', icon: I.edit, tone: 'teal',
@@ -460,6 +468,7 @@ export const CRED_TYPES = {
   browserless: { label: 'Browserless', help: 'browserless.io → sign up (a free plan) → copy your API token.', fields: [key('token', 'API token'), plain('baseUrl', 'Server (optional)', 'https://production-sfo.browserless.io')] },
   bitly: { label: 'Bitly', help: 'Settings → Developer settings → API → Generate token.', fields: [key('token', 'Access token')] },
   imap: { label: 'Email (IMAP)', help: 'Your mail server’s IMAP settings (Gmail: imap.gmail.com, port 993, an app password).', fields: [plain('host', 'IMAP server', 'imap.gmail.com'), plain('port', 'Port', '993'), plain('user', 'User', 'you@example.com'), key('password', 'Password (an app password)')] },
+  coderunner: { label: 'Code runner', help: 'A Piston server (github.com/engineer-man/piston, run your own) or Judge0 (your own, or Judge0 CE on RapidAPI) to run Go, Java, C, C++, C#, Rust, Ruby, PHP and more.', fields: [plain('service', 'Service', 'piston or judge0'), plain('url', 'URL', 'https://piston.example.com or https://judge0-ce.p.rapidapi.com'), key('apiKey', 'API key or token (if it needs one)')] },
   redis: { label: 'Redis', help: 'redis://user:password@host:6379 (rediss:// for TLS, as on Upstash or Redis Cloud).', fields: [key('url', 'Redis URL', 'rediss://default:…@host:6379')] },
   bearer: { label: 'Bearer token', help: 'Sent as Authorization: Bearer <token>.', fields: [key('token', 'Token')] },
   header: { label: 'Header', help: 'Any header, e.g. X-API-Key.', fields: [plain('headerName', 'Header name'), key('headerValue', 'Value')] },

@@ -147,7 +147,17 @@ Workflows run on the backend (`backend/flows.js`, `flow-engine.js`, `flow-nodes.
 
 - **Credentials** (API keys, tokens, connection strings) are encrypted with AES-256-GCM under `FLOW_SECRET` and never sent back to the browser. Set `FLOW_SECRET` to a long random value and keep it: changing it makes saved credentials unreadable. (`render.yaml` generates one.)
 - **Schedules run while the server is awake.** A free Render service sleeps after 15 idle minutes, so a schedule then waits until something wakes it: a webhook, a visit, or a pinger such as cron-job.org calling the site every 10 minutes. Webhooks wake it themselves (the first call takes about a minute).
-- HTTP and app nodes refuse private and local addresses unless `DB_ALLOW_PRIVATE=1`. The Code node runs JavaScript on the server with time limits but no real sandbox: it's for the server's own, trusted accounts.
+- HTTP and app nodes refuse private and local addresses unless `DB_ALLOW_PRIVATE=1`.
+- **The Code node** (`backend/flow-code.js`) takes a language. **JavaScript, TypeScript, Python, Lua and SQL** run on the server in `backend/code-sandbox.js`: a separate Node process per language under Node's permission model (`--permission`), which can read only the runtimes' own packages, can't start processes or write files (other than Python's package cache), and gets no environment variables, so code can't reach the server's files or secrets. It can still use the network. Python is [Pyodide](https://pyodide.org) (`import numpy`, `pandas` and other Pyodide packages are fetched on first use), Lua is wasmoon, SQL is SQLite (sql.js) with the items as a table `items`. Limits: 10 s (Python 60 s), 384 MB. **Go, Java, C, C++, C#, Rust, Ruby, PHP, Kotlin, Swift, Bash, R, Perl, Scala, Haskell, Dart and Elixir** run on a code runner the user connects as a **Code runner** credential: a [Piston](https://github.com/engineer-man/piston) server, or Judge0 (self-hosted, or Judge0 CE on RapidAPI). Those programs read the items as JSON on stdin and print the new items as JSON (the last line of output). Each language starts with an example (`frontend/src/lib/codelangs.js`).
+
+## Custom apps
+
+The **App** view (Tools → Custom app, or View → App) makes an app with a UI of your own around your workflows: write its page in HTML, CSS and JavaScript with a live preview beside the code, choose which of your workflows it may run (**Workflows ▾**), and **Publish** it for a link anyone can open, outside Workline: `/api/ui/<token>`. In its script:
+
+- `await workline.run('Workflow name', { … })` runs one of those workflows (the saved version, from its Run by hand trigger) with that input and resolves to what its last steps output, as a list. With no name, the app's first workflow.
+- `workline.workflows` lists them; `cards`, `bars`, `line`, `pie` and `table` draw results (as in dashboard blocks).
+
+**Start from** has a form, a dashboard that refreshes itself, and a chat. `frontend/src/lib/apphost.js` builds the page (saved in `file.ui.doc`); `backend/flows.js` serves it with `Content-Security-Policy: sandbox`, so the page is an origin of its own with no access to Workline's cookies or storage, and its runs (`POST /api/ui/<token>/run`, rate-limited) can only start the workflows the app was given. Like a webhook, a published app runs them with its owner's credentials. In the editor's preview the runs go through the signed-in API (`POST /api/flows/:fileId/call`).
 
 ## Running code
 
@@ -231,6 +241,7 @@ frontend/               the app (Netlify)
       SheetView.jsx     Sheet view: an Excel-like workbook (ribbon, grid, charts)
       DatabaseView.jsx  Database view: live connections, schema, data and queries
       FlowView.jsx      Workflow view: the n8n-style editor, credentials and runs
+      AppBuilder.jsx    App view: a custom app's code, live preview, workflows and publishing
       ui.jsx            menus, dialogs, toasts, theme button
     lib/
       backend.js        talking to the API (and waiting for it to wake)
@@ -246,6 +257,9 @@ frontend/               the app (Netlify)
       xlsx.js           .xlsx open and save (ExcelJS)
       dbclient.js       live database connections, SQLite in the browser, schema → diagram
       flows.js          workflow node types, credential kinds, and the workflow API
+      codelangs.js      the Code node's languages and their starter code
+      apphost.js        custom apps: the page around your HTML (workline.run) and starters
+      dashboard.js      dashboard blocks: the frame's document, helpers and data sources
       charts.js         charts from cells, as SVG
       theme.js          light, dark or system theme, remembered
       python.worker.js  Pyodide in a web worker
@@ -267,6 +281,8 @@ backend/                the API (Render)
   flow-engine.js        runs a workflow: order, items, {{ expressions }}
   flow-nodes.js         what each workflow node does (HTTP, Code, Slack, GitHub…)
   flow-extra.js         AI helpers, MCP, GraphQL, Redis, spreadsheet files, pivot, key-value store, more triggers
+  flow-code.js          the Code node's languages: the sandbox processes and Piston / Judge0 runners
+  code-sandbox.js       the sandbox process (JavaScript, TypeScript, Python, Lua, SQL)
   auth.js               passwords, sessions, sign-in limits
   mail.js               sending email (Resend or SMTP)
   oauth.js              Google and GitHub sign-in (OAuth 2 with PKCE)

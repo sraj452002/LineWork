@@ -77,7 +77,7 @@ export const wiredCode = (shapes, id) => {
 // Keep cached data small enough to save with the file.
 export const cacheable = data => { try { return JSON.stringify(data).length <= 200_000; } catch (_) { return false; } };
 
-const HELPERS = `
+export const HELPERS = `
 const $ = s => (typeof s === 'string' ? document.querySelector(s) : s);
 const fmt = v => (typeof v === 'number' ? v.toLocaleString(undefined, { maximumFractionDigits: 2 }) : v == null ? '' : String(v));
 const escH = v => fmt(v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -132,9 +132,26 @@ export function dashboardDoc(html, data, theme = {}) {
   const json = JSON.stringify(data == null ? [] : data).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
-:root{--ink:${t.ink};--ink2:${t.ink2};--surface:${t.surface};--line:${t.line};--c1:#3b82f6;--c2:#10b981;--c3:#f59e0b;--c4:#8b5cf6;--c5:#ef4444;--c6:#14b8a6;color-scheme:${t.dark ? 'dark' : 'light'}}
-html,body{margin:0;background:${t.bg};color:var(--ink);font:13px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
+${widgetStyle(t)}
 body{padding:12px}
+</style>
+<script>
+window.data = ${json};
+${HELPERS}
+${ERRORS}
+</script></head><body>
+${html || ''}
+</body></html>`;
+}
+
+// Errors in a page's script show on the page, not just in a console nobody sees.
+export const ERRORS = `window.addEventListener('error', e => { const p = document.createElement('div'); p.className = 'lw-error'; p.textContent = 'Error: ' + e.message; document.body.appendChild(p); });
+window.addEventListener('unhandledrejection', e => { const p = document.createElement('div'); p.className = 'lw-error'; p.textContent = 'Error: ' + ((e.reason && e.reason.message) || e.reason); document.body.appendChild(p); });`;
+
+// The look of the helpers' widgets, and plain page defaults, in theme t's colours.
+export function widgetStyle(t) {
+  return `:root{--ink:${t.ink};--ink2:${t.ink2};--surface:${t.surface};--line:${t.line};--c1:#3b82f6;--c2:#10b981;--c3:#f59e0b;--c4:#8b5cf6;--c5:#ef4444;--c6:#14b8a6;color-scheme:${t.dark ? 'dark' : 'light'}}
+html,body{margin:0;background:${t.bg};color:var(--ink);font:13px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
 h1,h2,h3{margin:0 0 8px;font-weight:650}
 .lw-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:10px}
 .lw-card{border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--surface)}
@@ -149,13 +166,5 @@ h1,h2,h3{margin:0 0 8px;font-weight:650}
 .lw-pie{display:flex;gap:14px;align-items:center}
 .lw-pie ul{list-style:none;margin:0;padding:0;font-size:12px}
 .lw-pie i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px}
-.lw-error{color:#d1242f;font:12px/1.4 ui-monospace,monospace;white-space:pre-wrap}
-</style>
-<script>
-window.data = ${json};
-${HELPERS}
-window.addEventListener('error', e => { const p = document.createElement('div'); p.className = 'lw-error'; p.textContent = 'Error: ' + e.message; document.body.appendChild(p); });
-</script></head><body>
-${html || ''}
-</body></html>`;
+.lw-error{color:#d1242f;font:12px/1.4 ui-monospace,monospace;white-space:pre-wrap}`;
 }

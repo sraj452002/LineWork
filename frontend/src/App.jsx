@@ -301,7 +301,7 @@ function Workspace({ session, onSignOut, onUser }) {
   }
   if (file) {
     return (<>
-      <Editor key={file.id} file={file} update={updateOpen} saveState={saveState} {...serverProps(file)}
+      <Editor key={file.id} file={file} files={files} update={updateOpen} saveState={saveState} {...serverProps(file)}
         onBack={() => setOpenId(null)}
         onRename={() => rename(file)}
         onDuplicate={() => { const c = duplicate(file); setOpenId(c.id); }}

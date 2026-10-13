@@ -2496,3 +2496,18 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .cv-dash{position:absolute;z-index:7;transform-origin:0 0;pointer-events:none;padding:0 8px 6px;box-sizing:border-box}
 .cv-dash iframe{display:block;width:100%;height:100%;border:0;border-radius:0 0 8px 8px;background:transparent}
 .cv-dash.live{pointer-events:auto}
+/* The App view: the app's code beside its live preview. */
+.apppane{flex:1;min-width:0;min-height:0;display:flex}
+.panes[data-view="app"] .docpane,.panes[data-view="app"] .canvaspane,.panes[data-view="app"] .codepane{display:none}
+.ab{flex:1;min-width:0;display:flex;flex-direction:column;padding:10px 12px;gap:8px;background:var(--paper)}
+.ab-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ab-bar .btn{max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ab-sp{flex:1}
+.ab-link{width:min(340px,40vw);height:30px;border:1px solid var(--line);border-radius:8px;padding:0 8px;background:var(--surface);color:var(--ink);font:12px var(--mono)}
+.ab-note{margin:0;padding:8px 12px;border-radius:8px;background:color-mix(in srgb,var(--c-blue) 10%,var(--surface));font-size:13px}
+.ab-main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+.ab-code{min-height:0;resize:none;border:1px solid var(--line);border-radius:10px;padding:12px;background:var(--surface);color:var(--ink);font:12.5px/1.55 var(--mono);tab-size:2;white-space:pre;overflow:auto}
+.ab-preview{width:100%;height:100%;min-height:0;border:1px solid var(--line);border-radius:10px;background:#fff}
+.ab-help{margin:0;font-size:12px;color:var(--ink2)}
+.ab-help code{font:11.5px var(--mono)}
+@media (max-width:760px){.ab-main{grid-template-columns:1fr;grid-template-rows:1fr 1fr}}

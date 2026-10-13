@@ -453,7 +453,12 @@ function Palette({ at, view, onPick, onClose }) {
 // Settings for one node, and what it produced in the last run.
 function NodePanel({ node, flow, change, creds, tab, setTab, result, active, onCred, onRun, onDelete, canRun, onHelp }) {
   const d = nodeDef(node.type);
-  const set = (k, v) => change(f => { const n = f.nodes.find(x => x.id === node.id); (n.params ||= {})[k] = v; });
+  const set = (k, v) => change(f => {
+    const n = f.nodes.find(x => x.id === node.id), before = { ...(n.params || {}) };
+    (n.params ||= {})[k] = v;
+    const also = d.onSet && d.onSet(k, v, before); // a field that changes others (the Code node's language)
+    if (also) Object.assign(n.params, also);
+  });
   const p = node.params || {};
   const meets = w => !w || w.slice(1).includes(p[w[0]] ?? '');
   const shown = f => meets(f.when) && meets(f.also);
@@ -502,7 +507,7 @@ function NodePanel({ node, flow, change, creds, tab, setTab, result, active, onC
           {d.help && <small className="muted fv-help">{d.help}</small>}
           {node.type === 'trigger.schedule' && <small className={active ? 'ok' : 'muted'}>{active ? 'Scheduled. Runs while the server is awake.' : 'Turn the workflow Active to run on schedule.'}</small>}
           {node.type === 'trigger.manual' && <small className="muted">Press Run workflow to start here.</small>}
-          {d.fields.filter(shown).map(f => <Field key={f.k} f={f} value={p[f.k]} onChange={v => set(f.k, v)} />)}
+          {d.fields.filter(shown).map(f => <Field key={f.k} f={f.hintFor ? { ...f, hint: f.hintFor(p) } : f} value={p[f.k]} onChange={v => set(f.k, v)} />)}
           {!d.trigger && node.type !== 'core.note' && (
             <label className="fv-f"><span>If it fails</span>
               <select aria-label="If it fails" value={node.onError || 'stop'} onChange={e => { const v = e.target.value; change(f => {

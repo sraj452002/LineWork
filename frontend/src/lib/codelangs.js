@@ -1,0 +1,53 @@
+/* The Code node's languages (backend/flow-code.js runs them) and the code each starts with.
+   Local ones run on the Workline server; `runner` ones on a Piston or Judge0 server, given the items as
+   JSON on stdin and printing the new items as JSON. */
+
+const STDIN = 'Reads the items (a JSON list) from stdin and prints the new items as JSON.';
+
+export const CODE_LANGS = [
+  { k: 'javascript', label: 'JavaScript', hint: '`items` is the list of item objects; return a list. await and fetch work.',
+    starter: 'return items.map(item => ({ ...item, checked: true }));' },
+  { k: 'typescript', label: 'TypeScript', hint: '`items` is the list of item objects; return a list. Types are checked loosely (they’re removed before running).',
+    starter: 'type Item = Record<string, unknown>;\n\nreturn items.map((item: Item) => ({ ...item, checked: true }));' },
+  { k: 'python', label: 'Python', hint: '`items` is a list of dicts; return a list. print() shows in the output. Imports like numpy and pandas load by themselves (the first time takes a while).',
+    starter: 'return [{**item, "checked": True} for item in items]' },
+  { k: 'lua', label: 'Lua', hint: '`items` is a table of item tables; return a table.',
+    starter: 'local out = {}\nfor i, item in ipairs(items) do\n  item.checked = true\n  out[i] = item\nend\nreturn out' },
+  { k: 'sql', label: 'SQL (SQLite)', hint: 'The items are a table called `items`, one column per field. The rows of the last SELECT are the new items.',
+    starter: 'SELECT *, 1 AS checked\nFROM items' },
+  { k: 'go', label: 'Go', runner: true, hint: STDIN,
+    starter: 'package main\n\nimport (\n\t"encoding/json"\n\t"fmt"\n\t"os"\n)\n\nfunc main() {\n\tvar items []map[string]any\n\tjson.NewDecoder(os.Stdin).Decode(&items)\n\tfor _, item := range items {\n\t\titem["checked"] = true\n\t}\n\tout, _ := json.Marshal(items)\n\tfmt.Println(string(out))\n}' },
+  { k: 'java', label: 'Java', runner: true, hint: STDIN,
+    starter: 'import java.io.*;\n\npublic class Main {\n  public static void main(String[] args) throws IOException {\n    String items = new String(System.in.readAllBytes());\n    // items is the JSON text of the list; print the new items as JSON.\n    System.out.println("{\\"bytes\\": " + items.length() + "}");\n  }\n}' },
+  { k: 'c', label: 'C', runner: true, hint: STDIN,
+    starter: '#include <stdio.h>\n\nint main(void) {\n  char buf[65536];\n  size_t n = fread(buf, 1, sizeof buf - 1, stdin);\n  buf[n] = 0;\n  // buf holds the items as JSON; print the new items as JSON.\n  printf("{\\"bytes\\": %zu}\\n", n);\n  return 0;\n}' },
+  { k: 'cpp', label: 'C++', runner: true, hint: STDIN,
+    starter: '#include <iostream>\n#include <iterator>\n#include <string>\n\nint main() {\n  std::string items((std::istreambuf_iterator<char>(std::cin)), std::istreambuf_iterator<char>());\n  // items is the JSON text of the list; print the new items as JSON.\n  std::cout << "{\\"bytes\\": " << items.size() << "}" << std::endl;\n}' },
+  { k: 'csharp', label: 'C#', runner: true, hint: STDIN,
+    starter: 'using System;\nusing System.Text.Json;\nusing System.Text.Json.Nodes;\n\nclass Program {\n  static void Main() {\n    var items = JsonNode.Parse(Console.In.ReadToEnd())!.AsArray();\n    foreach (var item in items) item!["checked"] = true;\n    Console.WriteLine(items.ToJsonString());\n  }\n}' },
+  { k: 'rust', label: 'Rust', runner: true, hint: STDIN + ' (Only the standard library.)',
+    starter: 'use std::io::Read;\n\nfn main() {\n    let mut items = String::new();\n    std::io::stdin().read_to_string(&mut items).unwrap();\n    // items is the JSON text of the list; print the new items as JSON.\n    println!("{{\\"bytes\\": {}}}", items.len());\n}' },
+  { k: 'ruby', label: 'Ruby', runner: true, hint: STDIN,
+    starter: 'require "json"\n\nitems = JSON.parse($stdin.read)\nitems.each { |item| item["checked"] = true }\nputs items.to_json' },
+  { k: 'php', label: 'PHP', runner: true, hint: STDIN,
+    starter: '<?php\n$items = json_decode(file_get_contents("php://stdin"), true);\nforeach ($items as &$item) { $item["checked"] = true; }\necho json_encode($items), "\\n";' },
+  { k: 'kotlin', label: 'Kotlin', runner: true, hint: STDIN,
+    starter: 'fun main() {\n    val items = generateSequence(::readLine).joinToString("\\n")\n    // items is the JSON text of the list; print the new items as JSON.\n    println("{\\"bytes\\": ${items.length}}")\n}' },
+  { k: 'swift', label: 'Swift', runner: true, hint: STDIN,
+    starter: 'import Foundation\n\nlet data = FileHandle.standardInput.readDataToEndOfFile()\nvar items = (try? JSONSerialization.jsonObject(with: data)) as? [[String: Any]] ?? []\nfor i in items.indices { items[i]["checked"] = true }\nlet out = try! JSONSerialization.data(withJSONObject: items)\nprint(String(data: out, encoding: .utf8)!)' },
+  { k: 'bash', label: 'Bash', runner: true, hint: STDIN,
+    starter: 'items=$(cat)\n# $items is the JSON text of the list; print the new items as JSON.\necho "{\\"bytes\\": ${#items}}"' },
+  { k: 'r', label: 'R', runner: true, hint: STDIN,
+    starter: 'items <- paste(readLines(file("stdin")), collapse = "\\n")\n# items is the JSON text of the list; print the new items as JSON.\ncat(sprintf(\'{"bytes": %d}\\n\', nchar(items)))' },
+  { k: 'perl', label: 'Perl', runner: true, hint: STDIN,
+    starter: 'use JSON::PP;\n\nmy $items = decode_json(join("", <STDIN>));\n$_->{checked} = JSON::PP::true for @$items;\nprint encode_json($items), "\\n";' },
+  { k: 'scala', label: 'Scala', runner: true, hint: STDIN,
+    starter: 'object Main extends App {\n  val items = scala.io.Source.stdin.mkString\n  // items is the JSON text of the list; print the new items as JSON.\n  println(s"""{"bytes": ${items.length}}""")\n}' },
+  { k: 'haskell', label: 'Haskell', runner: true, hint: STDIN,
+    starter: 'main :: IO ()\nmain = do\n  items <- getContents\n  -- items is the JSON text of the list; print the new items as JSON.\n  putStrLn ("{\\"bytes\\": " ++ show (length items) ++ "}")' },
+  { k: 'dart', label: 'Dart', runner: true, hint: STDIN,
+    starter: 'import \'dart:convert\';\nimport \'dart:io\';\n\nvoid main() {\n  final items = jsonDecode(stdin.readLineSync() ?? \'[]\') as List;\n  for (final item in items) { item[\'checked\'] = true; }\n  print(jsonEncode(items));\n}' },
+  { k: 'elixir', label: 'Elixir', runner: true, hint: STDIN,
+    starter: 'items = IO.read(:stdio, :eof)\n# items is the JSON text of the list; print the new items as JSON.\nIO.puts(~s({"bytes": #{String.length(items)}}))' },
+];
+export const codeLang = k => CODE_LANGS.find(l => l.k === (k || 'javascript')) || CODE_LANGS[0];

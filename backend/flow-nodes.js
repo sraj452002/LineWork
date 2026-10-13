@@ -3,6 +3,7 @@ import { createHash, createHmac, randomBytes, randomUUID } from 'node:crypto';
 import { FlowError, getPath, items, setPath } from './flow-engine.js';
 import { handle as dbHandle } from './dbconnect.js';
 import { cred, each, failIfBad, json, need, obj, pairs, request } from './flow-util.js';
+import { LOCAL_LANGS, runLocal, runRemote } from './flow-code.js';
 
 /* What each kind of workflow node does. A node gets its input items and returns {port: items}; most
    run once per item, reading params filled in for that item (params(item, i)). ctx (from flows.js):
@@ -58,26 +59,20 @@ export const NODE_TYPES = {
     return list;
   }) },
   'core.code': { run: async args => {
-    const code = need(args.node.params?.code, 'the code');
-    const logs = [];
-    const sandbox = {
-      console: { log: (...a) => logs.push(a.map(v => (typeof v === 'string' ? v : JSON.stringify(v))).join(' ')) },
-      fetch, URL, URLSearchParams, JSON, Math, Date, structuredClone, setTimeout,
-    };
-    let fn;
-    try { fn = vm.runInNewContext(`(async (items, $input) => {\n${code}\n})`, sandbox, { timeout: 1000 }); }
-    catch (e) { throw new FlowError(`The code doesn't parse: ${e.message}`, 'code'); }
+    const p = args.node.params || {}, code = need(p.code, 'the code'), lang = p.language || 'javascript';
     const input = args.items.map(x => structuredClone(x.json));
-    let result;
+    let got;
     try {
-      result = await Promise.race([
-        fn(input, { all: () => input, first: () => input[0] }),
-        new Promise((_, rej) => setTimeout(() => rej(new Error('it ran for more than 10 seconds')), 10_000)),
-      ]);
-    } catch (e) { throw new FlowError(`The code failed: ${e.message}`, 'code'); }
+      got = LOCAL_LANGS.includes(lang) ? await runLocal(lang, code, input)
+        : await runRemote(lang, code, input, args.node.credential ? await args.ctx.cred(args.node.credential) : null);
+    } catch (e) {
+      if (e instanceof FlowError) throw e;
+      throw new FlowError(/doesn't parse|runs on a code runner/.test(e.message) ? e.message : `The code failed: ${e.message}`, 'code');
+    }
+    let result = got.result;
     if (result === undefined) result = input;
     const out = items(Array.isArray(result) ? result.map(r => (r && r.json && Object.keys(r).length === 1 ? r.json : r)) : result);
-    if (logs.length && out[0]) out[0].json = { ...out[0].json, _logs: logs };
+    if (got.logs.length && out[0]) out[0].json = { ...out[0].json, _logs: got.logs };
     return { main: out };
   } },
 
