@@ -455,14 +455,19 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
   // The body as sent is kept too: app triggers check its signature.
   const keep = (req, res, buf) => { req.raw = buf; };
   hooks.use(express.json({ limit: '5mb', verify: keep }), express.urlencoded({ extended: true, limit: '5mb', verify: keep }), express.text({ type: 'text/*', limit: '5mb', verify: keep }));
+  // A link nobody answers: a browser gets a page saying so (a published web app that's been turned off,
+  // or never published); other callers get JSON.
+  const notLive = (req, res) => (req.method === 'GET' && req.accepts(['json', 'html']) === 'html'
+    ? res.status(404).set(PAGE_HEADERS).type('html').send(renderPage({ title: 'This app isn’t live', theme: 'light' }, [], { error: 'Nobody has published this link, or it was unpublished. If it’s yours: open the workflow in Workline and press Publish web app.' }))
+    : res.status(404).json({ error: 'not_found', message: 'No active workflow listens here.' }));
   hooks.all('/:token', async (req, res) => {
     const h = m.hooks[req.params.token];
-    if (!h) return res.status(404).json({ error: 'not_found', message: 'No active workflow listens here.' });
+    if (!h) return notLive(req, res);
     if (h.method !== 'ANY' && h.method !== req.method) return res.status(405).json({ error: 'method', message: `This webhook takes ${h.method} requests.` });
     if (hits.blocked(req.params.token)) return res.status(429).json({ error: 'too_many' });
     hits.fail(req.params.token);
     const flow = await savedFlow(h.uid, h.fileId);
-    if (!flow || !flow.active) return res.status(404).json({ error: 'not_found' });
+    if (!flow || !flow.active) return notLive(req, res);
     const node = flow.nodes.find(n => n.id === h.nodeId), type = node && TYPES[node.type];
     if (type?.page) return servePage(req, res, h, flow, node);
     const reply = r => (r.type === 'html' ? res.status(r.status).type('html').send(r.body) : res.status(r.status).json(r.body));

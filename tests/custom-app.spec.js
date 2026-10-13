@@ -96,8 +96,8 @@ test('a custom app runs its workflow in the preview and at its published link', 
     await expect(page.getByRole('button', { name: /^Workflows: Video library/ })).toBeVisible();
     const player = page.frameLocator('iframe[title="App preview"]');
     await expect(player.locator('.item')).toHaveCount(5, { timeout: 60_000 }); // Python's first start takes a moment
-    await expect(player.locator('#title')).toHaveText('Big Buck Bunny');
-    await expect(player.locator('#player')).toHaveAttribute('src', /BigBuckBunny_320x180\.mp4$/);
+    await expect(player.locator('#title')).toHaveText('City and Nature');
+    await expect(player.locator('#player')).toHaveAttribute('src', /stock\.mp4$/);
     await player.getByRole('button', { name: 'Streams' }).click();
     await expect(player.locator('.item')).toHaveCount(2);
     await player.locator('#q').fill('zzz');

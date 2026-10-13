@@ -201,6 +201,7 @@ export const NODES = {
       { k: 'title', label: 'Title', kind: 'text' }, { k: 'description', label: 'Description', kind: 'textarea' },
       { k: 'theme', label: 'Look', kind: 'select', options: [['light', 'Light'], ['dark', 'Dark']] },
       { k: 'width', label: 'Width', kind: 'select', options: [['normal', 'Normal'], ['wide', 'Wide']] },
+      { k: 'css', label: 'Page CSS (optional)', kind: 'textarea', hint: 'body { background: #0b0b14 }\n.btn.on { background: #1f80e0 }\n.n-player video { border-radius: 20px }' },
     ],
     help: 'The workflow gets { action, query, form }: action is "open" when the page is opened, or the name of the form that was sent; query is the link’s ?… values (Buttons set them); form is the answers.',
     defaults: () => ({ path: secretPath(), title: 'My page', theme: 'light', width: 'normal' }) },
@@ -461,6 +462,9 @@ export const NODES = {
     fields: [{ k: 'list', label: 'Stories', kind: 'select', options: [['top', 'Top'], ['new', 'New'], ['best', 'Best'], ['ask', 'Ask HN'], ['show', 'Show HN']] }, { k: 'limit', label: 'How many', kind: 'number' }], defaults: () => ({ list: 'top', limit: 10 }) },
   'data.weather': { group: 'Storage & feeds', label: 'Weather', note: 'Current weather anywhere (Open-Meteo)', icon: I.sun, tone: 'sky', fields: [{ k: 'latitude', label: 'Latitude', kind: 'text', hint: '28.61' }, { k: 'longitude', label: 'Longitude', kind: 'text', hint: '77.21' }] },
 };
+// Every UI node can be styled: CSS for its block (it also gets a class from its name, .n-<name>, for the
+// Page CSS to reach it).
+for (const [k, def] of Object.entries(NODES)) if (k.startsWith('ui.')) def.fields = [...(def.fields || []), { k: 'css', label: 'Style (CSS, optional)', kind: 'textarea', hint: 'background: #16213e; border-radius: 16px; padding: 16px' }];
 export const nodeDef = type => NODES[type] || { label: type, icon: I.code, tone: 'slate', group: 'Flow', fields: [] };
 export const inputsOf = type => (nodeDef(type).trigger ? [] : nodeDef(type).inputs || ['main']);
 export const outputsOf = type => nodeDef(type).outputs || ['main'];
