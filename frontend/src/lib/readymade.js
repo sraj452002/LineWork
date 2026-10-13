@@ -866,6 +866,228 @@ APPS.push({ k: 'a-help', name: 'AI help center', note: 'A help centre: hero, AI 
   ],
 }) });
 
+/* ---- Four complete apps: a shop, food delivery, video streaming and chat ---- */
+const wf = (workflow, input, into) => ({ kind: 'workflow', workflow, input: Object.entries(input).map(([name, value]) => ({ name, value })), into });
+const removeOne = list => `{{ (() => { const c = [...(vars.${list} || [])]; c.splice(c.indexOf(item), 1); return c; })() }}`;
+const cartButton = (id, x, y, look = 'secondary') => C(id, 'button', 'cartButton', x, y, 3, 6, { label: '{{ "🛒 Cart (" + (vars.cart || []).length + ")" }}', look, steps: [go('cart')] });
+
+// A shop: catalogue with filters, product pages, a cart and checkout through the workflow.
+APPS.push({ k: 'a-shop', name: 'Ecommerce store', note: 'A shop: hero, category and search filters, product pages with sizes, a cart, checkout and an order confirmation', make: () => visualApp('ShopNest', [
+  node('trigger.manual', 'Run by hand', 80),
+  node('core.code', 'Products and orders', 340, { language: 'javascript', code: `// Lists the products, or places an order (action: "order"). Swap the list for your store
+// (Shopify, WooCommerce, a database or a sheet), and send orders to email, a sheet or Stripe.
+const i = items[0] || {};
+if (i.action === 'order') {
+  const lines = Array.isArray(i.cart) ? i.cart : [];
+  const total = lines.reduce((s, p) => s + Number(p.price || 0), 0);
+  return [{ orderId: 'SN-' + Math.floor(100000 + Math.random() * 900000), total, count: lines.length, name: (i.customer || {}).name || '', placed: new Date().toISOString() }];
+}
+const p = (id, name, category, price, rating, about) => ({ id, name, category, price, rating, about, photo: 'https://picsum.photos/seed/shop' + id + '/800/800' });
+return [
+  p(1, 'Linen overshirt', 'Clothing', 68, 4.7, 'Washed linen, relaxed fit, two chest pockets.'),
+  p(2, 'Merino crew', 'Clothing', 89, 4.8, 'Fine merino wool that keeps warm without the bulk.'),
+  p(3, 'Canvas tote', 'Bags', 34, 4.6, 'Heavy cotton canvas with a leather base and an inner pocket.'),
+  p(4, 'Weekender bag', 'Bags', 149, 4.9, 'Waxed canvas, brass hardware, fits a long weekend.'),
+  p(5, 'Ceramic mug set', 'Home', 42, 4.5, 'Four hand-glazed stoneware mugs, dishwasher safe.'),
+  p(6, 'Wool throw', 'Home', 95, 4.8, 'Soft lambswool throw, woven in Scotland.'),
+  p(7, 'Leather wallet', 'Accessories', 55, 4.7, 'Vegetable-tanned leather that ages beautifully.'),
+  p(8, 'Field watch', 'Accessories', 189, 4.6, 'Automatic movement, sapphire glass, 38 mm.'),
+  p(9, 'Running sneakers', 'Shoes', 120, 4.4, 'Light, cushioned and made with recycled materials.'),
+  p(10, 'Suede loafers', 'Shoes', 135, 4.5, 'Unlined suede with a flexible leather sole.'),
+  p(11, 'Scented candle', 'Home', 28, 4.3, 'Cedar and fig, 50 hours of burn time.'),
+  p(12, 'Sunglasses', 'Accessories', 79, 4.6, 'Acetate frames with polarised lenses.'),
+];` }),
+], {
+  name: 'ShopNest', theme: { primary: '#111827', bg: '#ffffff', surface: '#f7f7f5', text: '#111827', dark: false, radius: 14, font: 'system' }, nav: 'top',
+  data: [{ id: 's1', name: 'products', workflow: 'ShopNest', input: [], auto: true }],
+  pages: [
+    { id: 'shop', name: 'Shop', nav: true, components: [
+      C('e1', 'hero', 'hero1', 0, 0, 12, 36, { kicker: 'New season', title: 'Everyday things, beautifully made', subtitle: 'Clothing, bags and homeware that last. Free shipping over $50.', button: '', image: 'https://picsum.photos/seed/shophero/1600/700' }),
+      C('e2', 'radio', 'category', 0, 37, 6, 9, { label: 'Category', options: '{{ ["All", ...new Set((data.products || []).map(p => p.category))] }}', value: 'All', inline: true }),
+      C('e3', 'search', 'search1', 6, 38, 3, 6, { placeholder: 'Search products' }),
+      cartButton('e4', 9, 38, 'primary'),
+      C('e5', 'list', 'list1', 0, 47, 12, 96, { rows: '{{ (data.products || []).filter(p => (!vars.category || vars.category === "All" || p.category === vars.category) && (!vars.search1 || p.name.toLowerCase().includes(vars.search1.toLowerCase()))) }}', title: '{{ item.name }}', subtitle: '{{ "$" + item.price + " · ★ " + item.rating }}', image: '{{ item.photo }}', steps: [set('product', '{{ item }}'), go('product')] }),
+    ] },
+    { id: 'product', name: 'Product', nav: false, components: [
+      C('p1', 'button', 'back', 0, 0, 2, 6, { label: '← Shop', look: 'link', steps: [go('shop')] }),
+      cartButton('p2', 9, 0),
+      C('p3', 'image', 'image1', 0, 7, 6, 56, { src: '{{ vars.product && vars.product.photo }}', fit: 'cover' }),
+      C('p4', 'badge', 'badge1', 6, 8, 2, 5, { text: '{{ vars.product && vars.product.category }}', tone: 'gray' }),
+      C('p5', 'heading', 'heading1', 6, 14, 6, 7, { text: '{{ vars.product ? vars.product.name : "Pick a product" }}', size: 'md' }),
+      C('p6', 'stat', 'price', 6, 22, 6, 12, { label: 'Price', value: '{{ vars.product && "$" + vars.product.price }}', note: '{{ vars.product && "★ " + vars.product.rating + " · free returns" }}' }),
+      C('p7', 'text', 'about', 6, 35, 6, 9, { text: '{{ vars.product ? vars.product.about : "" }}' }),
+      C('p8', 'radio', 'size', 6, 44, 6, 9, { label: 'Size', options: 'S, M, L, XL', value: 'M', inline: true }),
+      C('p9', 'button', 'addToCart', 6, 55, 3, 7, { label: 'Add to cart', look: 'primary', steps: [set('cart', '{{ [...(vars.cart || []), { ...vars.product, size: vars.size }] }}'), toast('Added to your cart')] }),
+      C('p10', 'button', 'buyNow', 9, 55, 3, 7, { label: 'Buy now', look: 'secondary', steps: [set('cart', '{{ [...(vars.cart || []), { ...vars.product, size: vars.size }] }}'), go('cart')] }),
+      C('p11', 'accordion', 'accordion1', 0, 64, 12, 22, { items: 'Shipping | Free over $50, otherwise $5. Arrives in 2–4 working days.\nReturns | Free returns within 30 days, in the original packaging.\nCare | See the label: most of our pieces like a cool wash.' }),
+    ] },
+    { id: 'cart', name: 'Cart', nav: true, components: [
+      C('c1', 'heading', 'heading1', 0, 0, 12, 6, { text: 'Your cart' }),
+      C('c2', 'items', 'cartItems', 0, 7, 7, 52, { title: 'Tap an item to remove it', rows: '{{ vars.cart || [] }}', text: '{{ item.name + (item.size ? " · " + item.size : "") }}', note: '{{ "$" + item.price }}', card: true, steps: [set('cart', removeOne('cart'))] }),
+      C('c3', 'stat', 'total', 7, 7, 5, 13, { label: 'Total', value: '{{ "$" + fmt((vars.cart || []).reduce((s, p) => s + p.price, 0)) }}', note: '{{ (vars.cart || []).length + " items · " + ((vars.cart || []).reduce((s, p) => s + p.price, 0) >= 50 ? "free shipping" : "$5 shipping") }}', card: true }),
+      C('c4', 'form', 'checkout', 7, 21, 5, 52, { title: 'Checkout', fields: 'Name*\nEmail* (email)\nAddress* (long)\nPhone (tel)', button: 'Place order', thanks: '', card: true, steps: [wf('ShopNest', { action: 'order', cart: '{{ vars.cart }}', customer: '{{ item }}' }, 'order'), set('cart', '{{ [] }}'), go('done')] }),
+      C('c5', 'button', 'continue', 0, 60, 3, 6, { label: '← Keep shopping', look: 'link', steps: [go('shop')] }),
+    ] },
+    { id: 'done', name: 'Thanks', nav: false, components: [
+      C('d1', 'hero', 'hero1', 0, 0, 12, 34, { kicker: 'Order placed', title: 'Thank you{{ data.order && data.order[0] && data.order[0].name ? ", " + data.order[0].name : "" }}!', subtitle: '{{ data.order && data.order[0] ? "Order " + data.order[0].orderId + " · $" + data.order[0].total + " · we’ll email you when it ships." : "" }}', button: 'Keep shopping', align: 'center', steps: [go('shop')] }),
+      C('d2', 'stepper', 'stepper1', 0, 36, 12, 10, { stages: 'Placed, Packed, Shipped, Delivered', current: '{{ 1 }}' }),
+    ] },
+  ],
+}) });
+
+// Food delivery: restaurants, menus, a cart, checkout, then live order tracking.
+APPS.push({ k: 'a-food', name: 'Food ordering app', note: 'Food delivery: restaurants with filters, menus, a cart, checkout with payment choice, and order tracking with a countdown and map', make: () => visualApp('QuickBite', [
+  node('trigger.manual', 'Run by hand', 80),
+  node('core.code', 'Restaurants and orders', 340, { language: 'javascript', code: `// Lists restaurants and their menus, or places an order (action: "order"). Swap for your kitchen's
+// menu (a sheet or database) and send orders to WhatsApp, Slack, email or a POS.
+const i = items[0] || {};
+if (i.action === 'order') {
+  const lines = Array.isArray(i.cart) ? i.cart : [];
+  const total = lines.reduce((s, d) => s + Number(d.price || 0), 0) + 2.99;
+  return [{ orderId: 'QB-' + Math.floor(1000 + Math.random() * 9000), total: +total.toFixed(2), count: lines.length, name: (i.customer || {}).name || '' }];
+}
+const r = (id, name, cuisine, rating, time, fee, menu) => ({ id, name, cuisine, rating, time, fee, photo: 'https://picsum.photos/seed/food' + id + '/900/600', menu: menu.map(([name, price, veg]) => ({ name, price, veg })) });
+return [
+  r(1, 'Spice Route', 'Indian', 4.6, 30, 1.99, [['Butter chicken', 11.5, false], ['Paneer tikka', 9.5, true], ['Dal makhani', 8, true], ['Garlic naan', 2.5, true], ['Mango lassi', 3.5, true]]),
+  r(2, 'Nonna’s Kitchen', 'Italian', 4.8, 35, 2.49, [['Margherita pizza', 10, true], ['Spaghetti carbonara', 12.5, false], ['Lasagne', 13, false], ['Tiramisu', 6, true]]),
+  r(3, 'Tokyo Bowl', 'Japanese', 4.7, 25, 1.49, [['Salmon poke', 13.5, false], ['Chicken katsu', 12, false], ['Veg ramen', 11, true], ['Matcha cheesecake', 5.5, true]]),
+  r(4, 'Green Leaf', 'Healthy', 4.5, 20, 0.99, [['Quinoa bowl', 10.5, true], ['Avocado toast', 8, true], ['Berry smoothie', 6, true]]),
+  r(5, 'Smash Burger Co.', 'Burgers', 4.4, 25, 1.99, [['Double smash', 11, false], ['Crispy chicken', 10.5, false], ['Beyond burger', 11.5, true], ['Loaded fries', 5, true]]),
+  r(6, 'Taco Fiesta', 'Mexican', 4.6, 30, 1.49, [['Al pastor tacos', 9.5, false], ['Bean burrito', 9, true], ['Nachos', 7.5, true], ['Churros', 4.5, true]]),
+];` }),
+], {
+  name: 'QuickBite', theme: { primary: '#e23744', bg: '#fff8f6', surface: '#ffffff', text: '#2b1114', dark: false, radius: 18, font: 'rounded' }, nav: 'top',
+  data: [{ id: 's1', name: 'places', workflow: 'QuickBite', input: [], auto: true }],
+  pages: [
+    { id: 'home', name: 'Restaurants', nav: true, components: [
+      C('h1', 'hero', 'hero1', 0, 0, 12, 34, { kicker: 'Hungry?', title: 'Food you love, delivered in 30 minutes', subtitle: 'The best restaurants near you, from biryani to burgers.', button: '', image: 'https://picsum.photos/seed/foodhero/1600/700' }),
+      C('h2', 'radio', 'cuisine', 0, 35, 8, 9, { label: 'Cuisine', options: '{{ ["All", ...new Set((data.places || []).map(p => p.cuisine))] }}', value: 'All', inline: true }),
+      C('h3', 'search', 'search1', 8, 36, 4, 6, { placeholder: 'Search restaurants' }),
+      C('h4', 'list', 'list1', 0, 45, 12, 96, { rows: '{{ (data.places || []).filter(p => (!vars.cuisine || vars.cuisine === "All" || p.cuisine === vars.cuisine) && (!vars.search1 || p.name.toLowerCase().includes(vars.search1.toLowerCase()))) }}', title: '{{ item.name }}', subtitle: '{{ item.cuisine + " · ★ " + item.rating + " · " + item.time + " min · $" + item.fee + " delivery" }}', image: '{{ item.photo }}', steps: [set('place', '{{ item }}'), go('menu')] }),
+    ] },
+    { id: 'menu', name: 'Menu', nav: false, components: [
+      C('m1', 'hero', 'hero1', 0, 0, 12, 28, { kicker: '{{ vars.place ? vars.place.cuisine + " · ★ " + vars.place.rating + " · " + vars.place.time + " min" : "" }}', title: '{{ vars.place ? vars.place.name : "Pick a restaurant" }}', subtitle: 'Tap a dish to add it to your order.', button: '← All restaurants', image: '{{ vars.place && vars.place.photo }}', steps: [go('home')] }),
+      C('m2', 'items', 'dishes', 0, 29, 8, 56, { title: 'Menu', rows: '{{ vars.place ? vars.place.menu : [] }}', text: '{{ (item.veg ? "🟢 " : "🔴 ") + item.name }}', note: '{{ "$" + item.price.toFixed(2) }}', card: true, steps: [set('cart', '{{ [...(vars.cart || []), { ...item, place: vars.place.name }] }}'), toast('Added to your order')] }),
+      C('m3', 'box', 'box1', 8, 29, 4, 30, { title: 'Your order' }),
+      C('m4', 'stat', 'count', 8, 35, 4, 12, { label: '{{ (vars.cart || []).length + " items" }}', value: '{{ "$" + (vars.cart || []).reduce((s, d) => s + d.price, 0).toFixed(2) }}', note: '+ $2.99 delivery' }),
+      C('m5', 'button', 'viewCart', 8, 49, 4, 7, { label: 'View cart →', look: 'primary', steps: [go('cart')] }),
+    ] },
+    { id: 'cart', name: 'Cart', nav: true, components: [
+      C('k1', 'heading', 'heading1', 0, 0, 12, 6, { text: 'Your order' }),
+      C('k2', 'items', 'cartItems', 0, 7, 7, 40, { title: 'Tap a dish to remove it', rows: '{{ vars.cart || [] }}', text: '{{ item.name }}', note: '{{ "$" + item.price.toFixed(2) }}', card: true, steps: [set('cart', removeOne('cart'))] }),
+      C('k3', 'radio', 'payment', 0, 48, 7, 9, { label: 'Pay with', options: 'Cash on delivery, UPI, Card', value: 'UPI', inline: true }),
+      C('k4', 'stat', 'total', 7, 7, 5, 13, { label: 'To pay', value: '{{ "$" + ((vars.cart || []).reduce((s, d) => s + d.price, 0) + 2.99).toFixed(2) }}', note: 'Includes $2.99 delivery', card: true }),
+      C('k5', 'form', 'checkout', 7, 21, 5, 50, { title: 'Delivery details', fields: 'Name*\nPhone* (tel)\nAddress* (long)\nNote for the rider', button: 'Place order', thanks: '', card: true, steps: [wf('QuickBite', { action: 'order', cart: '{{ vars.cart }}', customer: '{{ item }}', payment: '{{ vars.payment }}' }, 'order'), set('eta', '{{ new Date(Date.now() + 30 * 60000).toISOString() }}'), set('cart', '{{ [] }}'), go('track')] }),
+    ] },
+    { id: 'track', name: 'Track', nav: false, components: [
+      C('t1', 'heading', 'heading1', 0, 0, 12, 7, { text: 'Your food is on its way 🛵' }),
+      C('t2', 'alert', 'alert1', 0, 8, 12, 9, { tone: 'success', title: '{{ data.order && data.order[0] ? "Order " + data.order[0].orderId + " confirmed · $" + data.order[0].total : "Order confirmed" }}', text: 'The restaurant is preparing your food.' }),
+      C('t3', 'stepper', 'stepper1', 0, 18, 12, 10, { stages: 'Confirmed, Preparing, On the way, Delivered', current: '{{ 2 }}' }),
+      C('t4', 'countdown', 'eta', 0, 29, 5, 13, { label: 'Arriving in', to: '{{ vars.eta }}', done: 'Delivered! Enjoy 😋', card: true }),
+      C('t5', 'avatar', 'rider', 0, 43, 5, 8, { image: 'https://i.pravatar.cc/120?img=12', name: 'Ravi, your rider', subtitle: '★ 4.9 · on a scooter' }),
+      C('t6', 'rating', 'rating1', 0, 52, 5, 9, { label: 'Rate your meal', max: 5, steps: [toast('Thanks for rating!')] }),
+      C('t7', 'map', 'map1', 5, 29, 7, 40, { lat: '12.9716', lon: '77.5946', zoom: 14 }),
+      C('t8', 'button', 'again', 0, 62, 5, 6, { label: 'Order something else', look: 'secondary', steps: [go('home')] }),
+    ] },
+  ],
+}) });
+
+// Video streaming: a featured hero, genres, a player page with "up next", and a personal list.
+APPS.push({ k: 'a-stream', name: 'StreamBox (video streaming)', note: 'A streaming app: featured hero, genre and search filters, a player page with up next, ratings and My list', make: () => visualApp('StreamBox', [
+  node('trigger.manual', 'Run by hand', 80),
+  node('core.code', 'Catalogue', 340, { language: 'javascript', code: `// The catalogue. Swap for your video host (Mux, Cloudflare Stream, Bunny, S3) or a sheet; MP4 and HLS (.m3u8) play.
+const g = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/';
+const v = (id, file, title, genre, year, duration, about) => ({ id, title, genre, year, duration, about, src: g + file + '.mp4', poster: g + 'images/' + file + '.jpg' });
+return [
+  v('sintel', 'Sintel', 'Sintel', 'Fantasy', 2010, '14 min', 'A lonely young woman searches for the baby dragon she once raised.'),
+  v('bunny', 'BigBuckBunny', 'Big Buck Bunny', 'Comedy', 2008, '10 min', 'A giant rabbit takes gentle revenge on three bullying rodents.'),
+  v('dream', 'ElephantsDream', 'Elephants Dream', 'Sci-fi', 2006, '11 min', 'Two men explore a strange, ever-changing machine world.'),
+  v('steel', 'TearsOfSteel', 'Tears of Steel', 'Sci-fi', 2012, '12 min', 'Scientists try to save the world from killer robots in Amsterdam.'),
+  v('blazes', 'ForBiggerBlazes', 'For Bigger Blazes', 'Action', 2015, '1 min', 'A burst of fire, speed and colour.'),
+  v('escapes', 'ForBiggerEscapes', 'For Bigger Escapes', 'Travel', 2015, '1 min', 'Wide landscapes and open roads.'),
+  v('fun', 'ForBiggerFun', 'For Bigger Fun', 'Comedy', 2015, '1 min', 'Small moments of big fun.'),
+  v('joyrides', 'ForBiggerJoyrides', 'For Bigger Joyrides', 'Action', 2015, '1 min', 'Thrills on wheels and water.'),
+  v('meltdowns', 'ForBiggerMeltdowns', 'For Bigger Meltdowns', 'Comedy', 2015, '1 min', 'When everything goes wrong, beautifully.'),
+  v('subaru', 'SubaruOutbackOnStreetAndDirt', 'Outback on Street and Dirt', 'Travel', 2014, '9 min', 'A road test from city streets to dirt tracks.'),
+];` }),
+], {
+  name: 'StreamBox', theme: { primary: '#e50914', bg: '#0b0b0f', surface: '#16161d', text: '#f5f5f7', dark: true, radius: 10, font: 'system' }, nav: 'top',
+  data: [{ id: 's1', name: 'videos', workflow: 'StreamBox', input: [], auto: true }],
+  pages: [
+    { id: 'home', name: 'Home', nav: true, components: [
+      C('v1', 'hero', 'hero1', 0, 0, 12, 44, { kicker: 'Featured', title: 'Sintel', subtitle: 'A lonely young woman searches for the dragon she raised. An award-winning fantasy short.', button: '▶ Play', image: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/Sintel.jpg', steps: [set('video', '{{ (data.videos || []).find(v => v.id === "sintel") }}'), go('watch')] }),
+      C('v2', 'radio', 'genre', 0, 45, 8, 9, { label: 'Genre', options: '{{ ["All", ...new Set((data.videos || []).map(v => v.genre))] }}', value: 'All', inline: true }),
+      C('v3', 'search', 'search1', 8, 46, 4, 6, { placeholder: 'Search titles' }),
+      C('v4', 'heading', 'heading1', 0, 55, 12, 6, { text: 'Trending now', size: 'md' }),
+      C('v5', 'list', 'list1', 0, 62, 12, 96, { rows: '{{ (data.videos || []).filter(v => (!vars.genre || vars.genre === "All" || v.genre === vars.genre) && (!vars.search1 || v.title.toLowerCase().includes(vars.search1.toLowerCase()))) }}', title: '{{ item.title }}', subtitle: '{{ item.genre + " · " + item.year + " · " + item.duration }}', image: '{{ item.poster }}', steps: [set('video', '{{ item }}'), go('watch')] }),
+    ] },
+    { id: 'watch', name: 'Watch', nav: false, components: [
+      C('w1', 'button', 'back', 0, 0, 2, 6, { label: '← Browse', look: 'link', steps: [go('home')] }),
+      C('w2', 'video', 'player', 0, 7, 8, 54, { src: '{{ vars.video && vars.video.src }}', poster: '{{ vars.video && vars.video.poster }}' }),
+      C('w3', 'heading', 'title', 8, 7, 4, 7, { text: '{{ vars.video ? vars.video.title : "Pick something to watch" }}', size: 'md' }),
+      C('w4', 'badge', 'genreBadge', 8, 15, 2, 5, { text: '{{ vars.video && vars.video.genre }}', tone: 'red' }),
+      C('w5', 'badge', 'hd', 10, 15, 2, 5, { text: 'HD', tone: 'gray' }),
+      C('w6', 'text', 'about', 8, 21, 4, 16, { text: '{{ vars.video ? vars.video.about + "\\n\\n" + vars.video.year + " · " + vars.video.duration : "" }}' }),
+      C('w7', 'rating', 'rating1', 8, 38, 4, 9, { label: 'Rate it', max: 5, steps: [toast('Thanks! We’ll recommend more like this.')] }),
+      C('w8', 'button', 'addToList', 8, 48, 4, 7, { label: '+ My list', look: 'secondary', steps: [set('mylist', '{{ (vars.mylist || []).some(v => v.id === vars.video.id) ? vars.mylist : [...(vars.mylist || []), vars.video] }}'), toast('Added to My list')] }),
+      C('w9', 'heading', 'heading2', 0, 62, 12, 6, { text: 'Up next', size: 'sm' }),
+      C('w10', 'list', 'upNext', 0, 69, 12, 60, { rows: '{{ (data.videos || []).filter(v => !vars.video || v.id !== vars.video.id).slice(0, 6) }}', title: '{{ item.title }}', subtitle: '{{ item.genre + " · " + item.duration }}', image: '{{ item.poster }}', steps: [set('video', '{{ item }}')] }),
+    ] },
+    { id: 'mylist', name: 'My list', nav: true, components: [
+      C('l1', 'heading', 'heading1', 0, 0, 12, 6, { text: 'My list' }),
+      C('l2', 'text', 'text1', 0, 6, 12, 5, { text: '{{ (vars.mylist || []).length ? "Saved to watch later." : "Nothing yet: press + My list on anything you want to watch later." }}' }),
+      C('l3', 'list', 'list1', 0, 12, 12, 70, { rows: '{{ vars.mylist || [] }}', title: '{{ item.title }}', subtitle: '{{ item.genre + " · " + item.duration }}', image: '{{ item.poster }}', steps: [set('video', '{{ item }}'), go('watch')] }),
+    ] },
+  ],
+}) });
+
+// Chat: people sign in, pick a room and talk; messages are kept by the workflow (key-value store) and
+// the app checks for new ones every few seconds.
+APPS.push({ k: 'a-chat', name: 'Chat app', note: 'Team chat: sign-in, rooms, message bubbles that update every few seconds, and a profile page', make: () => {
+  const nodes = [
+    node('trigger.manual', 'Run by hand', 80),
+    node('core.kv', 'Read the room', 320, { operation: 'get', key: '{{ "chat:" + ($json.room || "general") }}', default: '[]', output: 'log' }),
+    node('core.code', 'Add the message', 560, { language: 'javascript', code: `// Each run lists a room's messages; with action "send" it adds one, from the signed-in person.
+const i = items[0] || {};
+let log = [];
+try { log = JSON.parse(i.log || '[]'); } catch (e) { log = []; }
+const text = String(i.text || '').trim().slice(0, 1000);
+const send = i.action === 'send' && !!text && !!i.user;
+if (send) log.push({ from: i.user.name || i.user.email, email: i.user.email, text, at: new Date().toISOString() });
+log = log.slice(-100);
+return [{ action: send ? 'send' : 'list', room: i.room || 'general', save: JSON.stringify(log), messages: log }];` }),
+    node('core.if', 'Sent one?', 800, { left: '{{ $json.action }}', op: 'equals', right: 'send' }),
+    node('core.kv', 'Save the room', 1040, { operation: 'set', key: '{{ "chat:" + $json.room }}', value: '{{ $json.save }}', output: 'saved' }, 60),
+    node('core.code', 'The messages', 1280, { language: 'javascript', code: 'return (items[0] && items[0].messages) || [];' }),
+  ];
+  const e = (a, b, port = 'main') => ({ id: rid('e'), from: nodes[a].id, fromPort: port, to: nodes[b].id, toPort: 'main' });
+  const edges = [e(0, 1), e(1, 2), e(2, 3), e(3, 4, 'true'), e(4, 5), e(3, 5, 'false')];
+  const send = [wf('Chatter', { action: 'send', room: '{{ vars.room || "general" }}', text: '{{ vars.message }}' }, 'messages'), set('message', '')];
+  const f = visualApp('Chatter', nodes, {
+    name: 'Chatter', theme: { primary: '#4f46e5', bg: '#f4f5fb', surface: '#ffffff', text: '#1e1b4b', dark: false, radius: 16, font: 'system' }, nav: 'top',
+    data: [{ id: 's1', name: 'messages', workflow: 'Chatter', input: [{ name: 'action', value: 'list' }, { name: 'room', value: '{{ vars.room || "general" }}' }], auto: true, every: 3 }],
+    pages: [
+      { id: 'chat', name: 'Chat', nav: true, components: [
+        C('r1', 'items', 'rooms', 0, 0, 3, 62, { title: 'Rooms', rows: '{{ [{ name: "general", about: "Everyone" }, { name: "random", about: "Off topic" }, { name: "help", about: "Questions" }, { name: "announcements", about: "News" }] }}', text: '{{ (item.name === (vars.room || "general") ? "● " : "# ") + item.name }}', note: '{{ item.about }}', card: true, steps: [set('room', '{{ item.name }}'), { kind: 'run', source: 'messages' }] }),
+        C('r2', 'heading', 'roomName', 3, 0, 6, 6, { text: '{{ "# " + (vars.room || "general") }}', size: 'sm' }),
+        C('r3', 'text', 'who', 9, 0, 3, 6, { text: '{{ user ? "Signed in as **" + user.name + "**" : "" }}', align: 'right' }),
+        C('r4', 'thread', 'thread1', 3, 7, 9, 47, { rows: '{{ data.messages }}', card: true }),
+        C('r5', 'input', 'message', 3, 55, 7, 7, { label: '', placeholder: '{{ "Message #" + (vars.room || "general") + " (Enter to send)" }}', steps: send }),
+        C('r6', 'button', 'sendButton', 10, 55, 2, 7, { label: 'Send', look: 'primary', steps: send }),
+      ] },
+      { id: 'profile', name: 'Profile', nav: true, components: [
+        C('q1', 'avatar', 'me', 0, 0, 6, 9, { image: '', name: '{{ user ? user.name : "You" }}', subtitle: '{{ user ? user.email : "" }}' }),
+        C('q2', 'radio', 'status', 0, 10, 6, 9, { label: 'Status', options: '🟢 Online, 🌙 Away, ⛔ Busy', value: '🟢 Online', inline: true }),
+        C('q3', 'switch', 'sound', 0, 20, 6, 5, { label: 'Sound for new messages', value: true }),
+        C('q4', 'switch', 'digest', 0, 26, 6, 5, { label: 'Email me a daily digest', value: false }),
+        C('q5', 'button', 'signOut', 0, 33, 3, 6, { label: 'Sign out', look: 'secondary', steps: [{ kind: 'logout' }] }),
+      ] },
+    ],
+  }, 'signin');
+  f.flow.edges = edges;
+  return f;
+} });
+
 /* ---- Pages made of nodes (no code) ---- */
 const PAGES = [
   { k: 'p-sales', name: 'Sales dashboard page', note: 'Cards, a chart, region buttons and a table, built only from nodes', make: () => {

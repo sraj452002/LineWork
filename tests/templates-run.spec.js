@@ -90,4 +90,49 @@ test.describe('pages made of nodes', () => {
     expect(r.json.html).toContain('name="_action" value="feedback"');
     expect(r.json.html).toMatch(/name="message"/);
   });
+
+  // The app templates' workflows, run as their published apps run them.
+  const publish = async (k, token, access = 'public') => {
+    const f = READY.find(t => t.k === k).make();
+    f.ui = { ...f.ui, published: true, token, access };
+    expect((await call('PUT', `/files/${f.id}`, f)).status).toBe(200);
+    return f;
+  };
+  const run = async (token, input, session) => {
+    const r = await fetch(`${base}/ui/${token}/run`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: JSON.stringify({ input, session }) });
+    return { status: r.status, json: await r.json().catch(() => null) };
+  };
+
+  test('the chat app keeps each room’s messages, from whoever is signed in', async () => {
+    const token = 'chatroom' + 'x'.repeat(24);
+    await publish('a-chat', token, 'signin');
+    const join = async (email, name) => (await (await fetch(`${base}/ui/${token}/signup`, { method: 'POST', body: JSON.stringify({ email, password: 'a long password', name }) })).json()).session;
+    const ann = await join('ann@example.com', 'Ann'), bo = await join('bo@example.com', 'Bo');
+    expect((await run(token, { action: 'list', room: 'general' })).status).toBe(401); // signed-in people only
+    expect((await run(token, { action: 'send', room: 'general', text: 'Hello all' }, ann)).json.items.map(m => m.text)).toEqual(['Hello all']);
+    await run(token, { action: 'send', room: 'general', text: 'Hi Ann!' }, bo);
+    await run(token, { action: 'send', room: 'random', text: 'Elsewhere' }, bo);
+    const general = (await run(token, { action: 'list', room: 'general' }, ann)).json.items;
+    expect(general.map(m => [m.from, m.text])).toEqual([['Ann', 'Hello all'], ['Bo', 'Hi Ann!']]);
+    expect(general[0].email).toBe('ann@example.com');
+    expect((await run(token, { action: 'list', room: 'random' }, ann)).json.items.map(m => m.text)).toEqual(['Elsewhere']);
+    // Listing doesn't add anything.
+    expect((await run(token, { action: 'list', room: 'general' }, bo)).json.items).toHaveLength(2);
+  });
+
+  test('the shop and food apps list their catalogue and take orders', async () => {
+    await publish('a-shop', 'shopping' + 'x'.repeat(24));
+    const products = (await run('shopping' + 'x'.repeat(24), {})).json.items;
+    expect(products).toHaveLength(12);
+    const order = (await run('shopping' + 'x'.repeat(24), { action: 'order', cart: [products[0], products[2]], customer: { name: 'Sam' } })).json.items[0];
+    expect(order).toMatchObject({ total: products[0].price + products[2].price, count: 2, name: 'Sam' });
+    expect(order.orderId).toMatch(/^SN-\d{6}$/);
+    await publish('a-food', 'foodfood' + 'x'.repeat(24));
+    const places = (await run('foodfood' + 'x'.repeat(24), {})).json.items;
+    expect(places[0].menu.length).toBeGreaterThan(2);
+    const meal = (await run('foodfood' + 'x'.repeat(24), { action: 'order', cart: [places[0].menu[0]] })).json.items[0];
+    expect(meal.total).toBeCloseTo(places[0].menu[0].price + 2.99, 2);
+    await publish('a-stream', 'streamin' + 'x'.repeat(24));
+    expect((await run('streamin' + 'x'.repeat(24), {})).json.items[0].src).toMatch(/\.mp4$/);
+  });
 });
