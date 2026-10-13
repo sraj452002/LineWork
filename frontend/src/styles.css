@@ -2571,8 +2571,11 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .vb-tabs{display:flex;gap:2px;border-bottom:1px solid var(--hair);margin:-4px -4px 2px}
 .vb-tabs button{flex:1;border:0;background:none;padding:7px 4px;font:inherit;font-size:13px;color:var(--ink2);cursor:pointer;border-bottom:2px solid transparent}
 .vb-tabs button.on{color:var(--ink);border-bottom-color:var(--ink);font-weight:600}
-.vb-palette{display:grid;grid-template-columns:1fr 1fr;gap:6px}
-.vb-palette .vb-hint{grid-column:1/-1}
+.vb-palette{display:grid;gap:10px}
+.vb-group{display:grid;gap:6px}
+.vb-tiles{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.vb-find{width:100%;box-sizing:border-box;font:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--hair);border-radius:8px;background:var(--surface);color:var(--ink)}
+.vb-color{display:flex;gap:6px;align-items:center}.vb-color input[type=color]{width:34px;height:30px;padding:0;border:1px solid var(--hair);border-radius:6px;flex:none}
 .vb-tile{padding:10px 6px;border:1px solid var(--hair);border-radius:9px;background:var(--surface);color:var(--ink);font:inherit;font-size:12.5px;cursor:grab;text-align:center}
 .vb-tile:hover{border-color:var(--c-blue);color:var(--c-blue)}
 .vb-hint{margin:0;color:var(--ink2);font-size:12px;line-height:1.45}
