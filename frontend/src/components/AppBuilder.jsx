@@ -11,7 +11,7 @@ import { useUI } from './ui.jsx';
 
 const hasFlow = f => !!(f && f.flow && Array.isArray(f.flow.nodes) && f.flow.nodes.length);
 
-export default function AppBuilder({ file, update, files = [], onGuide }) {
+export default function AppBuilder({ file, update, files = [], onGuide, assist }) {
   const { toast, popup } = useUI();
   const ui = file.ui || null;
   // Workflows this app could run: this file's own, and the account's other workflow files.
@@ -66,6 +66,27 @@ export default function AppBuilder({ file, update, files = [], onGuide }) {
     return () => removeEventListener('message', on);
   }, [workflows, server, file, files]);
 
+  // The AI panel (Editor): it sees the page's code and the workflows, and can rewrite the page.
+  if (assist) assist.current = {
+    section: 'App', placeholder: 'Describe the page, or what to change on it.',
+    intro: 'I can see this app’s code and the workflows it may run. Ask me to build the page, change how it looks, add a chart or form, or fix an error.',
+    chips: [
+      { label: 'Build a page that…', prompt: 'Build a page that ', fill: true },
+      { label: 'Make it look modern and polished', prompt: 'Restyle this page so it looks modern and polished, keeping everything it does.' },
+      { label: 'Show the results as a chart and cards', prompt: 'Change the page to show the workflow’s results as summary cards and a chart, with the table below.' },
+      { label: 'Explain how this page works', prompt: 'Explain how this page works, briefly.' },
+    ],
+    context: () => `The App view: a custom app page (HTML, CSS and JavaScript in one document body) that runs Workline workflows.
+In the page's script: await workline.run('Workflow name', inputObject) runs a workflow and resolves to a list of objects (its output); it throws on failure. workline.workflows lists {id, name}.
+Helpers: cards(el, [[label, value], …]), bars(el, rows, labelKey, valueKey), line(…), pie(…), table(el, rows, [cols]). el is an element or a CSS selector. Chart libraries can be loaded from a CDN with <script src>.
+The workflows it may run: ${workflows.map(w => `"${w.name}"`).join(', ') || '(none yet: they can add one under Workflows)'}.
+
+The page's current code:
+${ui ? ui.html : ''}`,
+    rules: `{"type": "html", "html": "the complete new page code (style, markup and script), replacing the current one"}`,
+    applyLabel: () => 'Replace the page code',
+    apply: a => { if (!a.html || typeof a.html !== 'string') throw new Error('The answer had no page code.'); write({ html: a.html }); setShown(a.html); return 'Page updated'; },
+  };
   if (!ui) return null;
   const link = ui.published && ui.token ? `${location.origin}/api/ui/${ui.token}` : '';
   const toggle = id => write({ flows: granted.includes(id) ? granted.filter(x => x !== id) : [...granted, id] });

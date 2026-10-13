@@ -260,6 +260,17 @@ function appGuide() {
       </ul>
       <p className="gnote">If AI isn't set up for this site, you'll see “AI is off”. Everything else still works.</p>
     </> },
+    { id: 'ai-everywhere', title: 'AI in every view', body: <>
+      <p><b>AI Chat</b> in the top bar opens an AI panel next to whatever you’re working on. It sees what’s on screen, answers questions, and when it proposes a change, a button makes it (nothing changes until you press it):</p>
+      <ul>
+        <li><b>Sheet</b>: formulas for the selected cell, totals, filling in or cleaning up data, what the numbers say. Ctrl Z undoes it.</li>
+        <li><b>Database</b>: queries from a description, put in the Query tab for you to check and run; the schema explained.</li>
+        <li><b>Code</b>: explain, fix, refactor or test the open file, or write a new one. Ctrl Z undoes it.</li>
+        <li><b>Workflow</b>: describe an automation and it adds the nodes; or it writes a Code node’s code, or explains why a run failed.</li>
+        <li><b>App</b>: builds or restyles the page.</li>
+      </ul>
+      <p>On the canvas the same button opens the diagram chat; the doc has <b>Ask AI</b> in its ribbon.</p>
+    </> },
     { id: 'doc', title: 'Writing the doc', body: <>
       <p>The doc works like Microsoft Word: white pages with margins, and a <b>ribbon</b> on top.</p>
       <ul>

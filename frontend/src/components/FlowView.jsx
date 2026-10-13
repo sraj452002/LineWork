@@ -41,7 +41,7 @@ const ago = t => { const s = Math.round((Date.now() - t) / 1000); return s < 60 
 
 const TRIGGER_NAME = { manual: 'By hand', app: 'App', webhook: 'Webhook', schedule: 'Schedule', poll: 'Something new', form: 'Form', github: 'GitHub', stripe: 'Stripe', shopify: 'Shopify', slack: 'Slack', typeform: 'Typeform', calendly: 'Calendly' };
 
-export default function FlowView({ file, update, visible, saveState = 'Saved', onGuide }) {
+export default function FlowView({ file, update, visible, saveState = 'Saved', onGuide, assist }) {
   const { toast, ask } = useUI();
   useEffect(() => { if (!file.flow) update(c => { c.flow = emptyFlow(); }); }, [file.flow, update]);
   const flow = file.flow || { nodes: [], edges: [] };
@@ -168,6 +168,7 @@ export default function FlowView({ file, update, visible, saveState = 'Saved', o
     el.addEventListener('wheel', stop, { passive: false });
     return () => el.removeEventListener('wheel', stop);
   }, []);
+  const fitRef = useRef(null);
   const fit = () => {
     if (!nodes.length || !stage.current) return;
     const r = stage.current.getBoundingClientRect();
@@ -176,6 +177,7 @@ export default function FlowView({ file, update, visible, saveState = 'Saved', o
     const k = Math.min(1, Math.max(.3, Math.min((r.width - 80) / (maxX - minX || 1), (r.height - 80) / (maxY - minY || 1))));
     setView({ k, x: (r.width - (maxX - minX) * k) / 2 - minX * k, y: (r.height - (maxY - minY) * k) / 2 - minY * k });
   };
+  fitRef.current = fit;
 
   /* ---- running ---- */
   const go = async startId => {
@@ -242,6 +244,76 @@ export default function FlowView({ file, update, visible, saveState = 'Saved', o
   const doExportRun = () => { if (run) download(`${file.title || 'workflow'} results`, exportRun(file, run), 'results'); };
 
   const triggers = nodes.filter(n => nodeDef(n.type).trigger);
+
+  // The AI panel (Editor): it sees the workflow, the selected node, the last run and every kind of node,
+  // and can add nodes (a whole workflow from a description) or change one node's settings.
+  if (assist) assist.current = {
+    section: 'Workflow', placeholder: 'Describe a workflow, or ask about this one.',
+    intro: 'I can see this workflow, the selected node and the last run. Describe an automation and I’ll build it from nodes, or ask me to explain it, write a Code node’s code, fill in an expression, or work out why a run failed.',
+    chips: [
+      { label: 'Build a workflow that…', prompt: 'Build a workflow that ', fill: true },
+      { label: 'Explain this workflow', prompt: 'Explain what this workflow does, step by step.' },
+      { label: 'Why did the last run fail?', prompt: 'Why did the last run fail, and how do I fix it?' },
+      { label: 'Write the code for the selected node', prompt: 'Write the code for the selected Code node: ', fill: true },
+      { label: 'Make a page with UI nodes', prompt: 'Add a Page trigger and UI nodes that show ', fill: true },
+    ],
+    context: () => {
+      const brief = n => `- "${n.name}" (${n.type})${n.credential ? ' [credential set]' : ''}: ${JSON.stringify(n.params || {}).slice(0, 600)}`;
+      const catalog = Object.entries(NODES).map(([k, d]) => `${k}: ${d.label}. ${d.note}${d.fields && d.fields.length ? ` Fields: ${d.fields.map(f => f.k + (f.kind === 'select' && f.options ? `(${f.options.map(o => o[0]).join('|')})` : '')).join(', ')}` : ''}${d.outputs ? ` Outputs: ${d.outputs.join(', ')}` : ''}`).join('\n');
+      const last = run && run.nodes ? Object.entries(run.nodes).filter(([, r]) => r.error).map(([id, r]) => `"${byId.get(id)?.name || id}": ${r.error}`).join('\n') : '';
+      return `The Workflow view: an n8n-style workflow. Items flow from node to node as JSON; fields can use {{ expressions }} like {{ $json.name }}, {{ $node["Name"].json.x }}, {{ $items.length }}. A Code node (language javascript, typescript, python, lua or sql) gets \`items\` and returns a list.
+${flow.active ? 'Active.' : 'Not active.'} Nodes:
+${nodes.map(brief).join('\n') || '(none yet)'}
+Connections: ${edges.map(e => `"${byId.get(e.from)?.name}"${e.fromPort && e.fromPort !== 'main' ? `[${e.fromPort}]` : ''} → "${byId.get(e.to)?.name}"`).join(', ') || '(none)'}
+${selected ? `Selected node: "${selected.name}".` : ''}
+${run ? `Last run: ${run.status}${run.error ? ` — ${run.error}` : ''}${last ? `\nErrors:\n${last}` : ''}` : 'Not run yet.'}
+
+Kinds of node (type: what it is. its fields):
+${catalog}`;
+    },
+    rules: `One of:
+{"type": "nodes", "nodes": [{"ref": "a", "type": "a node type from the list", "name": "a short name", "params": {"field": "value"}}], "edges": [{"from": "a", "to": "b", "fromPort": "main"}], "after": "name of an existing node to connect the first new node after, or null"}
+  Adds nodes (a new workflow starts with a trigger, usually trigger.manual). Edges join refs of new nodes or names of existing ones; fromPort is "main" unless the node has other outputs (IF: "true"/"false"). Use only types and field names from the list; pairs fields are lists of {"name", "value"}.
+{"type": "params", "node": "name of an existing node", "params": {"field": "value"}}
+  Changes some settings of one node (for example the code of a Code node).`,
+    applyLabel: a => (a.type === 'params' ? `Update “${a.node}”` : `Add ${(a.nodes || []).length} node${(a.nodes || []).length === 1 ? '' : 's'}`),
+    apply: a => {
+      if (a.type === 'params') {
+        const target = nodes.find(n => n.name === a.node) || selected;
+        if (!target) throw new Error(`There’s no node called “${a.node}”.`);
+        change(f => { const n = f.nodes.find(x => x.id === target.id); n.params = { ...(n.params || {}), ...(a.params || {}) }; });
+        setSel({ kind: 'node', id: target.id });
+        return `Updated “${target.name}”`;
+      }
+      const list = (Array.isArray(a.nodes) ? a.nodes : []).filter(n => n && NODES[n.type]);
+      if (!list.length) throw new Error('The answer had no nodes this workflow knows.');
+      const made = {}, startX = nodes.length ? Math.max(...nodes.map(n => n.x)) + 260 : 80;
+      change(f => {
+        f.nodes ||= []; f.edges ||= [];
+        list.forEach((spec, i) => {
+          const n = newNode(spec.type, f, { x: startX + i * 260, y: 160 });
+          if (spec.name) n.name = String(spec.name).slice(0, 60);
+          n.params = { ...n.params, ...(spec.params && typeof spec.params === 'object' ? spec.params : {}) };
+          f.nodes.push(n);
+          made[spec.ref || spec.name || i] = n;
+        });
+        const find = key => made[key] || f.nodes.find(n => n.name === key);
+        const join = (from, to, port) => {
+          if (!from || !to || from === to || nodeDef(to.type).trigger) return;
+          const outs = outsOf(from), fromPort = outs.includes(port) ? port : outs[0] || 'main';
+          if (!f.edges.some(e => e.from === from.id && e.to === to.id && e.fromPort === fromPort)) f.edges.push({ id: rid('e'), from: from.id, fromPort, to: to.id, toPort: 'main' });
+        };
+        const firstNew = made[list[0].ref || list[0].name || 0];
+        if (a.after) join(f.nodes.find(n => n.name === a.after), firstNew, 'main');
+        (Array.isArray(a.edges) ? a.edges : []).forEach(e => join(find(e.from), find(e.to), e.fromPort));
+        // Nodes left unjoined in a plain list get joined in order.
+        if (!Array.isArray(a.edges) || !a.edges.length) list.slice(1).forEach((spec, i) => join(made[list[i].ref || list[i].name || i], made[spec.ref || spec.name || i + 1], 'main'));
+      });
+      setTimeout(() => fitRef.current && fitRef.current(), 60); // show them all
+      return `Added ${list.length} node${list.length === 1 ? '' : 's'}: check their settings and credentials`;
+    },
+  };
+
   return (
     <div className="fv" hidden={!visible}>
       <div className="fv-bar">

@@ -151,6 +151,18 @@ Workflows run on the backend (`backend/flows.js`, `flow-engine.js`, `flow-nodes.
 - HTTP and app nodes refuse private and local addresses unless `DB_ALLOW_PRIVATE=1`.
 - **The Code node** (`backend/flow-code.js`) takes a language. **JavaScript, TypeScript, Python, Lua and SQL** run on the server in `backend/code-sandbox.js`: a separate Node process per language under Node's permission model (`--permission`), which can read only the runtimes' own packages, can't start processes or write files (other than Python's package cache), and gets no environment variables, so code can't reach the server's files or secrets. It can still use the network. Python is [Pyodide](https://pyodide.org) (`import numpy`, `pandas` and other Pyodide packages are fetched on first use), Lua is wasmoon, SQL is SQLite (sql.js) with the items as a table `items`. Limits: 10 s (Python 60 s), 384 MB. **Go, Java, C, C++, C#, Rust, Ruby, PHP, Kotlin, Swift, Bash, R, Perl, Scala, Haskell, Dart and Elixir** run on a code runner the user connects as a **Code runner** credential: a [Piston](https://github.com/engineer-man/piston) server, or Judge0 (self-hosted, or Judge0 CE on RapidAPI). Those programs read the items as JSON on stdin and print the new items as JSON (the last line of output). Each language starts with an example (`frontend/src/lib/codelangs.js`).
 
+## AI in every section
+
+**AI Chat** (top bar, or Ctrl J on the canvas) opens an AI panel beside whatever view is open. On the canvas it's the diagram chat; the Doc has its own **Ask AI**; the **Sheet**, **Database**, **Code**, **Workflow** and **App** views get an assistant that sees what's on screen (`frontend/src/components/AssistPanel.jsx`, `lib/assist.js`) and proposes one change per answer, made only when its button is pressed:
+
+- **Sheet**: the cells and selection → formulas, totals, filled-in data (Ctrl Z undoes it), or a whole new sheet.
+- **Database**: the connection's schema → a query, put in the Query tab for you to check and run.
+- **Code**: the open file, the selection and the file list → replace the file, insert at the cursor, or a new file (through the editor, so Ctrl Z undoes it).
+- **Workflow**: the nodes, the selected one, the last run and every kind of node → a workflow built from a description, or one node's settings changed (a Code node's code, an expression).
+- **App**: the page's code and its workflows → the page rewritten.
+
+It uses whichever model is picked (Claude or NVIDIA Nemotron) and counts toward the daily AI limit.
+
 ## Pages made of nodes (no code)
 
 A workflow can draw a web page by itself, without HTML (`backend/flow-ui.js`). Start it with the **Page** trigger, then add **UI** nodes in the order they should appear: **Text** (Markdown), **Cards** (big numbers; values can use `{{ $items.length }}` and the like), **Table**, **Chart** (bar, line or pie), **Image or video** (one, or a gallery), **Buttons** (links that reopen the page with `?choice=…`) and **Form**. Each adds its part from the items reaching it and passes them on, so data nodes go between them (a database query, a sheet, AI, …).
