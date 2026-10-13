@@ -11,7 +11,7 @@ test('the Custom apps guide opens from the guide tabs and from the App view', as
   await page.getByRole('button', { name: '? Guide' }).click();
   await expect(page.getByRole('heading', { name: 'Custom apps', level: 1 })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Custom apps', pressed: true })).toBeVisible();
-  for (const h of ['What a custom app is', 'No code: a page made of nodes', 'Your first app', 'Running a workflow from the page', 'Publishing and sharing', 'Ready-made: Video streaming app', 'Code in many languages', 'Dashboards on the canvas', 'Tips and troubleshooting'])
+  for (const h of ['What a custom app is', 'No code: a page made of nodes', 'Your first app', 'Running a workflow from the page', 'Publishing and sharing', 'Ready-made: OTT streaming app', 'Code in many languages', 'Dashboards on the canvas', 'Tips and troubleshooting'])
     await expect(page.getByRole('heading', { name: h })).toBeVisible();
   await expect(page.locator('.g-doc')).toContainText("await workline.run('Weather'");
   // The tabs switch guides; the main guide links here.

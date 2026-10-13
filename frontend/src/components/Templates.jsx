@@ -15,7 +15,8 @@ import { useUI } from './ui.jsx';
    view), which can be renamed and removed. Searched with the home page's search box. */
 
 // Every ready-made template, with the video starters among the apps and pages.
-const ALL = [...READY, ...STARTERS.map(t => ({ ...t, tool: t.k === 'videopage' ? 'Pages' : 'Apps', view: t.k === 'videopage' ? 'Workflow' : 'App' }))]
+// Apps has one rich template; the easy examples open from the Easy start guide, the other starters from Tools.
+const ALL = [...READY.filter(t => !t.hidden), ...STARTERS.filter(t => t.k === 'videopage').map(t => ({ ...t, tool: 'Pages', view: 'Workflow' }))]
   .sort((a, b) => READY_TOOLS.indexOf(a.tool) - READY_TOOLS.indexOf(b.tool));
 const TOOL_ICON = { Diagrams: IC.diagram, Docs: IC.doc, Sheets: IC.sheet, Databases: IC.dErd, Code: IC.braces };
 const KIND = { Diagrams: 'Diagram', Docs: 'Doc', Sheets: 'Sheet', Databases: 'Database schema', Code: 'Code', Workflows: 'Workflow', Apps: 'Workflow + app', Pages: 'Page from nodes' };

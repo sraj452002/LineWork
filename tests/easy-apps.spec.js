@@ -6,6 +6,12 @@ import { createApp } from '../backend/app.js';
 // Help → Easy start: a guide in plain words, and two examples (a workflow, then an app on it) that open
 // from the guide and work.
 
+// G opens the guide once the home page is listening.
+const openGuide = page => expect(async () => {
+  await page.keyboard.press('g');
+  await expect(page.getByRole('button', { name: 'Easy start' })).toBeVisible({ timeout: 2000 });
+}).toPass({ timeout: 20_000 });
+
 test('the Easy start guide opens two examples, and both work', async ({ browser }) => {
   test.setTimeout(240_000);
   const { spawn } = await import('node:child_process');
@@ -28,7 +34,7 @@ test('the Easy start guide opens two examples, and both work', async ({ browser 
     await expect(page.getByRole('button', { name: 'Create a Blank File' })).toBeVisible();
 
     // The guide, from the home page's keyboard shortcut, then its Easy start tab.
-    await page.keyboard.press('g');
+    await openGuide(page);
     await page.getByRole('button', { name: 'Easy start' }).click();
     await expect(page.getByRole('heading', { name: 'Easy start: make your first app' })).toBeVisible();
     await expect(page.locator('.g-doc')).toContainText('The workflow is the kitchen');
@@ -51,7 +57,7 @@ test('the Easy start guide opens two examples, and both work', async ({ browser 
 
     // Example 2: the quiz, from the guide again.
     await page.getByRole('button', { name: /Back|Home/ }).first().click();
-    await page.keyboard.press('g');
+    await openGuide(page);
     await page.getByRole('button', { name: 'Easy start' }).click();
     await page.getByRole('button', { name: 'Open Example 2 (ready-made)' }).click();
     await expect(page.getByRole('button', { name: 'Visual' })).toHaveAttribute('aria-pressed', 'true', { timeout: 15_000 });
@@ -99,7 +105,7 @@ test('Example 3: a workflow fetches the video list, and the app shows and plays 
     await page.getByLabel('Password').fill('a long password');
     await page.getByRole('button', { name: 'Create account' }).click();
     await expect(page.getByRole('button', { name: 'Create a Blank File' })).toBeVisible();
-    await page.keyboard.press('g');
+    await openGuide(page);
     await page.getByRole('button', { name: 'Easy start' }).click();
     await expect(page.locator('.g-doc')).toContainText('raw.githubusercontent.com/sraj452002/LineWork/master/samples/videos.json');
     await page.getByRole('button', { name: 'Open Example 3 (ready-made)' }).click();
