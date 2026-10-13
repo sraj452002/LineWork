@@ -3,6 +3,7 @@ import Login from './components/Login.jsx';
 import Home from './components/Home.jsx';
 import Editor from './components/Editor.jsx';
 import Guide from './components/Guide.jsx';
+import { READY } from './lib/readymade.js';
 import { UIProvider, useUI } from './components/ui.jsx';
 import { saveProfile, signOut, startSession } from './lib/auth.js';
 import { loadFiles, loadFolders, saveFiles, saveFolders } from './lib/storage.js';
@@ -293,6 +294,8 @@ function Workspace({ session, onSignOut, onUser }) {
     return (
       <Guide which={guide} onWhich={setGuide} onClose={() => setGuide(null)}
         onTry={(code, title) => {
+          const ready = code && code.ready && READY.find(r => r.k === code.ready);
+          if (ready) { create(ready.make()); setGuide(null); return; }
           const now = Date.now();
           create({ id: rid('f'), title, created: now, updated: now, doc: '', diagrams: [dg('erd', 'Schema', code)], active: 0, view: 'canvas' });
           setGuide(null);

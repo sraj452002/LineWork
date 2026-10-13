@@ -698,6 +698,136 @@ return all.map(o => ({ ...o, customer: who }));` }),
 /* ---- Stylish visual apps, to show what the builder can do ---- */
 const go = page => ({ kind: 'go', page }), set = (name, value) => ({ kind: 'set', name, value }), toast = text => ({ kind: 'toast', text });
 
+/* ---- Two easy examples, for the "Easy start" guide: first a workflow, then an app that uses it ---- */
+const REPORT = `// STEP 1 of the app: the workflow.
+// The app sends us: the student's name and marks in 5 subjects (out of 100 each).
+const s = items[0] || {};
+const subjects = ['maths', 'science', 'english', 'hindi', 'social'];
+const marks = subjects.map(k => Number(s[k]) || 0);
+
+// Add up the marks and work out the percentage.
+const total = marks.reduce((sum, m) => sum + m, 0);
+const percent = Math.round(total / subjects.length * 10) / 10;
+
+// Grade from the percentage. You pass if every subject has 33 or more.
+const grade = percent >= 90 ? 'A+' : percent >= 75 ? 'A' : percent >= 60 ? 'B' : percent >= 45 ? 'C' : percent >= 33 ? 'D' : 'E';
+const passed = marks.every(m => m >= 33);
+const best = subjects[marks.indexOf(Math.max(...marks))];
+
+// What we give back to the app: one row.
+return [{ name: s.name || 'Student', total, percent, grade, result: passed ? 'Pass' : 'Fail', best }];`;
+const mark = (id, name, label, x, y) => C(id, 'input', name, x, y, 4, 9, { label, kind: 'number', placeholder: '0 to 100', value: '' });
+const easyReport = () => visualApp('Report card', [
+  node('trigger.manual', 'Run by hand', 80),
+  node('core.code', 'Work out the result', 340, { language: 'javascript', code: REPORT }),
+], {
+  name: 'Report card', theme: { ...THEMES.ocean, radius: 14, font: 'system' }, nav: 'top', data: [],
+  pages: [
+    { id: 'home', name: 'Report card', nav: true, components: [
+      C('r1', 'heading', 'heading1', 0, 0, 12, 6, { text: 'My report card', size: 'lg' }),
+      C('r2', 'text', 'text1', 0, 6, 12, 5, { text: 'Type your marks (out of 100) and press the button. The **workflow** works out the rest.' }),
+      C('r3', 'input', 'name', 0, 12, 4, 9, { label: 'Your name', placeholder: 'e.g. Riya', value: '' }),
+      mark('r4', 'maths', 'Maths', 4, 12), mark('r5', 'science', 'Science', 8, 12),
+      mark('r6', 'english', 'English', 0, 22), mark('r7', 'hindi', 'Hindi', 4, 22), mark('r8', 'social', 'Social science', 8, 22),
+      C('r9', 'button', 'make', 0, 32, 4, 6, { label: 'Make my report card', look: 'primary', steps: [
+        { kind: 'workflow', workflow: 'Report card', into: 'card', input: ['name', 'maths', 'science', 'english', 'hindi', 'social'].map(k => ({ name: k, value: `{{ vars.${k} }}` })) },
+      ] }),
+      C('r10', 'stat', 'total', 0, 40, 3, 12, { label: 'Total (out of 500)', value: '{{ data.card ? data.card[0].total : "–" }}', note: '' }),
+      C('r11', 'stat', 'percent', 3, 40, 3, 12, { label: 'Percentage', value: '{{ data.card ? data.card[0].percent + "%" : "–" }}', note: '' }),
+      C('r12', 'stat', 'grade', 6, 40, 3, 12, { label: 'Grade', value: '{{ data.card ? data.card[0].grade : "–" }}', note: '' }),
+      C('r13', 'stat', 'result', 9, 40, 3, 12, { label: 'Result', value: '{{ data.card ? data.card[0].result : "–" }}', note: '{{ data.card ? "Best subject: " + data.card[0].best : "" }}' }),
+      C('r14', 'text', 'text2', 0, 53, 12, 5, { text: '{{ data.card ? "Well done, " + data.card[0].name + "!" : "" }}' }),
+    ] },
+  ],
+});
+
+const QUIZ = `// STEP 1 of the app: the workflow.
+// It has the questions and the right answers. The app shows the questions,
+// then sends back what was picked as a1, a2, a3, a4, a5, and we count the right ones.
+const questions = [
+  { q: 'What is 12 × 12?', options: ['124', '144', '154'], answer: '144' },
+  { q: 'Which planet is called the Red Planet?', options: ['Venus', 'Mars', 'Jupiter'], answer: 'Mars' },
+  { q: 'What gas do plants take in?', options: ['Oxygen', 'Carbon dioxide', 'Nitrogen'], answer: 'Carbon dioxide' },
+  { q: 'Who wrote the national anthem of India?', options: ['Rabindranath Tagore', 'Bankim Chandra', 'Sarojini Naidu'], answer: 'Rabindranath Tagore' },
+  { q: 'H₂O is the formula of…', options: ['Salt', 'Water', 'Sugar'], answer: 'Water' },
+];
+const sent = items[0] || {};
+const picked = questions.map((q, i) => sent['a' + (i + 1)] || '');
+const score = picked.filter((p, i) => p === questions[i].answer).length;
+
+// One row per question: the app shows these.
+return questions.map((q, i) => ({
+  number: i + 1, question: q.q, options: q.options,
+  picked: picked[i] || '(none)', correct: q.answer,
+  mark: picked[i] === q.answer ? '✅' : '❌', score,
+}));`;
+const question = (n, y) => C('q' + n, 'radio', 'a' + n, 0, y, 12, 12, { label: `{{ data.quiz ? data.quiz[${n - 1}].number + ". " + data.quiz[${n - 1}].question : "" }}`, options: `{{ data.quiz ? data.quiz[${n - 1}].options : [] }}`, value: '', inline: true });
+const easyQuiz = () => visualApp('Quiz', [
+  node('trigger.manual', 'Run by hand', 80),
+  node('core.code', 'Questions and score', 340, { language: 'javascript', code: QUIZ }),
+], {
+  name: 'Quiz', theme: { ...THEMES.sunset, radius: 14, font: 'system' }, nav: 'top',
+  data: [{ id: 's1', name: 'quiz', workflow: 'Quiz', input: [], auto: true }],
+  pages: [
+    { id: 'home', name: 'Quiz', nav: true, components: [
+      C('h1', 'heading', 'heading1', 0, 0, 12, 6, { text: 'Quick quiz', size: 'lg' }),
+      C('h2', 'text', 'text1', 0, 6, 12, 5, { text: 'Pick one answer for each question, then press **Check my answers**.' }),
+      question(1, 12), question(2, 25), question(3, 38), question(4, 51), question(5, 64),
+      C('h3', 'button', 'check', 0, 77, 4, 6, { label: 'Check my answers', look: 'primary', steps: [
+        { kind: 'workflow', workflow: 'Quiz', into: 'checked', input: [1, 2, 3, 4, 5].map(n => ({ name: 'a' + n, value: `{{ vars.a${n} }}` })) },
+        go('score'),
+      ] }),
+    ] },
+    { id: 'score', name: 'Score', nav: false, components: [
+      C('s1', 'heading', 'heading1', 0, 0, 12, 6, { text: 'Your score', size: 'lg' }),
+      C('s2', 'stat', 'score', 0, 7, 4, 12, { label: 'Right answers', value: '{{ data.checked ? data.checked[0].score + " / 5" : "–" }}', note: '' }),
+      C('s3', 'table', 'answers', 0, 20, 12, 34, { title: '', rows: '{{ data.checked }}', columns: 'number, question, picked, correct, mark', search: false }),
+      C('s4', 'button', 'again', 0, 55, 3, 6, { label: '↺ Try again', look: 'secondary', steps: [go('home')] }),
+    ] },
+  ],
+});
+// Example 3: the workflow fetches a list of videos from the internet (an HTTP request), the app plays them.
+export const VIDEO_LIST_URL = 'https://raw.githubusercontent.com/sraj452002/LineWork/master/samples/videos.json';
+const TIDY = `// STEP 2 of the workflow. The HTTP request node fetched the video list from the internet,
+// and each video in it is now one item. Keep the ones that have a link, and tidy them up.
+return items
+  .filter(v => v.src)
+  .map(v => ({
+    id: v.id,
+    title: v.title,
+    category: v.category || 'Other',
+    duration: v.duration || '',
+    src: v.src,
+    poster: v.poster || '',
+  }));`;
+const playing = '(vars.list1 || (data.videos || [])[0] || {})';
+const easyVideos = () => visualApp('Video app', [
+  node('trigger.manual', 'Run by hand', 80),
+  node('core.http', 'Fetch videos', 340, { method: 'GET', url: VIDEO_LIST_URL, query: [], headers: [], bodyType: 'none', body: '', failOnError: true }),
+  node('core.code', 'Tidy up', 600, { language: 'javascript', code: TIDY }),
+], {
+  name: 'Video app', theme: { ...THEMES.midnight, radius: 14, font: 'system' }, nav: 'top',
+  data: [{ id: 's1', name: 'videos', workflow: 'Video app', input: [], auto: true }],
+  pages: [
+    { id: 'home', name: 'Videos', nav: true, components: [
+      C('v1', 'video', 'player', 0, 0, 8, 40, { src: `{{ ${playing}.src }}`, poster: `{{ ${playing}.poster }}` }),
+      C('v2', 'heading', 'playing', 8, 0, 4, 6, { text: `{{ ${playing}.title || "Loading videos…" }}`, size: 'md' }),
+      C('v3', 'text', 'about', 8, 7, 4, 8, { text: `{{ ${playing}.title ? ${playing}.category + " · " + ${playing}.duration : "" }}` }),
+      C('v4', 'text', 'how', 8, 16, 4, 14, { text: 'These videos come from a **workflow**: it fetches a list from the internet. Click a video below to play it.' }),
+      C('v5', 'search', 'search', 0, 41, 4, 6, { placeholder: 'Search videos' }),
+      C('v6', 'radio', 'category', 4, 41, 8, 6, { label: '', options: '{{ ["All", ...new Set((data.videos || []).map(v => v.category))] }}', value: 'All', inline: true }),
+      C('v7', 'list', 'list1', 0, 48, 12, 60, { rows: '{{ (data.videos || []).filter(v => (!vars.category || vars.category === "All" || v.category === vars.category) && (!vars.search || v.title.toLowerCase().includes(vars.search.toLowerCase()))) }}', title: '{{ item.title }}', subtitle: '{{ item.category + " · " + item.duration }}', image: '{{ item.poster }}' }),
+    ] },
+  ],
+});
+export const EASY = { report: REPORT, quiz: QUIZ, tidy: TIDY };
+APPS.unshift(
+  { k: 'a-easy-report', name: 'Easy example 1: Report card', note: 'The simplest start: type marks, a workflow works out total, percentage and grade, and the app shows them', make: easyReport },
+  { k: 'a-easy-quiz', name: 'Easy example 2: Quiz', note: 'A workflow holds the questions and marks the answers; the app shows them and the score on a second page', make: easyQuiz },
+  { k: 'a-easy-videos', name: 'Easy example 3: Video app (fetches videos)', note: 'A workflow fetches a video list from the internet with an HTTP request; the app plays them, with search and categories', make: easyVideos },
+);
+
+
 // Sales: a dark dashboard with a side menu, a pipeline board, a calendar and a page for each deal.
 APPS.push({ k: 'a-sales', name: 'Sales command center', note: 'Dark dashboard: KPIs, charts, a gauge, a pipeline board, a calendar and a page per deal', make: () => visualApp('Sales command center', [
   node('trigger.manual', 'Run by hand', 80),
@@ -996,26 +1126,21 @@ return [
 APPS.push({ k: 'a-stream', name: 'StreamBox (video streaming)', note: 'A streaming app: featured hero, genre and search filters, a player page with up next, ratings and My list', make: () => visualApp('StreamBox', [
   node('trigger.manual', 'Run by hand', 80),
   node('core.code', 'Catalogue', 340, { language: 'javascript', code: `// The catalogue. Swap for your video host (Mux, Cloudflare Stream, Bunny, S3) or a sheet; MP4 and HLS (.m3u8) play.
-const g = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/';
-const v = (id, file, title, genre, year, duration, about) => ({ id, title, genre, year, duration, about, src: g + file + '.mp4', poster: g + 'images/' + file + '.jpg' });
+const s = 'https://storage.googleapis.com/', p = s + 'shaka-asset-icons/';
+const v = (id, src, poster, title, genre, year, duration, about) => ({ id, title, genre, year, duration, about, src: s + src, poster: p + poster });
 return [
-  v('sintel', 'Sintel', 'Sintel', 'Fantasy', 2010, '14 min', 'A lonely young woman searches for the baby dragon she once raised.'),
-  v('bunny', 'BigBuckBunny', 'Big Buck Bunny', 'Comedy', 2008, '10 min', 'A giant rabbit takes gentle revenge on three bullying rodents.'),
-  v('dream', 'ElephantsDream', 'Elephants Dream', 'Sci-fi', 2006, '11 min', 'Two men explore a strange, ever-changing machine world.'),
-  v('steel', 'TearsOfSteel', 'Tears of Steel', 'Sci-fi', 2012, '12 min', 'Scientists try to save the world from killer robots in Amsterdam.'),
-  v('blazes', 'ForBiggerBlazes', 'For Bigger Blazes', 'Action', 2015, '1 min', 'A burst of fire, speed and colour.'),
-  v('escapes', 'ForBiggerEscapes', 'For Bigger Escapes', 'Travel', 2015, '1 min', 'Wide landscapes and open roads.'),
-  v('fun', 'ForBiggerFun', 'For Bigger Fun', 'Comedy', 2015, '1 min', 'Small moments of big fun.'),
-  v('joyrides', 'ForBiggerJoyrides', 'For Bigger Joyrides', 'Action', 2015, '1 min', 'Thrills on wheels and water.'),
-  v('meltdowns', 'ForBiggerMeltdowns', 'For Bigger Meltdowns', 'Comedy', 2015, '1 min', 'When everything goes wrong, beautifully.'),
-  v('subaru', 'SubaruOutbackOnStreetAndDirt', 'Outback on Street and Dirt', 'Travel', 2014, '9 min', 'A road test from city streets to dirt tracks.'),
+  v('sintel', 'shaka-demo-assets/sintel-mp4-only/v-0576p-1400k-libx264.mp4', 'sintel.png', 'Sintel', 'Fantasy', 2010, '14 min', 'A lonely young woman searches for the baby dragon she once raised.'),
+  v('bunny', 'exoplayer-test-media-0/BigBuckBunny_320x180.mp4', 'big_buck_bunny.png', 'Big Buck Bunny', 'Comedy', 2008, '10 min', 'A giant rabbit takes gentle revenge on three bullying rodents.'),
+  v('steel', 'shaka-demo-assets/tos-ttml/v-0576p-1400k-libx264.mp4', 'tears_of_steel.png', 'Tears of Steel', 'Sci-fi', 2012, '12 min', 'Scientists try to save the world from killer robots in Amsterdam.'),
+  v('angel', 'shaka-demo-assets/angel-one-hls/hls.m3u8', 'angel_one.png', 'Angel One', 'Drama', 2015, '1 min', 'A short scene, streamed in HLS with several languages.'),
+  v('pattern', 'shaka-demo-assets/apple-advanced-stream-ts/master.m3u8', 'apple_test_pattern.png', 'Test pattern', 'Streams', 2017, '10 min', 'An adaptive HLS stream that changes quality with your connection.'),
 ];` }),
 ], {
   name: 'StreamBox', theme: { primary: '#e50914', bg: '#0b0b0f', surface: '#16161d', text: '#f5f5f7', dark: true, radius: 10, font: 'system' }, nav: 'top',
   data: [{ id: 's1', name: 'videos', workflow: 'StreamBox', input: [], auto: true }],
   pages: [
     { id: 'home', name: 'Home', nav: true, components: [
-      C('v1', 'hero', 'hero1', 0, 0, 12, 44, { kicker: 'Featured', title: 'Sintel', subtitle: 'A lonely young woman searches for the dragon she raised. An award-winning fantasy short.', button: '▶ Play', image: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/Sintel.jpg', steps: [set('video', '{{ (data.videos || []).find(v => v.id === "sintel") }}'), go('watch')] }),
+      C('v1', 'hero', 'hero1', 0, 0, 12, 44, { kicker: 'Featured', title: 'Sintel', subtitle: 'A lonely young woman searches for the dragon she raised. An award-winning fantasy short.', button: '▶ Play', image: 'https://storage.googleapis.com/shaka-asset-icons/sintel.png', steps: [set('video', '{{ (data.videos || []).find(v => v.id === "sintel") }}'), go('watch')] }),
       C('v2', 'radio', 'genre', 0, 45, 8, 9, { label: 'Genre', options: '{{ ["All", ...new Set((data.videos || []).map(v => v.genre))] }}', value: 'All', inline: true }),
       C('v3', 'search', 'search1', 8, 46, 4, 6, { placeholder: 'Search titles' }),
       C('v4', 'heading', 'heading1', 0, 55, 12, 6, { text: 'Trending now', size: 'md' }),

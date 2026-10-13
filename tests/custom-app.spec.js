@@ -69,6 +69,7 @@ test('a custom app runs its workflow in the preview and at its published link', 
 
     // Unpublished, the link stops working.
     await page.getByText('Published', { exact: true }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Unpublish' }).click();
     await expect.poll(async () => (await fetch(link)).status, { timeout: 15_000 }).toBe(404);
     await visitor.close();
 
@@ -96,9 +97,9 @@ test('a custom app runs its workflow in the preview and at its published link', 
     const player = page.frameLocator('iframe[title="App preview"]');
     await expect(player.locator('.item')).toHaveCount(5, { timeout: 60_000 }); // Python's first start takes a moment
     await expect(player.locator('#title')).toHaveText('Big Buck Bunny');
-    await expect(player.locator('#player')).toHaveAttribute('src', /BigBuckBunny\.mp4$/);
+    await expect(player.locator('#player')).toHaveAttribute('src', /BigBuckBunny_320x180\.mp4$/);
     await player.getByRole('button', { name: 'Streams' }).click();
-    await expect(player.locator('.item')).toHaveCount(1);
+    await expect(player.locator('.item')).toHaveCount(2);
     await player.locator('#q').fill('zzz');
     await expect(player.getByText('No videos match.')).toBeVisible();
     await page.getByRole('button', { name: /^View:/ }).click();

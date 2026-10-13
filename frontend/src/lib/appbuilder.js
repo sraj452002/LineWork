@@ -41,7 +41,7 @@ export const COMPONENTS = {
     fields: [f('rows', 'Rows', 'text', { hint: '{{ data.products }}' }), f('title', 'Card title', 'text', { hint: '{{ item.name }}' }), f('subtitle', 'Card text', 'text', { hint: '{{ item.price }}' }), f('image', 'Card image', 'text', { hint: '{{ item.photo }}' })] },
   image: { label: 'Image', w: 4, h: 24, props: { src: 'https://picsum.photos/seed/workline/640/400', fit: 'cover', alt: '' },
     fields: [f('src', 'Image URL'), f('fit', 'Fit', 'select', { options: [['cover', 'Fill the box'], ['contain', 'Show all of it']] }), f('alt', 'Description')] },
-  video: { label: 'Video', w: 8, h: 40, props: { src: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4', poster: '' },
+  video: { label: 'Video', w: 8, h: 40, props: { src: 'https://storage.googleapis.com/exoplayer-test-media-0/BigBuckBunny_320x180.mp4', poster: '' },
     fields: [f('src', 'Video URL (MP4, WebM or HLS .m3u8)'), f('poster', 'Poster image')] },
   divider: { label: 'Divider', w: 12, h: 3, props: {}, fields: [] },
   html: { label: 'Custom HTML', w: 6, h: 20, props: { html: '<p>Your own <b>HTML</b>. {{ vars.x }}</p>' },
@@ -593,7 +593,7 @@ function runtime(SPEC, OPT) {
           if (img) { const i = el('img'); i.src = img; i.alt = ''; i.loading = 'lazy'; card.appendChild(i); }
           const d = el('div'); d.appendChild(el('b', '', txt(p.title, r))); if (p.subtitle) d.appendChild(el('span', '', txt(p.subtitle, r)));
           card.appendChild(d);
-          card.onclick = () => { S.vars[c.name] = r; steps(p.steps, r); };
+          card.onclick = () => { S.vars[c.name] = r; steps(p.steps, r); paint(); };
           g.appendChild(card);
         }
         box.appendChild(g); break;
@@ -870,7 +870,7 @@ function runtime(SPEC, OPT) {
           for (const r of these.slice(0, 100)) {
             const card = el('div', 'wl-card kb' + (p.steps && p.steps.length ? ' click' : ''));
             const d = el('div'); d.appendChild(el('b', '', txt(p.title, r))); if (p.subtitle) d.appendChild(el('span', '', txt(p.subtitle, r)));
-            card.appendChild(d); card.onclick = () => { S.vars[c.name] = r; steps(p.steps, r); };
+            card.appendChild(d); card.onclick = () => { S.vars[c.name] = r; steps(p.steps, r); paint(); };
             lane.appendChild(card);
           }
           board.appendChild(lane);
@@ -896,10 +896,10 @@ function runtime(SPEC, OPT) {
           const iso = yy + '-' + String(mo).padStart(2, '0') + '-' + String(d).padStart(2, '0');
           const cell = el('div', 'wl-cal-d' + (iso === today ? ' today' : ''));
           cell.appendChild(el('small', '', String(d)));
-          cell.onclick = () => { S.vars[c.name] = { date: iso }; steps(p.steps, { date: iso }); };
+          cell.onclick = () => { S.vars[c.name] = { date: iso }; steps(p.steps, { date: iso }); paint(); };
           for (const r of rows.filter(r => String(r[p.date || 'date'] || '').slice(0, 10) === iso).slice(0, 4)) {
             const ev = el('div', 'wl-cal-ev', txt(p.title, r));
-            ev.onclick = e => { e.stopPropagation(); S.vars[c.name] = r; steps(p.steps, r); };
+            ev.onclick = e => { e.stopPropagation(); S.vars[c.name] = r; steps(p.steps, r); paint(); };
             cell.appendChild(ev);
           }
           grid.appendChild(cell);
