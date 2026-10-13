@@ -78,6 +78,8 @@ export const wiredCode = (shapes, id) => {
 export const cacheable = data => { try { return JSON.stringify(data).length <= 200_000; } catch (_) { return false; } };
 
 export const HELPERS = `
+// The helpers' own names stay inside; only the widgets are global, so a page can use $, fmt and the rest itself.
+(() => {
 const $ = s => (typeof s === 'string' ? document.querySelector(s) : s);
 const fmt = v => (typeof v === 'number' ? v.toLocaleString(undefined, { maximumFractionDigits: 2 }) : v == null ? '' : String(v));
 const escH = v => fmt(v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -124,6 +126,8 @@ function pie(el, rows, x, y, o) {
   });
   box.innerHTML = '<div class="lw-pie"><svg width="' + h + '" height="' + h + '">' + svg + '</svg><ul>' + rows.map((row, i) => '<li><i style="background:' + PALETTE[i % 6] + '"></i>' + escH(row[x]) + ' <b>' + escH(vals[i]) + '</b></li>').join('') + '</ul></div>';
 }
+Object.assign(window, { cards, table, bars, line, pie });
+})();
 `;
 
 // The frame's document: theme colours, the helpers, `data`, then the block's own HTML.
@@ -151,7 +155,8 @@ window.addEventListener('unhandledrejection', e => { const p = document.createEl
 // The look of the helpers' widgets, and plain page defaults, in theme t's colours.
 export function widgetStyle(t) {
   return `:root{--ink:${t.ink};--ink2:${t.ink2};--surface:${t.surface};--line:${t.line};--c1:#3b82f6;--c2:#10b981;--c3:#f59e0b;--c4:#8b5cf6;--c5:#ef4444;--c6:#14b8a6;color-scheme:${t.dark ? 'dark' : 'light'}}
-html,body{margin:0;background:${t.bg};color:var(--ink);font:13px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
+html,body{margin:0;color:var(--ink);font:13px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
+body{background:${t.bg}}
 h1,h2,h3{margin:0 0 8px;font-weight:650}
 .lw-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:10px}
 .lw-card{border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--surface)}

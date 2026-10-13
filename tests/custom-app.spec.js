@@ -39,7 +39,7 @@ test('a custom app runs its workflow in the preview and at its published link', 
 
     // Change the page: the preview follows.
     const code = page.getByLabel('App code');
-    await code.fill((await code.inputValue()).replace('<h1>My app</h1>', '<h1>Ask me</h1>'));
+    await code.fill((await code.inputValue()).replace('<h1>My app</h1>', '<h1>Ask me</h1><script>const $ = s => document.querySelector(s);</script>'));  // a page can name things $ itself
     await expect(preview.locator('h1')).toHaveText('Ask me');
 
     // Publish: a link that works on its own, for anyone.
