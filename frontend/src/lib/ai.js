@@ -1,9 +1,20 @@
-// AI calls go to /api/ai on the Workline API (../../backend), which holds the API key.
+// AI calls go to /api/ai on the Workline API (../../backend), which holds the API keys. The server may
+// offer more than one model (Claude, NVIDIA Nemotron); the one picked in the AI chat is kept per browser.
+const PROVIDER_KEY = 'linework:ai-provider';
+export let aiProviders = [];
+export const aiProvider = () => {
+  let id = null; try { id = localStorage.getItem(PROVIDER_KEY); } catch(_){}
+  return aiProviders.find(p => p.id === id) || aiProviders[0] || null;
+};
+export const setAIProvider = id => { try { localStorage.setItem(PROVIDER_KEY, id); } catch(_){} };
+// A model that reasons first (Nemotron) sends its thinking as it goes; listeners see it (the chat shows it).
+const thinkers = new Set();
+export const onAIThinking = fn => { thinkers.add(fn); return () => thinkers.delete(fn); };
 function createSample(){
   const sample = async (input, opts = {}) => {
     const prompt = typeof input === 'string' ? input : input.map(t => t.content).join('\n\n');
     let res;
-    try{ res = await fetch('/api/ai', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({prompt, tier:opts.modelTier || 'default', ...(opts.images && opts.images.length ? {images:opts.images} : {})}), signal:opts.signal}); }
+    try{ res = await fetch('/api/ai', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({prompt, tier:opts.modelTier || 'default', provider:aiProvider()?.id, ...(opts.images && opts.images.length ? {images:opts.images} : {})}), signal:opts.signal}); }
     catch(e){ throw {code: e && e.name === 'AbortError' ? 'cancelled' : 'unavailable'}; }
         if(res.status === 401) throw {code:'signed_out'};
     if(res.status === 429){ const j = await res.json().catch(() => null); throw {code: j && j.error === 'daily_limit' ? 'daily_limit' : 'rate_limited'}; }
@@ -11,7 +22,7 @@ function createSample(){
     if(res.status === 400 && opts.images) throw {code:'image_unsupported'};
     if(!res.ok) throw {code:'unavailable'};
     const reader = res.body.getReader(), dec = new TextDecoder();
-    let buf = '', text = '';
+    let buf = '', text = '', thinking = '';
     try{
       for(;;){
         const {value, done} = await reader.read();
@@ -23,6 +34,7 @@ function createSample(){
           if(!line.startsWith('data:')) continue;
           let ev; try{ ev = JSON.parse(line.slice(5)); }catch(_){ continue; }
           if(ev.type === 'content_block_delta' && ev.delta && ev.delta.type === 'text_delta'){ text += ev.delta.text; if(opts.onText) opts.onText({text, delta:ev.delta.text}); }
+          else if(ev.type === 'content_block_delta' && ev.delta && ev.delta.type === 'thinking_delta'){ thinking += ev.delta.thinking; if(opts.onThinking) opts.onThinking({thinking, delta:ev.delta.thinking}); thinkers.forEach(fn => fn(thinking)); }
           else if(ev.type === 'error') throw {code: ev.error && ev.error.type === 'overloaded_error' ? 'rate_limited' : 'unavailable', text};
         }
       }
@@ -42,6 +54,7 @@ function createSample(){
     NO_AI = j && j.reason === 'signed_out' ? AI_SIGNED_OUT
       : j && j.reason === 'daily_limit' ? `You’ve used today’s ${j.limit} AI requests. They reset at midnight UTC. Everything else still works.`
       : j && j.limit !== undefined ? AI_NO_KEY_SERVER : AI_NO_KEY;
+    aiProviders = (j && j.providers) || [];
     return j && j.enabled ? sample : null;
   }).catch(() => null);
 }
@@ -120,11 +133,11 @@ export function copyFor(code){
     cancelled:'Stopped.',
     signed_out:'Your session ended. Sign in again to use AI.',
     empty:'The reply had no usable diagram. Try describing it differently.',
-    image_unsupported:'That picture couldn’t be read. Try a PNG or JPEG screenshot.'
+    image_unsupported: aiProvider() && aiProvider().images === false ? `${aiProvider().label} doesn’t read pictures. Pick Claude at the top of the AI chat for that.` : 'That picture couldn’t be read. Try a PNG or JPEG screenshot.'
   })[code] || 'That didn\u2019t work. Try rephrasing your request.';
 }
 
-const AI_NO_KEY = 'AI is off. Sign in to use it, or set ANTHROPIC_API_KEY on the Workline API to turn it on. Everything else works.';
-const AI_NO_KEY_SERVER = 'AI is off. Set ANTHROPIC_API_KEY on the Workline server to turn it on. Everything else works.';
+const AI_NO_KEY = 'AI is off. Sign in to use it, or set ANTHROPIC_API_KEY or NVIDIA_API_KEY on the Workline API to turn it on. Everything else works.';
+const AI_NO_KEY_SERVER = 'AI is off. Set ANTHROPIC_API_KEY or NVIDIA_API_KEY on the Workline server to turn it on. Everything else works.';
 const AI_SIGNED_OUT = 'AI needs an account. Sign out, then sign in or create an account to use it. Everything else works.';
 export let NO_AI = AI_NO_KEY;

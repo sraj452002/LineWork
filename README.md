@@ -53,7 +53,7 @@ Render → **New → Blueprint** → this repository: [`render.yaml`](render.yam
 
 - `APP_URL`: the frontend's address on Netlify (e.g. `https://linework.netlify.app`). Email links, share links and Google/GitHub sign-in point there.
 - `TRUST_PROXY=2` (Netlify's proxy, then Render's load balancer).
-- The Google Drive settings (**Google Drive storage**, below), and optionally `ANTHROPIC_API_KEY`, email and Google/GitHub sign-in.
+- The Google Drive settings (**Google Drive storage**, below), and optionally `ANTHROPIC_API_KEY` and/or `NVIDIA_API_KEY`, email and Google/GitHub sign-in.
 
 It needs no disk, since the data is in Google Drive. Run **one** instance: it holds the accounts in memory and is the only writer to the Drive folder. A free Render service sleeps after 15 idle minutes and takes about a minute to wake; the app waits for it (`frontend/src/lib/backend.js`). Or use [`backend/Dockerfile`](backend/Dockerfile): `cd backend && docker build -t linework-api . && docker run -p 8787:8787 --env-file .env linework-api`.
 
@@ -96,6 +96,7 @@ Settings are environment variables; [`backend/.env.example`](backend/.env.exampl
 | `GOOGLE_DRIVE_FOLDER_ID` | | The Drive folder. Empty: the backend makes "Linework data" and prints its id. |
 | `DATA_DIR` | | A local folder instead of Drive (relative to `backend/`), for development. |
 | `ANTHROPIC_API_KEY` | | Turns AI on. `ANTHROPIC_MODEL` picks the model. |
+| `NVIDIA_API_KEY` | | Also (or instead) turns on NVIDIA's models (build.nvidia.com). `NVIDIA_MODEL` picks one (default `nvidia/nemotron-3.5-lightning-30b-a3b`), `NVIDIA_BASE_URL` another OpenAI-style endpoint. With both keys, people pick the model in the AI chat. |
 | `AI_DAILY_LIMIT` | `50` | `0` for no limit. |
 | `ALLOW_SIGNUP` | `false` | `true` lets anyone create an account. Off: only the accounts already there and `DEFAULT_USERS` (Google/GitHub can still sign in to existing ones). |
 | `RESEND_API_KEY` or `SMTP_URL`, `MAIL_FROM` | | Email: confirmation and reset links. |
