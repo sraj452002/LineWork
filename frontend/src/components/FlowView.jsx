@@ -210,6 +210,13 @@ export default function FlowView({ file, update, visible, saveState = 'Saved', o
   };
   const openRun = async id => { try { setRun(await getRun(id)); setSel(null); } catch (e) { toast('That run is gone.'); } };
   const status = id => run && run.nodes && run.nodes[id];
+  // A node runs once everything feeding it has: while a run is on, that's the one to light up.
+  const isActive = id => {
+    if (!run || run.status !== 'running' || status(id)) return false;
+    const into = edges.filter(e => e.to === id);
+    return into.length ? into.every(e => status(e.from)) : nodeDef(byId.get(id)?.type || '').trigger;
+  };
+  const calm = useMemo(() => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches, []);
   const toggleActive = () => {
     change(f => { f.active = !f.active; });
     toast(flow.active ? 'Inactive: its webhooks and schedules are off' : 'Active: its webhooks and schedules start it now');
@@ -383,9 +390,17 @@ ${catalog}`;
                 const d = curve(pa.x + W, pa.y + portY(outs, Math.max(0, outs.indexOf(e.fromPort)), heightOf(a)), pb.x, pb.y + portY(ins, Math.max(0, ins.indexOf(e.toPort)), heightOf(b)));
                 const on = sel && sel.kind === 'edge' && sel.id === e.id;
                 const lit = status(e.from)?.status === 'success' && (status(e.from).output?.[e.fromPort]?.length ?? 1) > 0 && status(e.to)?.status === 'success';
+                // Data on its way: the node it feeds is the one running now, so beads run along the string.
+                const feeding = run && run.status === 'running' && status(e.from)?.status === 'success' && !status(e.to) && isActive(e.to);
+                const pid = 'fve-' + e.id;
                 return (
-                  <g key={e.id} className={'fv-edge' + (on ? ' on' : '') + (lit ? ' lit' : '')} onPointerDown={ev => { ev.stopPropagation(); setSel({ kind: 'edge', id: e.id }); }}>
-                    <path className="hit" d={d} /><path className="line" d={d} /><path className="flow" d={d} pathLength="100" style={{ animationDelay: `${-(e.id.charCodeAt(e.id.length - 1) % 10) * .22}s` }} />
+                  <g key={e.id} className={'fv-edge' + (on ? ' on' : '') + (lit ? ' lit' : '') + (feeding ? ' feeding' : '')} onPointerDown={ev => { ev.stopPropagation(); setSel({ kind: 'edge', id: e.id }); }}>
+                    <path className="hit" d={d} /><path className="line" id={pid} d={d} /><path className="flow" d={d} pathLength="100" style={{ animationDelay: `${-(e.id.charCodeAt(e.id.length - 1) % 10) * .22}s` }} />
+                    {feeding && !calm && BEADS.map((b, i) => (
+                      <circle key={i} className="fv-bead" r={b.r} opacity={b.o}>
+                        <animateMotion dur="1.2s" begin={`${b.at}s`} repeatCount="indefinite" calcMode="spline" keyTimes="0;1" keySplines=".45 0 .25 1"><mpath href={'#' + pid} /></animateMotion>
+                      </circle>
+                    ))}
                   </g>
                 );
               })}
@@ -401,8 +416,10 @@ ${catalog}`;
                 </div>
               );
               const waiting = run && run.status === 'running' && !st;
+              // Running now: everything feeding it is done. Still to come: waiting behind those.
+              const now = waiting && isActive(n.id);
               return (
-                <div key={n.id} className={['fv-node', 't-' + d.tone, sel?.id === n.id && 'on', st && 's-' + st.status, waiting && 'waiting', d.trigger && 'trigger'].filter(Boolean).join(' ')}
+                <div key={n.id} className={['fv-node', 't-' + d.tone, sel?.id === n.id && 'on', st && 's-' + st.status, waiting && (now ? 'active' : 'queued'), d.trigger && 'trigger'].filter(Boolean).join(' ')}
                   style={{ left: p.x, top: p.y, width: W, height: h }}
                   onPointerDown={e => { if (e.button !== 0 || e.target.closest('.fv-port')) return; e.stopPropagation(); const c = toCanvas(e.clientX, e.clientY); setSel({ kind: 'node', id: n.id }); setSideOpen(true); setDrag({ id: n.id, x: n.x, y: n.y, ox: c.x - n.x, oy: c.y - n.y }); }}
                   onDoubleClick={() => { setSel({ kind: 'node', id: n.id }); setTab('settings'); }}>
@@ -547,6 +564,9 @@ function Palette({ at, view, onPick, onClose }) {
     </div>
   );
 }
+
+// Data beads running along a string while the node it feeds is running: a bright head and two trailing.
+const BEADS = [{ r: 4.4, o: 1, at: 0 }, { r: 3.2, o: .55, at: .09 }, { r: 2.2, o: .3, at: .17 }];
 
 // Settings for one node, and what it produced in the last run.
 function NodePanel({ node, flow, change, creds, tab, setTab, result, active, onCred, onRun, onDelete, canRun, onHelp, onPreview }) {
