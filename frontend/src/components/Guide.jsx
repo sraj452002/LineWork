@@ -800,7 +800,7 @@ function appsGuide() {
         <tr><th>Code</th><td>Node.js REST API, Python data analysis, Landing page, TypeScript utility with tests</td></tr>
         <tr><th>Workflows</th><td>Daily AI news digest, Lead capture with AI, Support ticket triage, Weekly sales report, Failure alerts</td></tr>
         <tr><th>Apps</th><td>OTT streaming app (Hotstar-style): a whole streaming service on one workflow. Simpler examples are in <a href="#" data-guide="easy">Easy start</a>; more starters (form, dashboard, chat, video library) are in <b>Tools</b>.</td></tr>
-        <tr><th>Pages</th><td>Sales dashboard page, Feedback form page, Video library page: made only of nodes</td></tr>
+        <tr><th>Pages</th><td>StarPlay 2 (a streaming app as one workflow), Sales dashboard page, Feedback form page, Video library page: made only of nodes</td></tr>
       </tbody></table>
       <p>Where a template sends to Slack or email, reads a database or adds rows to a sheet, the node is there and named: pick your credential, connection or file on it, then turn the workflow <b>Active</b>.</p>
     </> },

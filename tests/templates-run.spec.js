@@ -91,6 +91,52 @@ test.describe('pages made of nodes', () => {
     expect(r.json.html).toMatch(/name="message"/);
   });
 
+  test('StarPlay 2: a streaming app made only of nodes, on five pages', async () => {
+    const { createServer } = await import('node:http');
+    const { readFileSync } = await import('node:fs');
+    const list = createServer((req, res) => { res.writeHead(200, { 'content-type': 'text/plain' }); res.end(readFileSync('samples/videos.json')); }).listen(0);
+    const app2 = createApp(await openStore(memoryBackend()), { requireVerified: false, dbAllowPrivate: true }), srv2 = app2.listen(0);
+    try {
+      const b2 = `http://localhost:${srv2.address().port}/api`;
+      const up = await fetch(`${b2}/auth/signup`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'sp2@example.com', password: 'a long password' }) });
+      const ck = up.headers.get('set-cookie').split(';')[0];
+      const f = READY.find(t => t.k === 'p-ott').make();
+      expect(f.flow.nodes.every(n => n.type.startsWith('trigger.') || n.type.startsWith('core.') || n.type.startsWith('ui.'))).toBe(true);
+      f.flow.nodes.find(n => n.type === 'core.http').params.url = `http://localhost:${list.address().port}/samples/videos.json`;
+      const open = async input => {
+        const r = await fetch(`${b2}/flows/${f.id}/page`, { method: 'POST', headers: { 'content-type': 'application/json', cookie: ck }, body: JSON.stringify({ flow: f.flow, input }) });
+        const j = await r.json(); expect(r.status, JSON.stringify(j).slice(0, 300)).toBe(200); return j.html;
+      };
+      // Home: the menu and search on top, then the spotlight and rows. The other pages' nodes don't draw.
+      const home = await open({});
+      expect(home).toContain('<h1>StarPlay 2</h1>');
+      for (const h of ['▶ Watch Code Red: Delhi', 'Latest Releases', 'Top 10 in India Today']) expect(home, h).toContain(h);
+      for (const h of ['Live Sports', 'Choose your plan', '<video']) expect(home, h).not.toContain(h);
+      expect(home).toContain('href="?page=watch&amp;video=code-red"');
+      // Watch: an episode plays (MP4 only: a page has no scripts), with the others below.
+      const watch = await open({ query: { page: 'watch', video: 'mumbai-nights', ep: '7' } });
+      expect(watch).toMatch(/<video[^>]+src="https:\/\/storage\.googleapis\.com\/[^"]+\.mp4"/);
+      expect(watch).toContain('Mumbai Nights · S2 E2 · The Offer');
+      expect(watch).toContain('href="?page=watch&amp;video=mumbai-nights&amp;ep=1"');
+      expect(await open({ query: { page: 'watch', video: 'kaveri' } })).toContain('More Like This');
+      // Browse: a menu tab (its button lit), and search results.
+      const kids = await open({ query: { page: 'browse', tab: 'kids' } });
+      expect(kids).toContain('<a class="btn on" href="?page=browse&amp;tab=kids">');
+      expect(kids).toContain('Little Rangers');
+      expect(kids).not.toContain('Neon Bazaar');
+      expect(await open({ action: 'search', form: { search: 'kaveri' } })).toContain('1 results for “kaveri”');
+      // Sports and plans.
+      const sports = await open({ query: { page: 'sports' } });
+      expect(sports).toContain('<td>India vs Australia</td>');
+      expect(sports).not.toContain('Latest Releases');
+      const plans = await open({ query: { page: 'plans' } });
+      expect(plans).toMatch(/<span>Super<\/span><b>₹149 \/ month<\/b>/);
+      expect(plans).toContain('<svg class="chart"');
+      expect(plans).toContain('name="_action" value="subscribe"');
+      expect(await open({ action: 'subscribe', form: { name: 'Riya', mobileNumber: '9999999999', plan: 'Super' } })).toContain('✅ Thanks, Riya!');
+    } finally { srv2.close(); app2.flows.close(); list.close(); }
+  });
+
   // The app templates' workflows, run as their published apps run them.
   const publish = async (k, token, access = 'public') => {
     const f = READY.find(t => t.k === k).make();
