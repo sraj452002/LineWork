@@ -18,6 +18,9 @@ test('expressions: whole values keep their type, text gets filled in', () => {
   expect(evaluate('{{ $json.tags }}', ctx)).toEqual(['a', 'b']);
   expect(evaluate('Hi {{ $json.user.name }}, x={{ $node["Start"].json.x }}', ctx)).toBe('Hi Ada, x=1');
   expect(evaluate({ a: ['{{ $json.n }}', 'plain'] }, ctx)).toEqual({ a: [3, 'plain'] });
+  // Starting and ending with an expression doesn't make the whole text one expression.
+  expect(evaluate('{{ $json.user.name }} · {{ $json.n }} · {{ $json.tags.length }}', ctx)).toBe('Ada · 3 · 2');
+  expect(evaluate('{{ { "ok": true, "n": $json.n } }}', ctx)).toEqual({ ok: true, n: 3 });
   expect(() => evaluate('{{ nope.nope }}', ctx)).toThrow(/expression/);
 });
 

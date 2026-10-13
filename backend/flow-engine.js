@@ -16,9 +16,10 @@ export class FlowError extends Error {
 
 export const LIMITS = { steps: 200, items: 5000, exprMs: 250, runMs: 120_000 };
 const EXPR = /\{\{([\s\S]+?)\}\}/g;
-const ONLY = /^\s*\{\{([\s\S]+?)\}\}\s*$/;
+// A param that is one expression and nothing else (not "{{ a }} and {{ b }}", which is text).
+const ONLY = /^\s*\{\{((?:(?!\}\})[\s\S])+)\}\}\s*$/;
 
-// Fill in a param's expressions for one item. ctx: {$json, $node, $now, $index}.
+// Fill in a param's expressions for one item. ctx: {$json, $node, $now, $index, $items (all the items' json)}.
 export function evaluate(value, ctx) {
   if (typeof value === 'string') {
     const only = value.match(ONLY);
@@ -36,7 +37,7 @@ export function evaluate(value, ctx) {
 function run(expr, ctx) {
   try {
     return vm.runInNewContext(`(${expr})`, {
-      $json: ctx.$json || {}, $node: ctx.$node || {}, $now: ctx.$now, $index: ctx.$index || 0,
+      $json: ctx.$json || {}, $node: ctx.$node || {}, $now: ctx.$now, $index: ctx.$index || 0, $items: ctx.$items || [],
       JSON, Math, Date, String, Number, Boolean, Array, Object, parseInt, parseFloat, encodeURIComponent, decodeURIComponent,
     }, { timeout: LIMITS.exprMs });
   } catch (e) {
@@ -111,9 +112,10 @@ export async function runFlow(flow, { startId, input = [{ json: {} }], types, ct
     }
     try {
       if (Date.now() > deadline) throw new FlowError('The run took too long and was stopped.', 'timeout');
-      const expr = (item, i) => ({ $json: item?.json || {}, $node: byName, $now: now, $index: i });
+      const here = inputs.main || all, $items = here.map(x => x.json);
+      const expr = (item, i) => ({ $json: item?.json || {}, $node: byName, $now: now, $index: i, $items });
       const out = await type.run({
-        node, items: inputs.main || all, inputs, ctx,
+        node, items: here, inputs, ctx,
         // The node's params, filled in for one item (or the first, for nodes that run once).
         params: (item = all[0], i = 0) => evaluate(node.params || {}, expr(item, i)),
       }) || { main: [] };

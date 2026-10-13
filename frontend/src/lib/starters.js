@@ -1,6 +1,7 @@
 import { dg } from './engines.js';
 import { rid } from './utils.js';
 import { appDoc } from './apphost.js';
+import { secretPath } from './flows.js';
 
 /* Ready-made templates: files with a workflow and a custom app built on it, offered in Templates and
    Tools. Each make() gives a new file. */
@@ -124,9 +125,51 @@ const PLAYER = `<style>
   load();
 </script>`;
 
-const node = (type, name, x, params = {}) => ({ id: rid('n'), type, name, x, y: 160, params });
+const node = (type, name, x, params = {}, y = 160) => ({ id: rid('n'), type, name, x, y, params });
+const chain = nodes => nodes.slice(1).map((n, i) => ({ id: rid('e'), from: nodes[i].id, fromPort: 'main', to: n.id, toPort: 'main' }));
+
+// The video library as a page made only of workflow nodes (no HTML): the Page trigger and UI nodes.
+const PAGE_VIDEOS = `// The videos, picked by the page's buttons (?category=…, ?video=…) and its search form.
+// Swap this list for a Google Sheet, Airtable or database node: same fields.
+const { query = {}, form = {} } = items[0] || {};
+const videos = [
+  { id: 'bunny', title: 'Big Buck Bunny', category: 'Animation', duration: '9:56',
+    src: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+    poster: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/BigBuckBunny.jpg' },
+  { id: 'dream', title: 'Elephants Dream', category: 'Animation', duration: '10:53',
+    src: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
+    poster: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/ElephantsDream.jpg' },
+  { id: 'sintel', title: 'Sintel', category: 'Film', duration: '14:48',
+    src: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4',
+    poster: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/Sintel.jpg' },
+  { id: 'steel', title: 'Tears of Steel', category: 'Film', duration: '12:14',
+    src: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
+    poster: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/TearsOfSteel.jpg' },
+];
+const search = String(form.search || '').toLowerCase();
+const shown = videos
+  .filter(v => !query.category || v.category === query.category)
+  .filter(v => !search || v.title.toLowerCase().includes(search));
+// The one picked (?video=…) goes first: the player shows the first item.
+return shown.sort((a, b) => (b.id === query.video) - (a.id === query.video));`;
 
 export const STARTERS = [
+  {
+    k: 'videopage', name: 'Video library page (no code UI)', note: 'A video page built only from workflow nodes: Page, Buttons, Form, a player and a gallery',
+    make: () => {
+      const id = rid('f'), now = Date.now();
+      const nodes = [
+        node('trigger.page', 'Page', 80, { path: secretPath(), title: 'WorkTube', description: 'Pick a category, search, or click a video to play it.', theme: 'dark', width: 'wide' }),
+        node('core.code', 'Find videos', 340, { language: 'javascript', code: PAGE_VIDEOS }),
+        node('ui.buttons', 'Categories', 600, { buttons: [{ name: 'All', value: '?' }, { name: 'Animation', value: '?category=Animation' }, { name: 'Film', value: '?category=Film' }] }),
+        node('ui.form', 'Search', 860, { fields: 'Search', button: 'Search', action: 'search' }),
+        node('ui.media', 'Player', 1120, { url: '{{ $json.src }}', poster: '{{ $json.poster }}', caption: '{{ $json.title }} · {{ $json.category }} · {{ $json.duration }}', kind: 'video', layout: 'one' }),
+        node('ui.text', 'More videos', 1380, { text: '### More videos', style: 'text' }),
+        node('ui.media', 'Gallery', 1640, { url: '{{ $json.poster }}', caption: '{{ $json.title }}', link: '?video={{ $json.id }}', kind: 'image', layout: 'gallery' }),
+      ];
+      return { id, title: 'Video library page', created: now, updated: now, doc: '', diagrams: [dg('architecture', 'Diagram 1', '')], active: 0, view: 'flow', flow: { active: false, nodes, edges: chain(nodes) } };
+    },
+  },
   {
     k: 'video', name: 'Video streaming app', note: 'A video library workflow and a player app around it: search, categories, MP4 and HLS, signed links',
     make: () => {

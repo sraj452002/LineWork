@@ -420,6 +420,7 @@ const GROUP_NOTE = {
   Workline: 'Your own Workline files: sheets, docs, diagrams and saved database connections. A file a workflow changes keeps its version history.',
   Flow: 'Steer the items: branch, filter, join, sort, wait, or run code.',
   Data: 'Change the items’ fields and values without calling anything outside.',
+  UI: 'Build a web page from nodes, no code: start with the Page trigger, then add Text, Cards, Tables, Charts, pictures and videos, Buttons and Forms. The page is at the trigger’s link; its forms and buttons run the workflow again.',
   Web: 'Read web pages: fast without a browser, or with a real one for pages that need JavaScript, clicks or screenshots.',
   AI: 'Ask a model for text: summaries, replies, classifications, translations.',
   Communication: 'Send messages, emails and notifications.',
@@ -573,12 +574,27 @@ return [{ city, temp: +w.current_condition[0].temp_C, sky: w.current_condition[0
 function appsGuide() {
   return [
     { id: 'what', title: 'What a custom app is', body: <>
+      <p>There are two ways to put a UI on your workflows: a <b>page made of nodes</b>, built in the workflow itself with no code (next section), or a <b>custom app</b> with your own HTML.</p>
       <p>A <b>custom app</b> is a web page of your own, made in HTML, CSS and JavaScript, that runs your <b>workflows</b> and shows what they give back however you like: a form, a dashboard, a chat, a video player. Publish it and it gets <b>a link of its own</b> that anyone can open, outside Workline, without an account.</p>
       <ul>
         <li>The <b>workflow</b> is the back end: it fetches data, calls APIs and AI, reads your sheets and databases, with your credentials.</li>
         <li>The <b>app</b> is the front end: one line, <code>await workline.run('Workflow name', input)</code>, runs a workflow and gives you its result.</li>
         <li>Compared with <a href="#" data-guide="flow">published workflow apps</a> (a ready-made form in Home → Apps), a custom app looks and behaves exactly as you write it.</li>
       </ul>
+    </> },
+    { id: 'nodes', title: 'No code: a page made of nodes', body: <>
+      <p>Don’t want to write HTML? A workflow can draw a page by itself from <b>UI nodes</b>:</p>
+      <ol>
+        <li>Start the workflow with the <b>Page</b> trigger (Nodes → Triggers). Give it a title, and a light or dark look.</li>
+        <li>Add the nodes that get your data (a database, a sheet, an HTTP call, AI…), then <b>UI</b> nodes in the order they should appear: <b>Text</b>, <b>Cards</b>, <b>Table</b>, <b>Chart</b>, <b>Image or video</b>, <b>Buttons</b>, <b>Form</b>. Each one shows the items reaching it and passes them on.</li>
+        <li>Press <b>Preview page</b> on the Page trigger to see it. Turn the workflow <b>Active</b>, then <b>Open</b> or <b>Copy</b> its link.</li>
+      </ol>
+      <ul>
+        <li>The workflow gets <code>{'{ action, query, form }'}</code>: <b>Buttons</b> reopen the page with a choice in <code>query</code> (<code>?category=Film</code>), and a <b>Form</b> reruns it with its answers in <code>form</code> and its name in <code>action</code>. Read them with <code>{'{{ $json.query.category }}'}</code> right after the trigger, or <code>{'{{ $node["Page"].json.form.search }}'}</code> further on.</li>
+        <li><b>Cards</b> can count and add up: <code>{'{{ $items.length }}'}</code>, <code>{'{{ $items.reduce((s, i) => s + i.total, 0) }}'}</code>.</li>
+        <li>Ready-made example: <b>Templates → Ready-made → Video library page (no code UI)</b>.</li>
+      </ul>
+      <p>A page made of nodes has a set look; a custom app (below) can look like anything.</p>
     </> },
     { id: 'first', title: 'Your first app', body: <>
       <ol>
