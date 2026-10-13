@@ -10,7 +10,7 @@ import { EXTRA_NODES } from './flow-extra.js';
 import { UI_NODES, renderPage } from './flow-ui.js';
 
 const TYPES = { ...NODE_TYPES, ...APP_NODES, ...WORKLINE_NODES, ...TRIGGER_TYPES, ...WEB_NODES, ...EXTRA_NODES, ...UI_NODES };
-import { limiter, newToken } from './auth.js';
+import { DUMMY, checkPassword, hashPassword, limiter, newToken, tokenHash } from './auth.js';
 
 /* Workflows on the server: credentials, runs, webhooks and schedules. A workflow lives in a file
    (file.flow), saved like any other; when it's saved with `active` on, its webhook, schedule and
@@ -336,9 +336,86 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
       if (f && (!want || f.title === want)) { fileId = id; break; }
     }
     if (!fileId) return res.status(403).json({ error: 'not_allowed', message: want ? `This app can’t run “${want}”.` : 'This app has no workflows.' });
+    // An app behind sign-in runs only for its signed-in users, and each item says who: {{ $json.user.email }}.
+    let user = null;
+    if (accessOf(a.file) !== 'public') {
+      user = endUser(a, req.body.session);
+      if (!user) return res.status(401).json({ error: 'signed_out', message: 'Sign in to use this app.' });
+    }
     const flow = await savedFlow(a.uid, fileId).catch(() => null);
     if (!flow || !Array.isArray(flow.nodes) || !flow.nodes.length) return res.status(404).json({ error: 'not_found', message: 'That workflow is empty.' });
-    await sendItems(res, () => runForItems(a.uid, fileId, flow, asItems((req.body || {}).input), 'app'));
+    const items = asItems((req.body || {}).input);
+    if (user) for (const it of items) it.json.user = user;
+    await sendItems(res, () => runForItems(a.uid, fileId, flow, items, 'app'));
+  });
+
+  /* ---- the people who use a published app behind sign-in ----
+     file.ui.access: 'public' (anyone with the link), 'signin' (anyone may make an account) or 'invite'
+     (only the emails in file.ui.allow). Their accounts belong to the app, apart from Workline's:
+     m.appUsers['<uid>:<fileId>'][email] = {hash, name, created}; sessions are m.appSessions[hash] =
+     {uid, fileId, email, exp}. The page keeps its session in window.name (it has no storage of its own). */
+  const APP_SESSION_DAYS = 30;
+  const accessOf = file => (['signin', 'invite'].includes(file?.ui?.access) ? file.ui.access : 'public');
+  const allowedEmail = (file, email) => accessOf(file) !== 'invite' || (Array.isArray(file.ui.allow) ? file.ui.allow : []).map(e => String(e).trim().toLowerCase()).includes(email);
+  const usersOf = (uid, fileId) => ((m.appUsers ||= {})[`${uid}:${fileId}`] ||= {});
+  const endUser = (a, session) => {
+    const s = session && (m.appSessions || {})[tokenHash(session)];
+    if (!s || s.uid !== a.uid || s.fileId !== a.fileId || s.exp < Date.now()) return null;
+    const u = usersOf(a.uid, a.fileId)[s.email];
+    return u && allowedEmail(a.file, s.email) ? { email: s.email, name: u.name || s.email.split('@')[0] } : null;
+  };
+  const startSession = (a, email) => {
+    const session = newToken();
+    m.appSessions ||= {};
+    const now = Date.now();
+    for (const [k, v] of Object.entries(m.appSessions)) if (v.exp < now) delete m.appSessions[k];
+    m.appSessions[tokenHash(session)] = { uid: a.uid, fileId: a.fileId, email, exp: now + APP_SESSION_DAYS * 86_400_000 };
+    store.touch();
+    return session;
+  };
+  const appAuthHits = limiter({ max: 10, windowMs: 15 * 60_000 });
+  const authBody = async (req, res) => {
+    let b = {};
+    try { b = typeof req.body === 'string' && req.body ? JSON.parse(req.body) : {}; } catch (e) { res.status(400).json({ error: 'bad_json' }); return null; }
+    const a = await uiOf(req.params.token);
+    if (!a) { res.status(404).json({ error: 'not_found', message: 'This app isn’t published.' }); return null; }
+    return { a, b, email: String(b.email || '').trim().toLowerCase().slice(0, 200), password: String(b.password || '') };
+  };
+  const text = express.text({ type: () => true, limit: '20kb' });
+  ui.post('/:token/signup', text, async (req, res) => {
+    const got = await authBody(req, res); if (!got) return;
+    const { a, b, email, password } = got;
+    if (accessOf(a.file) === 'public') return res.status(400).json({ error: 'public', message: 'This app doesn’t use sign-in.' });
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ error: 'bad_email', message: 'Enter a valid email.' });
+    if (password.length < 8) return res.status(400).json({ error: 'weak_password', message: 'Use at least 8 characters for the password.' });
+    if (!allowedEmail(a.file, email)) return res.status(403).json({ error: 'not_invited', message: 'This app is invite-only, and this email isn’t on its list.' });
+    if (appAuthHits.blocked(`${req.params.token}:${req.ip}`)) return res.status(429).json({ error: 'too_many', message: 'Too many tries. Wait a few minutes.' });
+    appAuthHits.fail(`${req.params.token}:${req.ip}`);
+    const users = usersOf(a.uid, a.fileId);
+    if (users[email]) return res.status(409).json({ error: 'exists', message: 'There’s already an account with this email. Sign in instead.' });
+    if (Object.keys(users).length >= 10_000) return res.status(403).json({ error: 'full', message: 'This app can’t take more accounts.' });
+    users[email] = { hash: await hashPassword(password), name: String(b.name || '').trim().slice(0, 80), created: Date.now() };
+    res.json({ session: startSession(a, email), user: { email, name: users[email].name || email.split('@')[0] } });
+  });
+  ui.post('/:token/login', text, async (req, res) => {
+    const got = await authBody(req, res); if (!got) return;
+    const { a, email, password } = got, k = `${req.params.token}:${email}`;
+    if (appAuthHits.blocked(k)) return res.status(429).json({ error: 'too_many', message: 'Too many tries. Wait a few minutes.' });
+    const u = usersOf(a.uid, a.fileId)[email];
+    const ok = await checkPassword(password, u ? u.hash : DUMMY) && !!u;
+    if (!ok || !allowedEmail(a.file, email)) { appAuthHits.fail(k); return res.status(401).json({ error: 'bad_login', message: 'That email and password don’t match.' }); }
+    appAuthHits.clear(k);
+    res.json({ session: startSession(a, email), user: { email, name: u.name || email.split('@')[0] } });
+  });
+  ui.post('/:token/me', text, async (req, res) => {
+    const got = await authBody(req, res); if (!got) return;
+    const user = endUser(got.a, got.b.session);
+    res.status(user ? 200 : 401).json(user ? { user, access: accessOf(got.a.file) } : { error: 'signed_out', access: accessOf(got.a.file) });
+  });
+  ui.post('/:token/logout', text, async (req, res) => {
+    let b = {}; try { b = JSON.parse(req.body || '{}'); } catch (e) { /* nothing to drop */ }
+    if (b.session && m.appSessions) { delete m.appSessions[tokenHash(b.session)]; store.touch(); }
+    res.json({ ok: true });
   });
 
   /* ---- pages made of UI nodes (flow-ui.js): the Page trigger's link ----
@@ -408,6 +485,20 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
 
   /* ---- the API for the app (signed in) ---- */
   const routes = (api, signedIn) => {
+    // The people with an account on one of your apps (the App view → Access).
+    api.get('/flows/:fileId/app-users', signedIn, (req, res) => {
+      if (!ID.test(req.params.fileId)) return res.status(400).json({ error: 'bad_id' });
+      const users = (m.appUsers || {})[`${req.user.id}:${req.params.fileId}`] || {};
+      res.json({ users: Object.entries(users).map(([email, u]) => ({ email, name: u.name || '', created: u.created })).sort((a, b) => b.created - a.created) });
+    });
+    api.delete('/flows/:fileId/app-users/:email', signedIn, (req, res) => {
+      if (!ID.test(req.params.fileId)) return res.status(400).json({ error: 'bad_id' });
+      const users = (m.appUsers || {})[`${req.user.id}:${req.params.fileId}`] || {}, email = String(req.params.email).toLowerCase();
+      delete users[email];
+      for (const [k, v] of Object.entries(m.appSessions || {})) if (v.uid === req.user.id && v.fileId === req.params.fileId && v.email === email) delete m.appSessions[k];
+      store.touch();
+      res.json({ ok: true });
+    });
     api.get('/credentials', signedIn, (req, res) => {
       res.json({ credentials: Object.values(credsOf(req.user.id)).map(publicCred).sort((a, b) => a.name.localeCompare(b.name)) });
     });
