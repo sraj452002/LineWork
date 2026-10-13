@@ -25,7 +25,7 @@ export const COMPONENTS = {
     fields: [f('text', 'Text', 'textarea', { hint: '**bold**, *italic*, [link](https://…), - list, {{ data.x.length }}' }), f('align', 'Align', 'select', { options: [['left', 'Left'], ['center', 'Center'], ['right', 'Right']] })] },
   button: { label: 'Button', w: 3, h: 6, props: { label: 'Button', look: 'primary', steps: [] }, events: 'steps',
     fields: [f('label', 'Label'), f('look', 'Look', 'select', { options: [['primary', 'Filled'], ['secondary', 'Outline'], ['link', 'Link']] })] },
-  input: { label: 'Input', w: 4, h: 9, props: { label: 'Label', placeholder: '', kind: 'text', value: '' }, holds: 'what was typed',
+  input: { label: 'Input', w: 4, h: 9, props: { label: 'Label', placeholder: '', kind: 'text', value: '', steps: [] }, events: 'steps', holds: 'what was typed',
     fields: [f('label', 'Label'), f('placeholder', 'Placeholder'), f('kind', 'Kind', 'select', { options: [['text', 'Text'], ['number', 'Number'], ['email', 'Email'], ['tel', 'Phone'], ['url', 'Web address'], ['date', 'Date'], ['time', 'Time'], ['long', 'Long text'], ['password', 'Password']] }), f('value', 'Starts as')] },
   select: { label: 'Dropdown', w: 4, h: 9, props: { label: 'Choose', options: 'All, North, South, East', value: 'All', steps: [] }, events: 'steps', holds: 'the choice',
     fields: [f('label', 'Label'), f('options', 'Options', 'text', { hint: 'A, B, C  or  {{ data.x.map(r => r.name) }}' }), f('value', 'Starts as')] },
@@ -73,6 +73,9 @@ export const COMPONENTS = {
     fields: [f('placeholder', 'Placeholder')] },
   chat: { label: 'AI chat', w: 6, h: 44, props: { title: 'Ask me anything', workflow: '', field: 'reply', greeting: 'Hi! How can I help?', placeholder: 'Type a message…' }, holds: 'the conversation',
     fields: [f('title', 'Title'), f('workflow', 'Workflow that answers', 'workflow'), f('field', 'Field with the answer', 'text', { hint: 'reply (it gets {message, history})' }), f('greeting', 'First message'), f('placeholder', 'Placeholder')] },
+
+  thread: { label: 'Message thread', w: 8, h: 50, props: { rows: '{{ data.messages }}', from: '{{ item.from }}', text: '{{ item.text }}', time: '{{ item.at ? new Date(item.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "" }}', mine: '{{ user && item.email === user.email }}', empty: 'No messages yet. Say hi!' },
+    fields: [f('rows', 'Messages', 'text', { hint: '{{ data.messages }}' }), f('from', 'Who', 'text', { hint: '{{ item.from }}' }), f('text', 'Message', 'text', { hint: '{{ item.text }}' }), f('time', 'When'), f('mine', 'Mine (on the right) when', 'text', { hint: '{{ user && item.email === user.email }}' }), f('empty', 'With none yet')] },
 
   /* ---- more to show ---- */
   badge: { label: 'Badge', w: 2, h: 5, props: { text: 'New', tone: 'blue' },
@@ -138,9 +141,9 @@ export const GROUPS = [
   ['Status', ['badge', 'alert', 'progress', 'gauge', 'stepper', 'countdown', 'avatar']],
   ['Media', ['video', 'audio', 'carousel', 'embed', 'map', 'qr']],
   ['Layout', ['box', 'spacer', 'accordion', 'tabs', 'code', 'html']],
-  ['AI', ['chat']],
+  ['Chat', ['thread', 'chat']],
 ];
-const EVENT_LABEL = { hero: 'When its button is clicked', button: 'When it’s clicked', form: 'When it’s sent', table: 'When a row is clicked', list: 'When a card is clicked', items: 'When an item is clicked', kanban: 'When a card is clicked', calendar: 'When an event or day is clicked', search: 'When Enter is pressed' };
+const EVENT_LABEL = { hero: 'When its button is clicked', button: 'When it’s clicked', form: 'When it’s sent', table: 'When a row is clicked', list: 'When a card is clicked', items: 'When an item is clicked', kanban: 'When a card is clicked', calendar: 'When an event or day is clicked', search: 'When Enter is pressed', input: 'When Enter is pressed' };
 export const eventLabel = type => EVENT_LABEL[type] || 'When it changes';
 // Every component can sit in a card.
 export const COMMON_FIELDS = [f('card', 'In a card', 'bool')];
@@ -225,7 +228,7 @@ a{color:var(--p)}
 .wl-page.stack .wl-c.fixed .wl-in{height:100%}
 .wl-h{margin:0;line-height:1.2}.wl-h.lg{font-size:30px}.wl-h.md{font-size:22px}.wl-h.sm{font-size:17px}
 .wl-t p{margin:0 0 8px}.wl-t ul{margin:0 0 8px;padding-left:20px}
-.wl-btn{font:inherit;font-weight:600;padding:9px 16px;border-radius:calc(var(--r) * .75);border:1.5px solid var(--p);background:var(--p);color:#fff;cursor:pointer;width:100%;min-height:40px}
+.wl-btn{font:inherit;font-weight:600;padding:9px 16px;border-radius:calc(var(--r) * .75);border:1.5px solid var(--p);background:var(--p);color:#fff;cursor:pointer;width:100%;min-height:36px}
 .wl-btn.secondary{background:transparent;color:var(--p)}
 .wl-btn.link{background:none;border-color:transparent;color:var(--p);text-decoration:underline}
 .wl-btn:disabled{opacity:.6;cursor:default}
@@ -260,6 +263,11 @@ a{color:var(--p)}
 .wl-auth .tabs{display:flex;gap:6px}.wl-auth .tabs button{flex:1;font:inherit;padding:7px;border:1px solid var(--ln);background:none;border-radius:8px;color:var(--tx);cursor:pointer}
 .wl-auth .tabs button.on{border-color:var(--p);color:var(--p);font-weight:600}
 .wl-c{z-index:1}.wl-c.behind{z-index:0}
+.wl-thread{display:flex;flex-direction:column;gap:4px;padding:6px 4px}
+.wl-tm{max-width:78%;align-self:flex-start;display:grid;gap:1px;padding:7px 12px;border-radius:16px 16px 16px 4px;background:color-mix(in srgb,var(--tx) 7%,var(--sf));margin-top:2px}
+.wl-tm b{font-size:12px;color:var(--p)}.wl-tm span{white-space:pre-wrap;overflow-wrap:anywhere}
+.wl-tm small{font-size:11px;opacity:.6;justify-self:end}
+.wl-tm.mine{align-self:flex-end;background:var(--p);color:#fff;border-radius:16px 16px 4px 16px}
 .wl-in{padding-left:2px;padding-right:2px}
 .wl-c.inpanel .wl-in{padding-left:14px;padding-right:14px}
 .lw-chart text{fill:var(--mt)}.lw-chart text.v{fill:var(--tx)}
@@ -371,7 +379,7 @@ a{color:var(--p)}
 
 /* The app itself, run in the page (its source is copied there, so it uses nothing from this module). */
 function runtime(SPEC, OPT) {
-  const ROW = 8, FIXED = { hero: 1, table: 1, chart: 1, image: 1, video: 1, html: 1, list: 1, chat: 1, kanban: 1, calendar: 1, embed: 1, map: 1, carousel: 1, json: 1, items: 1, box: 1, spacer: 1, gauge: 1, qr: 1 };
+  const ROW = 8, FIXED = { thread: 1, hero: 1, table: 1, chart: 1, image: 1, video: 1, html: 1, list: 1, chat: 1, kanban: 1, calendar: 1, embed: 1, map: 1, carousel: 1, json: 1, items: 1, box: 1, spacer: 1, gauge: 1, qr: 1 };
   const root = document.getElementById('wl-root');
   const S = { data: {}, vars: {}, errors: {}, loading: {}, user: null, page: null, spec: SPEC, stack: false, selected: {} };
   const fns = {};
@@ -435,12 +443,15 @@ function runtime(SPEC, OPT) {
     } catch (e) { S.errors[src.name] = e.message || String(e); }
     S.loading[src.name] = false; paint();
   }
-  let loaded = '';
+  let loaded = '', timers = [];
   function loadAuto() {
-    const key = JSON.stringify([(S.spec.data || []).filter(s => s.auto), S.page && S.page.id]);
+    const key = JSON.stringify([(S.spec.data || []).filter(s => s.auto || +s.every > 0), S.page && S.page.id, !!S.user]);
     if (key === loaded) return;
     loaded = key;
     for (const s of S.spec.data || []) if (s.auto && s.name) load(s);
+    // Sources that refresh by themselves (a chat, a live dashboard), quietly: no "Loading…" in between.
+    timers.forEach(clearInterval);
+    timers = (S.spec.data || []).filter(s => s.name && +s.every > 0).map(s => setInterval(() => { if (!document.hidden && !S.loading[s.name]) load(s); }, Math.max(2, +s.every) * 1000));
   }
 
   /* ---- steps: what a button, form, table or list does when used ---- */
@@ -491,7 +502,11 @@ function runtime(SPEC, OPT) {
         i.value = S.vars[c.name] ?? '';
         i.dataset.name = c.name;
         const set = () => { S.vars[c.name] = p.kind === 'number' && i.value !== '' ? +i.value : i.value; paint(c.id); };
-        i.oninput = set; i.onchange = () => { set(); if (c.type === 'select') steps(p.steps, S.vars[c.name]); };
+        // Typing redraws the rest of the page as it goes; leaving the box mustn't redraw again, or a click on
+        // a button next to it (Send) would land on a button that has just been replaced.
+        i.oninput = set;
+        if (c.type === 'select') i.onchange = () => { S.vars[c.name] = i.value; steps(p.steps, S.vars[c.name]); };
+        if (c.type === 'input' && p.kind !== 'long') i.onkeydown = e => { if (e.key === 'Enter' && p.steps && p.steps.length) { e.preventDefault(); set(); steps(p.steps, S.vars[c.name]); } };
         l.appendChild(i); box.appendChild(l); break;
       }
       case 'form': {
@@ -718,6 +733,25 @@ function runtime(SPEC, OPT) {
         };
         wrap.appendChild(fm); box.appendChild(wrap);
         box._draw = () => { log.scrollTop = log.scrollHeight; };
+        break;
+      }
+
+      case 'thread': {
+        if (failed.length) return note('wl-err', failed[0]);
+        const rows = rowsOf();
+        if (!rows.length) return note('wl-note center', waiting ? 'Loading…' : txt(p.empty));
+        const log = el('div', 'wl-thread'); log.setAttribute('role', 'log');
+        let last = null;
+        for (const r of rows.slice(-300)) {
+          const mine = !!val(p.mine, r), who = txt(p.from, r);
+          const m = el('div', 'wl-tm' + (mine ? ' mine' : ''));
+          if (!mine && who !== last) m.appendChild(el('b', '', who));
+          m.appendChild(el('span', '', txt(p.text, r)));
+          const t = txt(p.time, r); if (t) m.appendChild(el('small', '', t));
+          log.appendChild(m); last = mine ? null : who;
+        }
+        box.appendChild(log);
+        box._draw = () => { if (box.dataset.n !== String(rows.length)) box.scrollTop = box.scrollHeight; box.dataset.n = rows.length; };
         break;
       }
 

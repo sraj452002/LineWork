@@ -5,6 +5,7 @@ import { accountRoutes } from './accounts.js';
 import { createMailer } from './mail.js';
 import { DbError, handle as dbHandle } from './dbconnect.js';
 import { createFlows } from './flows.js';
+import { electronRoute } from './app-install.js';
 
 /* The Workline API: accounts, files with version history, folders, share links, live databases and the
    AI proxy with a daily allowance, all under /api. The frontend (../frontend) is hosted on its own and
@@ -73,6 +74,7 @@ export function createApp(store, opts = {}) {
   });
   const signedIn = (req, res, next) => (req.user ? next() : res.status(401).json({ error: 'unauthorized' }));
   flows.routes(api, signedIn);
+  electronRoute(api, signedIn, { base: opts.electronBase });
   const accounts = accountRoutes(api, { store, mailer, allowSignup, requireVerified, oauthConfig: oauth, appUrl, signedIn });
 
   // What this server offers. allowLocal: whether the app may be used without an account.

@@ -26,7 +26,7 @@ test('every component can be added and drawn, and the inputs hold what is picked
 
   // The palette: grouped, and searchable.
   const palette = page.getByLabel('Components', { exact: true });
-  for (const g of ['Basics', 'Inputs', 'Data', 'Status', 'Media', 'Layout', 'AI']) await expect(palette.getByText(g, { exact: true })).toBeVisible();
+  for (const g of ['Basics', 'Inputs', 'Data', 'Status', 'Media', 'Layout', 'Chat']) await expect(palette.getByText(g, { exact: true })).toBeVisible();
   await page.getByLabel('Find a component').fill('kanban');
   await expect(palette.locator('.vb-tile')).toHaveCount(1);
   await page.getByLabel('Find a component').fill('');

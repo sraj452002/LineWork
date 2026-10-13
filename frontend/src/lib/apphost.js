@@ -36,7 +36,13 @@ const SDK = mode => `window.workline = (() => {
   // The page has no storage of its own (it's a sandbox), so the session lives in window.name: it lasts
   // while the tab is open, through reloads, and isn't sent anywhere or shown in the address.
   const session = () => { try { const v = JSON.parse(window.name || '{}'); return v.wlSession || ''; } catch (e) { return ''; } };
-  const setSession = v => { window.name = v ? JSON.stringify({ wlSession: v }) : ''; };
+  // Installed (/api/ui/<token>/app), the page around it keeps the session between launches: it's handed
+  // in as #wls=…, and changes are sent back.
+  const setSession = (v, quiet) => {
+    window.name = v ? JSON.stringify({ wlSession: v }) : '';
+    if (!quiet && parent !== window) parent.postMessage({ workline: 'session', value: v || '' }, '*');
+  };
+  try { const h = /[#&]wls=([^&]+)/.exec(location.hash); if (h && !session()) setSession(decodeURIComponent(h[1]), true); } catch (e) { /* no hash */ }
   // Sign-in for apps that use it. In the editor's preview you're signed in as yourself.
   const answer = async r => { const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.message || 'That didn’t work.'); if (j.session) setSession(j.session); return j.user; };
   const auth = {

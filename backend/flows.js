@@ -8,6 +8,7 @@ import { POLL_EVERY, TRIGGER_TYPES } from './flow-triggers.js';
 import { WEB_NODES } from './flow-web.js';
 import { EXTRA_NODES } from './flow-extra.js';
 import { UI_NODES, renderPage } from './flow-ui.js';
+import { installRoutes } from './app-install.js';
 
 const TYPES = { ...NODE_TYPES, ...APP_NODES, ...WORKLINE_NODES, ...TRIGGER_TYPES, ...WEB_NODES, ...EXTRA_NODES, ...UI_NODES };
 import { DUMMY, checkPassword, hashPassword, limiter, newToken, tokenHash } from './auth.js';
@@ -321,6 +322,8 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
     res.set({ 'content-security-policy': 'sandbox allow-scripts allow-forms allow-popups allow-modals allow-downloads', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer' });
     res.type('html').send(String(a.file.ui.doc || a.file.ui.html || ''));
   });
+  // The app as an installable app (a PWA): /api/ui/<token>/app, with its manifest, icons and service worker.
+  installRoutes(ui, uiOf);
   // The page sends its JSON as text/plain, a request browsers make without asking first (no preflight).
   ui.post('/:token/run', express.text({ type: () => true, limit: '1mb' }), async (req, res) => {
     try { req.body = typeof req.body === 'string' && req.body ? JSON.parse(req.body) : {}; } catch (e) { return res.status(400).json({ error: 'bad_json', message: 'Send JSON: {workflow, input}.' }); }
@@ -354,13 +357,17 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
      (only the emails in file.ui.allow). Their accounts belong to the app, apart from Workline's:
      m.appUsers['<uid>:<fileId>'][email] = {hash, name, created}; sessions are m.appSessions[hash] =
      {uid, fileId, email, exp}. The page keeps its session in window.name (it has no storage of its own). */
-  const APP_SESSION_DAYS = 30;
+  // A session lasts a year from when it was last used: people who use an app stay signed in.
+  const APP_SESSION_DAYS = 365;
   const accessOf = file => (['signin', 'invite'].includes(file?.ui?.access) ? file.ui.access : 'public');
   const allowedEmail = (file, email) => accessOf(file) !== 'invite' || (Array.isArray(file.ui.allow) ? file.ui.allow : []).map(e => String(e).trim().toLowerCase()).includes(email);
   const usersOf = (uid, fileId) => ((m.appUsers ||= {})[`${uid}:${fileId}`] ||= {});
   const endUser = (a, session) => {
     const s = session && (m.appSessions || {})[tokenHash(session)];
     if (!s || s.uid !== a.uid || s.fileId !== a.fileId || s.exp < Date.now()) return null;
+    // Used: push its end back (saved at most once a day per session).
+    const exp = Date.now() + APP_SESSION_DAYS * 86_400_000;
+    if (exp - s.exp > 86_400_000) { s.exp = exp; store.touch(); }
     const u = usersOf(a.uid, a.fileId)[s.email];
     return u && allowedEmail(a.file, s.email) ? { email: s.email, name: u.name || s.email.split('@')[0] } : null;
   };

@@ -55,6 +55,79 @@ test.describe('an exported app', () => {
   });
 });
 
+test.describe('an installed app (PWA)', () => {
+  test.describe.configure({ mode: 'serial' });
+  let app, srv, base, cookie = '';
+  const TOKEN = 'installed' + 'x'.repeat(24);
+  test.beforeAll(async () => {
+    app = createApp(await openStore(memoryBackend()), { requireVerified: false });
+    srv = app.listen(0);
+    base = `http://localhost:${srv.address().port}/api`;
+  });
+  test.afterAll(() => { srv?.close(); app?.flows.close(); });
+  const call = async (method, path, body) => {
+    const r = await fetch(base + path, { method, headers: { 'content-type': 'application/json', ...(cookie ? { cookie } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
+    const set = r.headers.get('set-cookie'); if (set) cookie = set.split(';')[0];
+    return { status: r.status, json: await r.json().catch(() => null) };
+  };
+
+  test('has a manifest, icons and a service worker, and keeps people signed in between launches', async ({ page }) => {
+    await call('POST', '/auth/signup', { email: 'pwa@example.com', password: 'a long password' });
+    const { appDoc } = await import('../frontend/src/lib/apphost.js');
+    const spec = ab.newVisualApp('Team Hub', 'Team Hub');
+    spec.theme.primary = '#0e7490';
+    const html = ab.builderHtml(spec, { access: 'signin' });
+    const flow = { active: false, nodes: [{ id: 't', type: 'trigger.manual', name: 'Run by hand', x: 0, y: 0, params: {} }, { id: 'c', type: 'core.code', name: 'Rows', x: 200, y: 0, params: { language: 'javascript', code: 'return [{ hello: items[0].user.email }];' } }], edges: [{ id: 'e', from: 't', fromPort: 'main', to: 'c', toPort: 'main' }] };
+    expect((await call('PUT', '/files/f_pwa', { id: 'f_pwa', title: 'Team Hub', diagrams: [], doc: '', updated: Date.now(), flow, ui: { mode: 'visual', spec, access: 'signin', html, doc: appDoc(html, { workflows: [{ id: 'f_pwa', name: 'Team Hub' }], title: 'Team Hub' }), flows: ['f_pwa'], published: true, token: TOKEN } })).status).toBe(200);
+
+    const manifest = await (await fetch(`${base}/ui/${TOKEN}/manifest.webmanifest`)).json();
+    expect(manifest).toMatchObject({ name: 'Team Hub', display: 'standalone', start_url: `/api/ui/${TOKEN}/app`, scope: `/api/ui/${TOKEN}/`, theme_color: '#0e7490' });
+    expect(manifest.icons.map(i => i.sizes)).toEqual(['192x192', '512x512']);
+    const icon = Buffer.from(await (await fetch(`${base}/ui/${TOKEN}/icon-512.png`)).arrayBuffer());
+    expect(icon.subarray(1, 4).toString()).toBe('PNG');
+    expect(icon.readUInt32BE(16)).toBe(512);
+    const sw = await fetch(`${base}/ui/${TOKEN}/sw.js`);
+    expect(sw.headers.get('content-type')).toMatch(/javascript/);
+    expect((await fetch(`${base}/ui/${'nothere'.repeat(4)}/app`)).status).toBe(404);
+
+    // Installed: the page around the app; sign in once, and it remembers.
+    await page.goto(`${base}/ui/${TOKEN}/app`);
+    await expect(page.locator('link[rel=manifest]')).toHaveAttribute('href', `/api/ui/${TOKEN}/manifest.webmanifest`);
+    const app = page.frameLocator('#app');
+    await app.getByRole('button', { name: 'Create account' }).first().click();
+    await app.getByLabel('Email').fill('member@example.com');
+    await app.getByLabel('Password').fill('a long password');
+    await app.locator('form').getByRole('button', { name: 'Create account' }).last().click();
+    await expect(app.locator('.wl-tbl')).toContainText('member@example.com');
+    await page.reload();
+    await expect(page.frameLocator('#app').locator('.wl-tbl')).toContainText('member@example.com'); // still signed in
+    await page.frameLocator('#app').getByText('Sign out').click();
+    await page.reload();
+    await expect(page.frameLocator('#app').getByRole('button', { name: 'Sign in' }).last()).toBeVisible();
+  });
+});
+
+test('the Electron route passes Electron’s build through, to signed-in people', async () => {
+  const JSZip = (await import('node:module')).createRequire(import.meta.url)('../frontend/node_modules/jszip');
+  const zip = new JSZip(); zip.file('electron.exe', 'MZ fake'); zip.file('resources/default_app.asar', 'x'); zip.file('LICENSE', 'MIT');
+  const body = await zip.generateAsync({ type: 'nodebuffer' });
+  const { createServer } = await import('node:http');
+  let asked = '';
+  const gh = createServer((req, res) => { asked = req.url; res.writeHead(200, { 'content-type': 'application/zip', 'content-length': body.length }); res.end(body); }).listen(0);
+  const app = createApp(await openStore(memoryBackend()), { requireVerified: false, electronBase: `http://localhost:${gh.address().port}` });
+  const srv = app.listen(0), base = `http://localhost:${srv.address().port}/api`;
+  try {
+    expect((await fetch(`${base}/electron/win32-x64`)).status).toBe(401);
+    const up = await fetch(`${base}/auth/signup`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'e@example.com', password: 'a long password' }) });
+    const cookie = up.headers.get('set-cookie').split(';')[0];
+    expect((await fetch(`${base}/electron/darwin-arm64`, { headers: { cookie } })).status).toBe(404);
+    const r = await fetch(`${base}/electron/win32-x64`, { headers: { cookie } });
+    expect(r.status).toBe(200);
+    expect(asked).toBe('/v31.7.7/electron-v31.7.7-win32-x64.zip');
+    expect(Buffer.from(await r.arrayBuffer()).equals(body)).toBe(true);
+  } finally { srv.close(); app.flows.close(); gh.close(); }
+});
+
 test('the Android project is a complete Gradle project with its page and a build on GitHub', () => {
   const ui = { html: '<h1>Hi</h1>' };
   const files = ex.androidFiles(ui, { title: 'My Shop!', workflows: [], base: 'https://example.com/api/ui/abc' });

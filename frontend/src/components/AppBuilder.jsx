@@ -15,6 +15,8 @@ const VisualBuilder = lazy(() => import('./VisualBuilder.jsx'));
    design in file.ui.spec, made into html by lib/appbuilder.js), or Code, by writing it. A visual app can
    ask people to sign in first (file.ui.access, file.ui.allow). */
 
+const LIVE_TEXT = { checking: '● Checking…', live: '● Live', waking: '● Server waking up…', missing: '● Not live' };
+const LIVE_HELP = { checking: 'Checking that the link works', live: 'The link works: anyone with it can use the app', waking: 'The Workline server is starting (a free server sleeps when idle); the link will work in a minute', missing: 'The link isn’t answering yet: wait for “Saved”, or reload' };
 const hasFlow = f => !!(f && f.flow && Array.isArray(f.flow.nodes) && f.flow.nodes.length);
 
 export default function AppBuilder({ file, update, files = [], onGuide, assist }) {
@@ -42,6 +44,27 @@ export default function AppBuilder({ file, update, files = [], onGuide, assist }
   useEffect(() => { if (!file.ui) write({ mode: 'visual', spec: newVisualApp(file.title || 'My app', hasFlow(file) ? file.title : ''), flows: hasFlow(file) ? [file.id] : [] }); }, [file.ui]); // eslint-disable-line react-hooks/exhaustive-deps
   const visual = !!(file.ui && file.ui.mode === 'visual' && file.ui.spec);
   const [previewing, setPreviewing] = useState(false);
+  const [building, setBuilding] = useState('');
+  // Is the published link answering? Checked when the app opens published, and after publishing.
+  const [live, setLive] = useState(null), [liveCheck, setLiveCheck] = useState(0);
+  const liveLink = file.ui && file.ui.published && file.ui.token ? `${location.origin}/api/ui/${file.ui.token}` : '';
+  useEffect(() => {
+    if (!liveLink) { setLive(null); return undefined; }
+    let stop = false, tries = 0;
+    setLive('checking');
+    const check = async () => {
+      if (stop) return;
+      try {
+        const r = await fetch(liveLink, { method: 'GET', cache: 'no-store' });
+        if (stop) return;
+        if (r.ok) return setLive('live');
+        if (++tries < 12) return setTimeout(check, 2500); // still saving
+        setLive('missing');
+      } catch (e) { if (!stop) { setLive('waking'); if (++tries < 30) setTimeout(check, 4000); } }
+    };
+    check();
+    return () => { stop = true; };
+  }, [liveLink, liveCheck]);
 
   const [server, setServer] = useState(undefined);
   useEffect(() => { hasFeature('flows').then(setServer); }, []);
@@ -143,6 +166,13 @@ ${ui ? ui.html : ''}`,
   };
   if (!ui) return null;
   const link = ui.published && ui.token ? `${location.origin}/api/ui/${ui.token}` : '';
+  // Publishing saves at once, so the link works straight away; it stays published, at the same link, until
+  // it's turned off here (which asks first).
+  const setPublished = async on => {
+    if (!on && !await ask({ title: 'Stop publishing this app?', text: 'Its link stops working for everyone, and exported apps stop reaching their workflows. Turn Publish on again and the same link works again.', input: false, ok: 'Unpublish' })) return;
+    write({ published: on, token: ui.token || secretPath() + secretPath().slice(0, 8) });
+    if (on) { setTimeout(() => dispatchEvent(new Event('workline:save')), 60); setLiveCheck(n => n + 1); }
+  };
   const toggle = id => write({ flows: granted.includes(id) ? granted.filter(x => x !== id) : [...granted, id] });
   const pickFlows = el => popup(el, choices.length
     ? choices.map(c => ({ label: c.name, on: granted.includes(c.id), act: () => toggle(c.id) }))
@@ -168,11 +198,33 @@ ${ui ? ui.html : ''}`,
       if (!await ask({ title: 'Publish the app first?', text: 'An exported app runs its workflows through the app’s published link, so it needs to be published. Anyone with the link (or the exported app) can use it.', input: false, ok: 'Publish and export' })) return;
       token = token || secretPath() + secretPath().slice(0, 8);
       write({ published: true, token });
+      setTimeout(() => dispatchEvent(new Event('workline:save')), 60);
+      setLiveCheck(n => n + 1);
     }
     const opts = { title, workflows, base: `${location.origin}/api/ui/${token}` };
     const ex = await import('../lib/appexport.js');
     const name = ex.slugOf(title);
     if (kind === 'html') { ex.exportHtml(ui, opts); toast('Web page downloaded'); return; }
+    if (kind === 'install') {
+      const at = `${location.origin}/api/ui/${token}/app`;
+      const ok = await ask({ title: 'Install it as an app', value: at, ok: 'Copy the link',
+        text: 'Open this link on the phone or computer, then: on Android (Chrome), ⋮ → Install app: it goes in the app drawer like any app. On iPhone (Safari), Share → Add to Home Screen. On a computer (Chrome or Edge), the install icon in the address bar. It updates by itself when you change the app.' });
+      if (ok) { navigator.clipboard?.writeText(at); toast('Link copied'); }
+      return;
+    }
+    if (kind === 'win32-x64' || kind === 'linux-x64') {
+      if (building) return;
+      try {
+        setBuilding('Getting ready…');
+        await ex.readyDesktop(ui, opts, kind, (pct, what) => setBuilding(`${what} ${pct}%`));
+        setBuilding('');
+        await ask({ title: kind === 'win32-x64' ? 'Windows app downloaded' : 'Linux app downloaded', input: false, ok: 'Got it',
+          text: kind === 'win32-x64'
+            ? `Unzip it, then double-click “${title}.exe” inside. Windows may say it protected your PC, as the app isn’t code-signed: press More info → Run anyway. Keep the .exe with the files beside it; to find it easily, right-click it → Pin to Start.`
+            : 'Unzip it, then run the program inside (chmod +x it first if needed).' });
+      } catch (err) { setBuilding(''); toast(err.message || 'Couldn’t build the app.'); }
+      return;
+    }
     await ex.exportZip(kind === 'android' ? ex.androidFiles(ui, opts) : ex.desktopFiles(ui, opts), kind === 'android' ? `${name}-android` : `${name}-desktop`);
     await ask({
       title: kind === 'android' ? 'Android project downloaded' : 'Desktop project downloaded', input: false, ok: 'Got it',
@@ -180,6 +232,9 @@ ${ui ? ui.html : ''}`,
     });
   };
   const exportMenu = el => popup(el, [
+    { label: 'Windows app (.exe, ready to run)', act: () => exportAs('win32-x64') },
+    { label: 'Install on a phone or computer (Android, iPhone, Chrome)', act: () => exportAs('install') },
+    { label: 'Linux app (ready to run)', act: () => exportAs('linux-x64') },
     { label: 'Android app (project for an .apk)', act: () => exportAs('android') },
     { label: 'Windows, Mac & Linux app (project for an .exe)', act: () => exportAs('desktop') },
     { label: 'Web page (.html file)', act: () => exportAs('html') },
@@ -200,7 +255,7 @@ ${ui ? ui.html : ''}`,
           ? <button className={'btn' + (previewing ? ' dark' : '')} aria-pressed={previewing} onClick={() => { setShown(ui.html); setPreviewing(v => !v); setReload(n => n + 1); }}>{previewing ? '✎ Edit' : '▶ Preview'}</button>
           : <button className="btn" aria-haspopup="menu" onClick={e => startFrom(e.currentTarget)}>Start from ▾</button>}
         <button className="btn" onClick={() => setReload(n => n + 1)} title="Load the preview again">↻ Reload</button>
-        <button className="btn" aria-haspopup="menu" onClick={e => exportMenu(e.currentTarget)} title="Download the app as a web page, an Android app or a desktop app">Export ▾</button>
+        <button className="btn" aria-haspopup="menu" disabled={!!building} onClick={e => exportMenu(e.currentTarget)} title="Make it a Windows or Linux app, install it on a phone, or download it as a project or a web page">{building ? `⏳ ${building}` : 'Export ▾'}</button>
         {onGuide && <button className="btn" onClick={() => onGuide('apps')} title="How custom apps work: workline.run, helpers, publishing">? Guide</button>}
         <span className="ab-sp" />
         {link && <>
@@ -208,8 +263,9 @@ ${ui ? ui.html : ''}`,
           <button className="btn" onClick={() => { navigator.clipboard?.writeText(link); toast('Link copied'); }}>Copy</button>
           <a className="btn" href={link} target="_blank" rel="noreferrer">Open</a>
         </>}
-        <label className={'fv-active' + (ui.published ? ' on' : '')} title="Anyone with the link can use the app, and run its workflows with your credentials">
-          <input type="checkbox" checked={!!ui.published} disabled={server === false} onChange={e => write({ published: e.target.checked, token: ui.token || secretPath() + secretPath().slice(0, 8) })} />
+        {ui.published && live && <span className={'ab-live ' + live} role="status" title={LIVE_HELP[live]}>{LIVE_TEXT[live]}</span>}
+        <label className={'fv-active' + (ui.published ? ' on' : '')} title="Stays published, at the same link, until you turn it off. Anyone with the link can use the app, and run its workflows with your credentials">
+          <input type="checkbox" checked={!!ui.published} disabled={server === false} onChange={e => setPublished(e.target.checked)} />
           <i />{ui.published ? 'Published' : 'Publish'}
         </label>
       </div>

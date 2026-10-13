@@ -187,21 +187,23 @@ The **App** view starts in **Visual**: build an app for other people by dragging
   - *AI*: an AI chat that sends `{message, history}` to a workflow and shows its answer.
 
   Click to add, or drag onto the page. Drag a box to move it on the 12-column grid, its edges or corner to resize; Delete removes, Ctrl+D copies, arrows nudge. **Properties** (right) set what each one shows.
-- **Data**: a data source runs a workflow (when the app opens, or from a button) and keeps its output as `data.<name>`. Any text can show data with `{{ … }}`: `{{ data.orders }}` for a table's rows, `{{ data.orders.length }}`, `{{ vars.input1 }}` (what's typed in an input, the row clicked in a table), `{{ user.name }}`.
+- **Data**: a data source runs a workflow (when the app opens, from a button, or every few seconds for live data like a chat) and keeps its output as `data.<name>`. Any text can show data with `{{ … }}`: `{{ data.orders }}` for a table's rows, `{{ data.orders.length }}`, `{{ vars.input1 }}` (what's typed in an input, the row clicked in a table), `{{ user.name }}`.
 - **Steps**: buttons, forms, tables, lists, kanban cards, calendar days, and inputs when they change (dropdowns, switches, sliders…) run steps: refresh a data source, run a workflow (with the form's answers or the clicked row, keeping the result as `data.<name>`), set a value, go to a page, show a message, open a link, sign out. A table row that opens a details page is two clicks.
 - **Pages**: `+ Page` adds one; each can be in the app's menu (top or side). **App** sets the name, theme (presets, colours, corners, font) and who can use it.
 - **Who can use it**: anyone with the link, people who sign in (anyone can make an account), or only people you invite (a list of emails). Accounts belong to the app, not to Workline; you see them and can remove them under **App**. Each workflow run gets who it's for as `{{ $json.user.email }}`, set by the server, so a workflow can show people only their own data.
 - **Phone**: on a narrow screen the components stack, top to bottom; **Phone** in the builder shows it.
 - **Preview** runs the app as people will see it (signed in as you). The AI panel can build or change the whole app from a description.
 
-- **Export ▾** (visual or code apps) downloads the app to run outside Workline. It still runs its workflows through its published link (`window.WORKLINE_BASE`), so the app is published first:
+- **Export ▾** (visual or code apps) makes the app run outside Workline. It still runs its workflows through its published link (`window.WORKLINE_BASE`), so the app is published first:
+  - *Windows app (.exe, ready to run)* and *Linux app*: a zip with the app inside Electron's official build, named after the app: unzip and double-click `<App>.exe`. The server passes Electron's release through (`GET /api/electron/win32-x64`, signed in; a browser can't fetch GitHub's releases itself) and the browser puts the app in it (`readyDesktop` in `frontend/src/lib/appexport.js`), so nothing is compiled. Not code-signed: Windows asks once (More info → Run anyway).
+  - *Install on a phone or computer*: `/api/ui/<token>/app` is an installable page (a PWA: manifest, icons, a service worker; `backend/app-install.js`) with the app in its sandboxed frame. On Android, Chrome → Install app puts it in the app drawer like any app (Chrome builds a WebAPK); on iPhone, Share → Add to Home Screen; on a computer, the install button in Chrome or Edge. It updates when you change the app, and keeps people signed in between launches.
   - *Android app*: a Gradle project, the page in a full-screen WebView, with a GitHub Actions workflow (`.github/workflows/build-android.yml`) that builds the `.apk`: upload the folder to a GitHub repository and download the APK from the run's Artifacts. Or open it in Android Studio.
   - *Windows, Mac & Linux app*: an Electron project; its workflow builds a Windows installer and portable `.exe`, a Mac `.dmg` and a Linux `.AppImage`. Or `npm install && npm run dist`.
   - *Web page*: one `.html` file to host anywhere.
 
   A browser can't compile an `.apk` or `.exe` itself, hence the projects with a cloud build; each has a README (`frontend/src/lib/appexport.js`).
 
-The design is saved in `file.ui.spec`; `frontend/src/lib/appbuilder.js` turns it into the page (a small runtime with the design as JSON), published like any custom app below. Sign-in: `POST /api/ui/<token>/signup`, `/login`, `/me`, `/logout`; sessions last 30 days and live in the page's `window.name` (the sandboxed page has no storage), so they survive reloads in that tab.
+The design is saved in `file.ui.spec`; `frontend/src/lib/appbuilder.js` turns it into the page (a small runtime with the design as JSON), published like any custom app below. **Publish** keeps the app published, at the same link, until you turn it off (which asks first): the link is saved with the file on the server and survives restarts and edits. Publishing saves at once and checks the link (● Live). On a free Render server the first visit after it has slept takes about a minute. Sign-in: `POST /api/ui/<token>/signup`, `/login`, `/me`, `/logout`; a session lasts a year from its last use and lives in the page's `window.name` (the sandboxed page has no storage), so they survive reloads in that tab.
 
 ## Custom apps
 
@@ -235,7 +237,7 @@ The Code view's **Run** button, **Terminal** and **Python** prompt run code in t
 | Databases | Online shop, Blog, SaaS accounts and billing (schemas, drawn) |
 | Code | Node.js REST API, Python data analysis, Landing page, TypeScript utility with tests |
 | Workflows | Daily AI news digest, Lead capture with AI, Support ticket triage, Weekly sales report, Failure alerts |
-| Apps | Sales command center (dark dashboard, pipeline board, calendar), Stay finder (travel site with filters, map and booking), Fitness journal (gauges, habits, countdown), AI help center (Claude chat, FAQ, guides), Order tracker (sign-in), Feedback analyzer, KPI dashboard, Video streaming app |
+| Apps | Ecommerce store (catalogue, product pages, cart, checkout), Food ordering app (restaurants, menus, cart, order tracking), StreamBox (video streaming with My list), Chat app (sign-in, rooms, live messages), Sales command center, Stay finder, Fitness journal, AI help center, Order tracker, Feedback analyzer, KPI dashboard, Video streaming app (code) |
 | Pages | Sales dashboard page, Feedback form page, Video library page |
 
 Templates that need an account of yours (Slack, email, a database connection, a sheet to add rows to) are wired up and named; pick the credential or file on the node. Below them are the workflows you saved with **Template**.

@@ -288,6 +288,7 @@ export default function VisualBuilder({ spec, onChange, access, allow, onAccess,
                   </select>
                   <Pairs label="Send" value={d.input} onChange={v => setSource(d.id, { input: v })} />
                   <label className="vb-check"><input type="checkbox" checked={!!d.auto} onChange={e => setSource(d.id, { auto: e.target.checked })} /> Run when the app opens</label>
+                  <label className="vb-field"><span>Refresh every (seconds; blank: never)</span><input type="number" min="2" aria-label="Refresh every" value={d.every || ''} onChange={e => setSource(d.id, { every: e.target.value === '' ? '' : Math.max(2, +e.target.value) })} /></label>
                 </div>
               ))}
               <button className="btn" onClick={addSource}>+ Add a data source</button>
