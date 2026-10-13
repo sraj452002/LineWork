@@ -61,7 +61,7 @@ return [
     const b = await box.boundingBox();
     await page.mouse.move(b.x + 20, b.y + 10);
     await page.mouse.down();
-    await page.mouse.move(b.x + 20 + b.width / 12 * 2 + 4, b.y + 10, { steps: 6 });
+    await page.mouse.move(b.x + 20 + b.width / 6 * 2 + 4, b.y + 10, { steps: 6 });
     await page.mouse.up();
     await expect(props.getByLabel('Column')).toHaveValue('2');
 
