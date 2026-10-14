@@ -2639,3 +2639,33 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .ab-live.live{color:#15803d;background:color-mix(in srgb,#22c55e 14%,var(--surface))}
 .ab-live.checking,.ab-live.waking{color:#a16207;background:color-mix(in srgb,#eab308 14%,var(--surface))}
 .ab-live.missing{color:#b91c1c;background:color-mix(in srgb,#ef4444 12%,var(--surface))}
+
+/* ---- a run, on the canvas: the node running glows with light orbiting its own outline (any shape);
+   data runs along the string into it as beads; done strings get a pluck, done nodes a pop ---- */
+@property --fv-a{syntax:'<angle>';inherits:false;initial-value:0deg}
+.fv-node.waiting::after{display:none}
+.fv-node.queued{opacity:.72;transition:opacity .2s}
+.fv-node.active{animation:fv-breathe 1.6s ease-in-out infinite}
+.fv-node.active::before{content:"";position:absolute;inset:-4px;border-radius:22px;padding:2.5px;pointer-events:none;
+  background:conic-gradient(from var(--fv-a),transparent 0 52%,color-mix(in srgb,var(--c-blue) 45%,transparent) 68%,var(--c-blue) 84%,#fff 88%,transparent 92%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0);
+  animation:fv-orbit 1.15s linear infinite}
+.fv-node.trigger.active::before{border-radius:36px 22px 22px 36px}
+@keyframes fv-orbit{to{--fv-a:360deg}}
+@keyframes fv-breathe{0%,100%{box-shadow:0 6px 18px -10px rgba(0,0,0,.5)}50%{box-shadow:0 0 0 1px color-mix(in srgb,var(--c-blue) 30%,transparent),0 0 26px 2px color-mix(in srgb,var(--c-blue) 32%,transparent)}}
+.fv-node.s-success{animation:fv-pop .5s cubic-bezier(.3,1.7,.5,1)}
+.fv-node.s-error{animation:fv-shake .42s ease-in-out}
+@keyframes fv-pop{40%{transform:scale(1.09)}}
+@keyframes fv-shake{20%,60%{transform:translateX(-4px)}40%,80%{transform:translateX(4px)}}
+.fv-bead{fill:#fff;stroke:var(--c-blue);stroke-width:2;filter:drop-shadow(0 0 4px var(--c-blue));pointer-events:none}
+.fv-edge.feeding .line{stroke:color-mix(in srgb,var(--c-blue) 70%,transparent);stroke-width:2.6;stroke-dasharray:none;animation:none}
+.fv-edge.lit .line{animation:fv-pluck .7s ease-out,lw-march 3s linear .7s infinite}
+@keyframes fv-pluck{0%{stroke-width:6;stroke:#fff}35%{stroke-width:4}100%{stroke-width:2}}
+@media (prefers-reduced-motion:reduce){.fv-node.active,.fv-node.active::before,.fv-node.s-success,.fv-node.s-error,.fv-edge.lit .line{animation:none}.fv-node.active::before{background:var(--c-blue)}}
+
+/* A string's bend handle: shows on hover or when the string is picked; a bent string keeps a small dot. */
+.fv-bend{fill:var(--surface);stroke:var(--c-blue);stroke-width:2;cursor:grab;opacity:0;transition:opacity .15s,r .15s;pointer-events:auto}
+.fv-edge:hover .fv-bend,.fv-edge.on .fv-bend{opacity:1}
+.fv-bend.bent{opacity:.55}
+.fv-bend:hover{r:9}
+.fv-bend:active{cursor:grabbing;fill:var(--c-blue)}

@@ -462,6 +462,66 @@ export const NODES = {
     fields: [{ k: 'list', label: 'Stories', kind: 'select', options: [['top', 'Top'], ['new', 'New'], ['best', 'Best'], ['ask', 'Ask HN'], ['show', 'Show HN']] }, { k: 'limit', label: 'How many', kind: 'number' }], defaults: () => ({ list: 'top', limit: 10 }) },
   'data.weather': { group: 'Storage & feeds', label: 'Weather', note: 'Current weather anywhere (Open-Meteo)', icon: I.sun, tone: 'sky', fields: [{ k: 'latitude', label: 'Latitude', kind: 'text', hint: '28.61' }, { k: 'longitude', label: 'Longitude', kind: 'text', hint: '77.21' }] },
 };
+// The Code block (UI): a part of the page in your own HTML, React or Vue. It runs in a frame of its own,
+// with `items` (what reached the node); a starter for each framework, swapped in when the code is untouched.
+export const CODE_BLOCKS = {
+  react: { label: 'React (JSX)', starter: `// A React component, App. It gets items: what reached this node.
+function App({ items }) {
+  const [picked, setPicked] = React.useState(null);
+  return (
+    <div style={{ fontFamily: 'system-ui', color: '#f5f5f7' }}>
+      <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 8 }}>
+        {items.map((it, i) => (
+          <button key={i} onClick={() => setPicked(it)}
+            style={{ flex: 'none', padding: '12px 16px', borderRadius: 12, border: 0, cursor: 'pointer',
+              background: picked === it ? '#1f80e0' : '#1c1f29', color: '#fff', fontWeight: 600 }}>
+            {it.title || it.name || 'Item ' + (i + 1)}
+          </button>
+        ))}
+      </div>
+      <p>{picked ? <>You picked <b>{picked.title || picked.name}</b></> : 'Pick one.'}</p>
+    </div>
+  );
+}` },
+  vue: { label: 'Vue', starter: `// A Vue component, App. items (what reached this node) is there in its template.
+const App = {
+  data: () => ({ picked: null }),
+  template: \`
+    <div style="font-family: system-ui; color: #f5f5f7">
+      <button v-for="(it, i) in items" :key="i" @click="picked = it"
+        :style="{ margin: '0 8px 8px 0', padding: '12px 16px', borderRadius: '12px', border: 0, cursor: 'pointer',
+          background: picked === it ? '#1f80e0' : '#1c1f29', color: '#fff', fontWeight: 600 }">
+        {{ it.title || it.name || 'Item ' + (i + 1) }}
+      </button>
+      <p v-if="picked">You picked <b>{{ picked.title || picked.name }}</b></p>
+    </div>\`,
+};` },
+  html: { label: 'HTML, CSS and JavaScript', starter: `<!-- Your own HTML, CSS and JavaScript. items holds what reached this node. -->
+<style>
+  body { font-family: system-ui; color: #f5f5f7; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+  .card { padding: 14px; border-radius: 12px; background: #1c1f29; }
+</style>
+<div class="grid" id="grid"></div>
+<script>
+  document.getElementById('grid').append(...items.map(i => {
+    const d = document.createElement('div');
+    d.className = 'card';
+    d.textContent = i.title || i.name || JSON.stringify(i);
+    return d;
+  }));
+</script>` },
+};
+NODES['ui.code'] = { group: 'UI', label: 'Code block', note: 'Your own HTML, React or Vue on the page', icon: I.code, tone: 'sky',
+  fields: [
+    { k: 'framework', label: 'Write it in', kind: 'select', options: Object.entries(CODE_BLOCKS).map(([k, v]) => [k, v.label]) },
+    { k: 'code', label: 'Code', kind: 'code', hintFor: p => (CODE_BLOCKS[p.framework] || CODE_BLOCKS.react).starter.split('\n')[0] },
+    { k: 'height', label: 'Height (px)', kind: 'number' },
+    { k: 'title', label: 'Name for screen readers', kind: 'text' },
+  ],
+  help: 'The code runs in a frame of its own on the page, with items: the items reaching this node. React and Vue load from a CDN. It can’t see the page, cookies or the person’s sign-in. {{ }} in the code is left as it is (for React and Vue).',
+  onSet: (k, v, before) => (k === 'framework' && (!String(before.code || '').trim() || before.code === (CODE_BLOCKS[before.framework] || CODE_BLOCKS.react).starter) ? { code: CODE_BLOCKS[v].starter } : null),
+  defaults: () => ({ framework: 'react', code: CODE_BLOCKS.react.starter, height: 320, title: 'Code block' }) };
 // Every UI node can be styled: CSS for its block (it also gets a class from its name, .n-<name>, for the
 // Page CSS to reach it).
 for (const [k, def] of Object.entries(NODES)) if (k.startsWith('ui.')) def.fields = [...(def.fields || []), { k: 'css', label: 'Style (CSS, optional)', kind: 'textarea', hint: 'background: #16213e; border-radius: 16px; padding: 16px' }];

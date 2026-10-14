@@ -36,6 +36,14 @@ function Mark({ d, size = 18 }) {
 }
 const badge = d => 'fv-badge' + (d.logo && LOGOS[d.logo] ? ' logo' : '');
 const curve = (x1, y1, x2, y2) => { const dx = Math.max(40, Math.abs(x2 - x1) / 2); return `M${x1} ${y1}C${x1 + dx} ${y1} ${x2 - dx} ${y2} ${x2} ${y2}`; };
+// A string bent by hand: it passes through its middle moved by bend {x, y}, smoothly (level there).
+const bendAt = (x1, y1, x2, y2, bend) => ({ x: (x1 + x2) / 2 + (bend?.x || 0), y: (y1 + y2) / 2 + (bend?.y || 0) });
+const bentCurve = (x1, y1, x2, y2, bend) => {
+  if (!bend || (!bend.x && !bend.y)) return curve(x1, y1, x2, y2);
+  const m = bendAt(x1, y1, x2, y2, bend);
+  const a = Math.max(30, Math.abs(m.x - x1) / 2), b = Math.max(30, Math.abs(x2 - m.x) / 2), h = Math.max(24, Math.abs(x2 - x1) / 5);
+  return `M${x1} ${y1}C${x1 + a} ${y1} ${m.x - h} ${m.y} ${m.x} ${m.y}C${m.x + h} ${m.y} ${x2 - b} ${y2} ${x2} ${y2}`;
+};
 const typing = e => /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.target.isContentEditable;
 const ago = t => { const s = Math.round((Date.now() - t) / 1000); return s < 60 ? `${s}s ago` : s < 3600 ? `${Math.round(s / 60)} min ago` : s < 86400 ? `${Math.round(s / 3600)} h ago` : new Date(t).toLocaleDateString(); };
 
@@ -56,6 +64,7 @@ export default function FlowView({ file, update, visible, saveState = 'Saved', o
   const [view, setView] = useState({ x: 60, y: 60, k: 1 });
   const [sel, setSel] = useState(null);       // {kind: 'node' | 'edge', id}
   const [drag, setDrag] = useState(null);     // a node being moved: {id, x, y}
+  const [bending, setBending] = useState(null); // a string being bent: {id, sx, sy, bx, by, x, y}
   const [wire, setWire] = useState(null);     // a connection being drawn: {from, port, x1, y1, x2, y2}
   const [pan, setPan] = useState(null);
   const [palette, setPalette] = useState(null); // {x, y, from?: {id, port}} in canvas coordinates
@@ -138,11 +147,12 @@ export default function FlowView({ file, update, visible, saveState = 'Saved', o
 
   /* ---- pointer: panning, moving nodes, drawing connections ---- */
   useEffect(() => {
-    if (!drag && !wire && !pan) return undefined;
+    if (!drag && !wire && !pan && !bending) return undefined;
     const move = e => {
       if (pan) setView(v => ({ ...v, x: pan.vx + e.clientX - pan.sx, y: pan.vy + e.clientY - pan.sy }));
       if (drag) { const p = toCanvas(e.clientX, e.clientY); setDrag(d => ({ ...d, x: Math.round(p.x - d.ox), y: Math.round(p.y - d.oy), moved: true })); }
       if (wire) { const p = toCanvas(e.clientX, e.clientY); setWire(w => ({ ...w, x2: p.x, y2: p.y })); }
+      if (bending) { const p = toCanvas(e.clientX, e.clientY); setBending(b => ({ ...b, x: Math.round(b.bx + p.x - b.sx), y: Math.round(b.by + p.y - b.sy), moved: true })); }
     };
     const up = e => {
       if (drag && drag.moved) change(f => { const n = f.nodes.find(x => x.id === drag.id); if (n) { n.x = drag.x; n.y = drag.y; } });
@@ -151,7 +161,8 @@ export default function FlowView({ file, update, visible, saveState = 'Saved', o
         if (target) connect(wire.from, wire.port, target.dataset.node, target.dataset.in);
         else if (Math.hypot(wire.x2 - wire.x1, wire.y2 - wire.y1) > 30) setPalette({ x: wire.x2, y: wire.y2 - H / 2, dropped: true, from: { id: wire.from, port: wire.port } });
       }
-      setDrag(null); setWire(null); setPan(null);
+      if (bending && bending.moved) change(f => { const ed = f.edges.find(x => x.id === bending.id); if (ed) ed.bend = Math.hypot(bending.x, bending.y) < 6 ? undefined : { x: bending.x, y: bending.y }; });
+      setDrag(null); setWire(null); setPan(null); setBending(null);
     };
     addEventListener('pointermove', move);
     addEventListener('pointerup', up);
@@ -210,6 +221,13 @@ export default function FlowView({ file, update, visible, saveState = 'Saved', o
   };
   const openRun = async id => { try { setRun(await getRun(id)); setSel(null); } catch (e) { toast('That run is gone.'); } };
   const status = id => run && run.nodes && run.nodes[id];
+  // A node runs once everything feeding it has: while a run is on, that's the one to light up.
+  const isActive = id => {
+    if (!run || run.status !== 'running' || status(id)) return false;
+    const into = edges.filter(e => e.to === id);
+    return into.length ? into.every(e => status(e.from)) : nodeDef(byId.get(id)?.type || '').trigger;
+  };
+  const calm = useMemo(() => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches, []);
   const toggleActive = () => {
     change(f => { f.active = !f.active; });
     toast(flow.active ? 'Inactive: its webhooks and schedules are off' : 'Active: its webhooks and schedules start it now');
@@ -380,12 +398,28 @@ ${catalog}`;
                 if (!a || !b) return null;
                 const pa = pos(a), pb = pos(b);
                 const outs = outsOf(a), ins = inputsOf(b.type);
-                const d = curve(pa.x + W, pa.y + portY(outs, Math.max(0, outs.indexOf(e.fromPort)), heightOf(a)), pb.x, pb.y + portY(ins, Math.max(0, ins.indexOf(e.toPort)), heightOf(b)));
+                const x1 = pa.x + W, y1 = pa.y + portY(outs, Math.max(0, outs.indexOf(e.fromPort)), heightOf(a)), x2 = pb.x, y2 = pb.y + portY(ins, Math.max(0, ins.indexOf(e.toPort)), heightOf(b));
+                const bend = bending && bending.id === e.id ? bending : e.bend;
+                const d = bentCurve(x1, y1, x2, y2, bend), mid = bendAt(x1, y1, x2, y2, bend);
                 const on = sel && sel.kind === 'edge' && sel.id === e.id;
                 const lit = status(e.from)?.status === 'success' && (status(e.from).output?.[e.fromPort]?.length ?? 1) > 0 && status(e.to)?.status === 'success';
+                // Data on its way: the node it feeds is the one running now, so beads run along the string.
+                const feeding = run && run.status === 'running' && status(e.from)?.status === 'success' && !status(e.to) && isActive(e.to);
+                const pid = 'fve-' + e.id;
                 return (
-                  <g key={e.id} className={'fv-edge' + (on ? ' on' : '') + (lit ? ' lit' : '')} onPointerDown={ev => { ev.stopPropagation(); setSel({ kind: 'edge', id: e.id }); }}>
-                    <path className="hit" d={d} /><path className="line" d={d} /><path className="flow" d={d} pathLength="100" style={{ animationDelay: `${-(e.id.charCodeAt(e.id.length - 1) % 10) * .22}s` }} />
+                  <g key={e.id} className={'fv-edge' + (on ? ' on' : '') + (lit ? ' lit' : '') + (feeding ? ' feeding' : '')} onPointerDown={ev => { ev.stopPropagation(); setSel({ kind: 'edge', id: e.id }); }}>
+                    <path className="hit" d={d} /><path className="line" id={pid} d={d} /><path className="flow" d={d} pathLength="100" style={{ animationDelay: `${-(e.id.charCodeAt(e.id.length - 1) % 10) * .22}s` }} />
+                    {/* Its handle: drag to bend the string around nodes and other strings; double-click to straighten it. */}
+                    <circle className={'fv-bend' + (bend && (bend.x || bend.y) ? ' bent' : '')} cx={mid.x} cy={mid.y} r="7"
+                      onPointerDown={ev => { if (ev.button !== 0) return; ev.stopPropagation(); setSel({ kind: 'edge', id: e.id }); const c = toCanvas(ev.clientX, ev.clientY); setBending({ id: e.id, sx: c.x, sy: c.y, bx: e.bend?.x || 0, by: e.bend?.y || 0, x: e.bend?.x || 0, y: e.bend?.y || 0 }); }}
+                      onDoubleClick={ev => { ev.stopPropagation(); change(f => { const ed = f.edges.find(x => x.id === e.id); if (ed) delete ed.bend; }); }}>
+                      <title>Drag to bend this string · double-click to straighten it</title>
+                    </circle>
+                    {feeding && !calm && BEADS.map((b, i) => (
+                      <circle key={i} className="fv-bead" r={b.r} opacity={b.o}>
+                        <animateMotion dur="1.2s" begin={`${b.at}s`} repeatCount="indefinite" calcMode="spline" keyTimes="0;1" keySplines=".45 0 .25 1"><mpath href={'#' + pid} /></animateMotion>
+                      </circle>
+                    ))}
                   </g>
                 );
               })}
@@ -401,8 +435,10 @@ ${catalog}`;
                 </div>
               );
               const waiting = run && run.status === 'running' && !st;
+              // Running now: everything feeding it is done. Still to come: waiting behind those.
+              const now = waiting && isActive(n.id);
               return (
-                <div key={n.id} className={['fv-node', 't-' + d.tone, sel?.id === n.id && 'on', st && 's-' + st.status, waiting && 'waiting', d.trigger && 'trigger'].filter(Boolean).join(' ')}
+                <div key={n.id} className={['fv-node', 't-' + d.tone, sel?.id === n.id && 'on', st && 's-' + st.status, waiting && (now ? 'active' : 'queued'), d.trigger && 'trigger'].filter(Boolean).join(' ')}
                   style={{ left: p.x, top: p.y, width: W, height: h }}
                   onPointerDown={e => { if (e.button !== 0 || e.target.closest('.fv-port')) return; e.stopPropagation(); const c = toCanvas(e.clientX, e.clientY); setSel({ kind: 'node', id: n.id }); setSideOpen(true); setDrag({ id: n.id, x: n.x, y: n.y, ox: c.x - n.x, oy: c.y - n.y }); }}
                   onDoubleClick={() => { setSel({ kind: 'node', id: n.id }); setTab('settings'); }}>
@@ -471,7 +507,7 @@ ${catalog}`;
         <div className="modal" onClick={e => { if (e.target === e.currentTarget) setPagePreview(null); }}>
           <div className="mbox fv-pagebox" role="dialog" aria-modal="true" aria-label="Page preview">
             <div className="fv-pagehead"><b>Page preview</b><small className="muted">Buttons and forms work at the page’s link (turn the workflow Active).</small><button className="btn" onClick={() => setPagePreview(null)}>Close</button></div>
-            {pagePreview.busy ? <p className="muted">Running the workflow…</p> : <iframe title="Page preview" sandbox="" srcDoc={pagePreview.html} />}
+            {pagePreview.busy ? <p className="muted">Running the workflow…</p> : <iframe title="Page preview" sandbox="allow-scripts allow-popups" srcDoc={pagePreview.html} />}
           </div>
         </div>
       )}
@@ -547,6 +583,9 @@ function Palette({ at, view, onPick, onClose }) {
     </div>
   );
 }
+
+// Data beads running along a string while the node it feeds is running: a bright head and two trailing.
+const BEADS = [{ r: 4.4, o: 1, at: 0 }, { r: 3.2, o: .55, at: .09 }, { r: 2.2, o: .3, at: .17 }];
 
 // Settings for one node, and what it produced in the last run.
 function NodePanel({ node, flow, change, creds, tab, setTab, result, active, onCred, onRun, onDelete, canRun, onHelp, onPreview }) {

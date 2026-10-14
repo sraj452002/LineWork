@@ -7,7 +7,7 @@ import { WORKLINE_NODES } from './flow-workline.js';
 import { POLL_EVERY, TRIGGER_TYPES } from './flow-triggers.js';
 import { WEB_NODES } from './flow-web.js';
 import { EXTRA_NODES } from './flow-extra.js';
-import { UI_NODES, renderPage } from './flow-ui.js';
+import { UI_NODES, renderPage, codeBlock } from './flow-ui.js';
 import { installRoutes } from './app-install.js';
 
 const TYPES = { ...NODE_TYPES, ...APP_NODES, ...WORKLINE_NODES, ...TRIGGER_TYPES, ...WEB_NODES, ...EXTRA_NODES, ...UI_NODES };
@@ -430,7 +430,7 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
      is the UI nodes' blocks, drawn as HTML with no scripts and served as a sandbox. */
   // allow-scripts is only for the browser's own video controls (Safari's are scripts, and a sandbox without
   // it leaves a video that won't play); script-src 'none' still keeps every script on the page from running.
-  const PAGE_HEADERS = { 'content-security-policy': "sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox; default-src 'none'; script-src 'none'; img-src https: http: data:; media-src https: http:; style-src 'unsafe-inline'; form-action 'self'", 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'cache-control': 'no-store' };
+  const PAGE_HEADERS = { 'content-security-policy': "sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox; default-src 'none'; script-src 'none'; frame-src 'self' https: http:; img-src https: http: data:; media-src https: http:; style-src 'unsafe-inline'; form-action 'self'", 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'cache-control': 'no-store' };
   const pageInput = req => {
     const body = req.method === 'POST' && req.body && typeof req.body === 'object' ? req.body : {};
     const form = Object.fromEntries(Object.entries(body).filter(([k]) => k !== '_action').map(([k, v]) => [k, String(v ?? '').slice(0, 10_000)]).slice(0, 50));
@@ -462,6 +462,13 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
   const notLive = (req, res) => (req.method === 'GET' && req.accepts(['json', 'html']) === 'html'
     ? res.status(404).set(PAGE_HEADERS).type('html').send(renderPage({ title: 'This app isn’t live', theme: 'light' }, [], { error: 'Nobody has published this link, or it was unpublished. If it’s yours: open the workflow in Workline and press Publish web app.' }))
     : res.status(404).json({ error: 'not_found', message: 'No active workflow listens here.' }));
+  // A Code block's own document (flow-ui.js): scripts run here, in a sandbox with no origin of its own, so
+  // it can't reach the page, the API or anyone's sign-in; React and Vue come from unpkg or jsDelivr.
+  hooks.get('/code/:id', (req, res) => {
+    const html = codeBlock(req.params.id);
+    if (!html) return res.status(404).type('text').send('This block has expired: reload the page.');
+    res.set({ 'content-security-policy': "sandbox allow-scripts allow-popups allow-forms allow-modals; default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net; style-src 'unsafe-inline' https:; img-src https: http: data: blob:; media-src https: http: blob:; font-src https: data:; connect-src https:", 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'cache-control': 'private, max-age=3600' }).type('html').send(html);
+  });
   hooks.all('/:token', async (req, res) => {
     const h = m.hooks[req.params.token];
     if (!h) return notLive(req, res);
