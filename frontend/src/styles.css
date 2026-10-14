@@ -2669,3 +2669,6 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .fv-bend.bent{opacity:.55}
 .fv-bend:hover{r:9}
 .fv-bend:active{cursor:grabbing;fill:var(--c-blue)}
+/* Publish as a web app: the page's own link name */
+.fv-pub-name{align-items:center;gap:0}.fv-pub-name span{white-space:nowrap;padding-right:2px;font-size:13px}.fv-pub-name input{flex:1;min-width:0}
+.fv-pub p.ok{color:var(--c-green);margin:6px 0 0;font-size:13px}.fv-pub p.err{margin:6px 0 0;font-size:13px}

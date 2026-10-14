@@ -201,6 +201,7 @@ export const NODES = {
       { k: 'title', label: 'Title', kind: 'text' }, { k: 'description', label: 'Description', kind: 'textarea' },
       { k: 'theme', label: 'Look', kind: 'select', options: [['light', 'Light'], ['dark', 'Dark']] },
       { k: 'width', label: 'Width', kind: 'select', options: [['normal', 'Normal'], ['wide', 'Wide']] },
+      { k: 'link', label: 'Custom link (optional)', kind: 'text', hint: 'starplay → your site/p/starplay' },
       { k: 'css', label: 'Page CSS (optional)', kind: 'textarea', hint: 'body { background: #0b0b14 }\n.btn.on { background: #1f80e0 }\n.n-player video { border-radius: 20px }' },
     ],
     help: 'The workflow gets { action, query, form }: action is "open" when the page is opened, or the name of the form that was sent; query is the link’s ?… values (Buttons set them); form is the answers.',

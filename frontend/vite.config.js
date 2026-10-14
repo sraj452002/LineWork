@@ -18,7 +18,8 @@ const apiProxy = {
     if (!API && process.env.NETLIFY) this.error('Set BACKEND_URL in Netlify (Site configuration → Environment variables) to the backend\'s address, e.g. https://linework-api.onrender.com');
   },
   closeBundle() {
-    if (API) writeFileSync(resolve(outDir, '_redirects'), `/api/*  ${API}/api/:splat  200!\n`);
+    // /p/<name>: a published page's own link, answered by the API too.
+    if (API) writeFileSync(resolve(outDir, '_redirects'), `/api/*  ${API}/api/:splat  200!\n/p/*  ${API}/api/p/:splat  200!\n`);
   },
 };
 
@@ -31,6 +32,6 @@ export default defineConfig({
   // Same cross-origin isolation headers as netlify.toml, so running code works in development too.
   // With LINEWORK_API set (e.g. http://localhost:8787, from `npm run dev` at the top), /api goes to the
   // Linework API. The Host header is kept, so the API sees requests as coming from this page.
-  server: { headers: ISOLATION, proxy: process.env.LINEWORK_API ? { '/api': { target: process.env.LINEWORK_API, changeOrigin: false } } : undefined },
+  server: { headers: ISOLATION, proxy: process.env.LINEWORK_API ? { '/api': { target: process.env.LINEWORK_API, changeOrigin: false }, '/p/': { target: process.env.LINEWORK_API, changeOrigin: false, rewrite: p => '/api' + p } } : undefined },
   preview: { headers: ISOLATION },
 });

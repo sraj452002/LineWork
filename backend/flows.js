@@ -75,6 +75,9 @@ const KEEP_RUNS = 20, SAMPLE = 20, MAX_DETAIL = 1_000_000, RUNNING_PER_USER = 5;
 const UNIT = { minutes: 60_000, hours: 3_600_000, days: 86_400_000 };
 const ID = /^[\w-]{1,80}$/;
 
+// A page's own link name: /p/<name>.
+export const PAGE_LINK = /^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$/;
+
 export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secret = '' }) {
   const m = store.meta;
 
@@ -235,7 +238,8 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
     m.polls ||= {};
     m.errorTriggers ||= {};
     m.uiApps ||= {};
-    for (const table of ['hooks', 'schedules', 'polls', 'errorTriggers', 'uiApps']) for (const [k, v] of Object.entries(m[table])) if (v.uid === uid && v.fileId === fileId) { before[k] = v; delete m[table][k]; }
+    m.pageLinks ||= {};
+    for (const table of ['hooks', 'schedules', 'polls', 'errorTriggers', 'uiApps', 'pageLinks']) for (const [k, v] of Object.entries(m[table])) if (v.uid === uid && v.fileId === fileId) { before[k] = v; delete m[table][k]; }
     // A published custom app (the App view): its link's token.
     const ui = file && file.ui;
     if (ui && ui.published && /^[a-z0-9]{20,80}$/.test(String(ui.token || '')) && !m.uiApps[ui.token]) m.uiApps[ui.token] = { uid, fileId };
@@ -245,6 +249,9 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
       if ((n.type === 'trigger.webhook' || TYPES[n.type]?.hook) && /^[\w-]{12,80}$/.test(String(p.path || '')) && !m.hooks[p.path]) {
         m.hooks[p.path] = { uid, fileId, nodeId: n.id, type: n.type, method: n.type !== 'trigger.webhook' ? 'ANY' : ['GET', 'POST', 'PUT', 'DELETE'].includes(p.method) ? p.method : 'ANY' };
       }
+      // A published page's own name: /p/<name>. First come, first served; it stays while the page is live.
+      const link = String(p.link || '').toLowerCase();
+      if (n.type === 'trigger.page' && PAGE_LINK.test(link) && m.hooks[p.path]?.fileId === fileId && !m.pageLinks[link]) m.pageLinks[link] = { uid, fileId, token: p.path };
       if (TYPES[n.type]?.poll) {
         const k = `${uid}:${fileId}:${n.id}`, was = before[k];
         // The same thing watched keeps what was seen; something else starts afresh.
@@ -469,12 +476,12 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
     if (!html) return res.status(404).type('text').send('This block has expired: reload the page.');
     res.set({ 'content-security-policy': "sandbox allow-scripts allow-popups allow-forms allow-modals; default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net; style-src 'unsafe-inline' https:; img-src https: http: data: blob:; media-src https: http: blob:; font-src https: data:; connect-src https:", 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'cache-control': 'private, max-age=3600' }).type('html').send(html);
   });
-  hooks.all('/:token', async (req, res) => {
-    const h = m.hooks[req.params.token];
+  const handleHook = async (req, res, token) => {
+    const h = m.hooks[token];
     if (!h) return notLive(req, res);
     if (h.method !== 'ANY' && h.method !== req.method) return res.status(405).json({ error: 'method', message: `This webhook takes ${h.method} requests.` });
-    if (hits.blocked(req.params.token)) return res.status(429).json({ error: 'too_many' });
-    hits.fail(req.params.token);
+    if (hits.blocked(token)) return res.status(429).json({ error: 'too_many' });
+    hits.fail(token);
     const flow = await savedFlow(h.uid, h.fileId);
     if (!flow || !flow.active) return notLive(req, res);
     const node = flow.nodes.find(n => n.id === h.nodeId), type = node && TYPES[node.type];
@@ -502,10 +509,27 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
       const items = ends.flatMap(n => run.nodes[n.id].output?.main || []);
       res.status(200).json(items.length === 1 ? items[0] : items);
     } catch (e) { res.status(e.code === 'busy' ? 429 : 500).json({ error: e.code || 'flow_error', message: e.message }); }
+  };
+  hooks.all('/:token', (req, res) => handleHook(req, res, req.params.token));
+
+  /* ---- pages at a name of their own: /api/p/<name> (the site sends /p/* here) ---- */
+  const pages = express.Router();
+  pages.use(express.urlencoded({ extended: true, limit: '1mb' }), express.json({ limit: '1mb' }));
+  pages.all('/:link', (req, res) => {
+    const l = (m.pageLinks || {})[String(req.params.link).toLowerCase()];
+    return l ? handleHook(req, res, l.token) : notLive(req, res);
   });
 
   /* ---- the API for the app (signed in) ---- */
   const routes = (api, signedIn) => {
+    // Is a page name free? (Free for this file if it's already its own.)
+    api.get('/flows/link/:name', signedIn, (req, res) => {
+      const name = String(req.params.name || '').toLowerCase();
+      if (!PAGE_LINK.test(name)) return res.json({ ok: false, reason: 'Use 3 to 40 lowercase letters, numbers or -, starting and ending with a letter or number.' });
+      const l = (m.pageLinks || {})[name];
+      const mine = l && l.uid === req.user.id && l.fileId === String(req.query.file || '');
+      res.json({ ok: !l || mine, taken: !!l && !mine, live: !!mine });
+    });
     // The people with an account on one of your apps (the App view → Access).
     api.get('/flows/:fileId/app-users', signedIn, (req, res) => {
       if (!ID.test(req.params.fileId)) return res.status(400).json({ error: 'bad_id' });
@@ -629,5 +653,5 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
     });
   };
 
-  return { hooks, ui, routes, reindex, tick, poll, close: () => clearInterval(timer) };
+  return { hooks, ui, pages, routes, reindex, tick, poll, close: () => clearInterval(timer) };
 }

@@ -512,7 +512,7 @@ ${catalog}`;
         </div>
       )}
       {publish && <PublishDialog file={file} flow={flow} change={change} onClose={() => setPublish(false)} />}
-      {webPub && pageNode && <WebPublishDialog flow={flow} node={pageNode} server={server} change={change} onForm={() => { setWebPub(false); setPublish(true); }} onClose={() => setWebPub(false)} />}
+      {webPub && pageNode && <WebPublishDialog fileId={file.id} flow={flow} node={pageNode} server={server} change={change} onForm={() => { setWebPub(false); setPublish(true); }} onClose={() => setWebPub(false)} />}
       {credDlg && <Credentials types={credDlg.types} creds={creds} onChanged={loadCreds} onPick={credDlg.pick} onClose={() => setCredDlg(null)} ask={ask} toast={toast} />}
     </div>
   );
@@ -742,10 +742,28 @@ function Field({ f, value, onChange }) {
 // The account's credentials: add, change (secrets left empty are kept) and remove.
 // Publish a page made of nodes as a web app: turning it on makes the Page trigger's link answer (it's the
 // workflow's Active switch, saved with it); the dialog hands out the link and how to put it on a phone.
-function WebPublishDialog({ flow, node, server, change, onForm, onClose }) {
+function WebPublishDialog({ fileId, flow, node, server, change, onForm, onClose }) {
   const { toast } = useUI();
-  const link = `${location.origin}/api/hook/${(node.params || {}).path}`;
+  const hookLink = `${location.origin}/api/hook/${(node.params || {}).path}`;
   const live = !!flow.active;
+  // A name of its own: your site/p/<name>. Checked as it's typed; first come, first served.
+  const name = String((node.params || {}).link || '');
+  const [check, setCheck] = useState(null); // {ok, taken, live, reason}
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!name) { setCheck(null); return undefined; }
+    const t = setTimeout(() => api(`/flows/link/${encodeURIComponent(name)}?file=${encodeURIComponent(fileId)}`).then(setCheck, () => setCheck(null)), tick ? 0 : 300);
+    return () => clearTimeout(t);
+  }, [name, fileId, tick]);
+  // Live and free but not yet ours: it becomes ours once the change is saved, so ask again until then.
+  useEffect(() => {
+    if (!live || !check || !check.ok || check.live) return undefined;
+    const t = setTimeout(() => setTick(x => x + 1), 1500);
+    return () => clearTimeout(t);
+  }, [live, check]);
+  const setName = v => change(f => { const n = f.nodes.find(x => x.id === node.id); if (n) (n.params ||= {}).link = v.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 40); });
+  const named = name && check && check.ok;
+  const link = named ? `${location.origin}/p/${name}` : hookLink;
   const turn = on => {
     change(f => { f.active = on; });
     dispatchEvent(new Event('workline:save'));
@@ -758,6 +776,9 @@ function WebPublishDialog({ flow, node, server, change, onForm, onClose }) {
         <p className="muted">This workflow draws a page (it starts with a <b>Page</b> trigger). Publish it and the page is a web app at its own link: anyone can open it on a phone or computer, no account needed. It always runs the saved workflow.</p>
         {!server && <p className="err">Sign in to the Workline server to publish: the server is what answers the link.</p>}
         <label className={'fv-active' + (live ? ' on' : '')}><input type="checkbox" checked={live} disabled={!server} onChange={e => turn(e.target.checked)} /><i />{live ? 'Live: anyone with the link can use it' : 'Not published'}</label>
+        <h4>A name for its link</h4>
+        <div className="fv-row fv-pub-name"><span className="muted">{location.host}/p/</span><input aria-label="Custom link name" placeholder="starplay" value={name} onChange={e => setName(e.target.value)} /></div>
+        {name && check && <p className={check.ok ? 'ok' : 'err'}>{check.reason || (check.taken ? 'Taken: pick another name.' : check.live ? 'Yours: the link works.' : live ? 'Free: it’s yours once saved.' : 'Free: publish to take it.')}</p>}
         <h4>Its link</h4>
         <div className="fv-row"><input readOnly aria-label="Web app link" value={link} onFocus={e => e.target.select()} />
           <button type="button" className="btn" onClick={() => { navigator.clipboard?.writeText(link); toast('Link copied'); }}>Copy</button>
