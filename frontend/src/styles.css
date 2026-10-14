@@ -2672,3 +2672,52 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 /* Publish as a web app: the page's own link name */
 .fv-pub-name{align-items:center;gap:0}.fv-pub-name span{white-space:nowrap;padding-right:2px;font-size:13px}.fv-pub-name input{flex:1;min-width:0}
 .fv-pub p.ok{color:var(--c-green);margin:6px 0 0;font-size:13px}.fv-pub p.err{margin:6px 0 0;font-size:13px}
+
+/* ---- polish: motion and hover, all of it only when the person hasn't asked for less motion ---- */
+@media (prefers-reduced-motion:no-preference){
+  /* Buttons lift a little on hover and press in when clicked; the main ones catch a sheen. */
+  .btn,.fv-tool,.action,.tool-card,.tpl-card,.tpl-starter{will-change:transform}
+  .btn{transition:transform .18s cubic-bezier(.3,1.5,.5,1),box-shadow .18s,background .15s,border-color .15s}
+  .btn:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 6px 14px -8px rgba(0,0,0,.35)}
+  .btn:active:not(:disabled){transform:translateY(0) scale(.97);box-shadow:none;transition-duration:.06s}
+  .btn.primary,.btn.dark{position:relative;overflow:hidden}
+  .btn.primary::after,.btn.dark::after{content:"";position:absolute;inset:0;background:linear-gradient(105deg,transparent 35%,rgba(255,255,255,.38) 50%,transparent 65%);transform:translateX(-120%);pointer-events:none}
+  .btn.primary:hover::after,.btn.dark:hover::after{transform:translateX(120%);transition:transform .7s ease}
+  .fv-tool{transition:background .15s,color .15s,transform .18s cubic-bezier(.3,1.5,.5,1)}
+  .fv-tool:hover{transform:translateY(-1px)}
+  .fv-tool:hover svg{animation:pl-nudge .5s ease}
+  /* Big cards on the home page and in Tools and Templates: lift, with the icon turning a little. */
+  .action{transition:transform .25s cubic-bezier(.3,1.4,.5,1),box-shadow .25s,border-color .2s}
+  .action:hover{transform:translateY(-4px);box-shadow:0 18px 30px -18px rgba(0,0,0,.45)}
+  .action:hover .a-ico{animation:pl-wiggle .55s ease}
+  .tool-card:hover,.tpl-card:hover,.tpl-starter:hover{transform:translateY(-3px);box-shadow:0 16px 28px -18px rgba(0,0,0,.45)}
+  .tpl-starter{transition:transform .25s cubic-bezier(.3,1.4,.5,1),box-shadow .25s,border-color .2s}
+  /* Lists arrive one after another. */
+  .tpl-starter,.tpl-card,.tool-card,.action{animation:pl-rise .45s cubic-bezier(.2,.8,.3,1) backwards}
+  .ftable tbody tr{animation:pl-rise .35s cubic-bezier(.2,.8,.3,1) backwards}
+  :is(.tpl-starter,.tpl-card,.tool-card,.action,.ftable tbody tr):nth-child(2){animation-delay:.03s}
+  :is(.tpl-starter,.tpl-card,.tool-card,.action,.ftable tbody tr):nth-child(3){animation-delay:.06s}
+  :is(.tpl-starter,.tpl-card,.tool-card,.action,.ftable tbody tr):nth-child(4){animation-delay:.09s}
+  :is(.tpl-starter,.tpl-card,.tool-card,.action,.ftable tbody tr):nth-child(5){animation-delay:.12s}
+  :is(.tpl-starter,.tpl-card,.tool-card,.action,.ftable tbody tr):nth-child(6){animation-delay:.15s}
+  :is(.tpl-starter,.tpl-card,.tool-card,.action,.ftable tbody tr):nth-child(7){animation-delay:.18s}
+  :is(.tpl-starter,.tpl-card,.tool-card,.action,.ftable tbody tr):nth-child(n+8){animation-delay:.21s}
+  /* File rows: a coloured edge slides in on hover. */
+  .ftable tbody tr{transition:background .15s,box-shadow .2s}
+  .ftable tbody tr:hover{box-shadow:inset 3px 0 0 var(--c-blue)}
+  /* Workflow canvas: the node's icon pops on hover (the node stays put so its strings stay joined). */
+  .fv-node .fv-badge{transition:transform .25s cubic-bezier(.3,1.6,.5,1)}
+  .fv-node:hover .fv-badge{transform:scale(1.1) rotate(-4deg)}
+  .fv-lib-item{transition:background .15s,transform .18s}
+  .fv-lib-item:hover{transform:translateX(3px)}
+  .fv-lib-item:hover .fv-badge{animation:pl-wiggle .5s ease}
+  .fv-port{transition:transform .15s,background .15s}
+  .fv-port:hover{transform:scale(1.45)}
+  /* Screens come up softly; toasts drop in with a little bounce. */
+  .fv:not([hidden]){animation:pl-rise .35s cubic-bezier(.2,.8,.3,1)}
+  .toast{animation:pl-toast .45s cubic-bezier(.3,1.6,.5,1)}
+}
+@keyframes pl-rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes pl-wiggle{30%{transform:rotate(-8deg) scale(1.08)}60%{transform:rotate(6deg) scale(1.08)}100%{transform:none}}
+@keyframes pl-nudge{40%{transform:translateY(-2px)}}
+@keyframes pl-toast{from{opacity:0;transform:translate(-50%,-14px) scale(.9)}to{opacity:1;transform:translate(-50%,0)}}
