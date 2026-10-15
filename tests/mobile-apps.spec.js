@@ -67,7 +67,7 @@ test('WorkLine Apps: sign in on a phone, see only the published workflows, run o
     await page.getByRole('button', { name: 'AI chat' }).click();
     await page.getByLabel('Message').fill('Hello');
     await page.getByRole('button', { name: 'Send' }).click();
-    await expect(page.locator('.m-msg.ai')).toContainText('Namaste! Main madad karunga.');
+    await expect(page.locator('.as-msg.ai')).toContainText('Namaste! Main madad karunga.');
     await page.screenshot({ path: 'test-results/mobile-apps-chat.png' });
 
     // Installable: its manifest, icons and service worker.

@@ -718,5 +718,7 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
     });
   };
 
-  return { hooks, ui, pages, routes, reindex, tick, poll, close: () => clearInterval(timer) };
+  // For the AI assistant (agent.js): run a flow and wait for its items, read a saved flow, list credentials.
+  const agent = { runForItems, savedFlow, creds: uid => Object.values(credsOf(uid)).map(publicCred) };
+  return { hooks, ui, pages, routes, reindex, tick, poll, agent, close: () => clearInterval(timer) };
 }

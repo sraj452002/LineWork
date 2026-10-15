@@ -1,8 +1,7 @@
-/* Music and sound for the video guides, made with Web Audio: nothing to download.
-   The music is a calm lo-fi loop (Cmaj7, Am7, Fmaj7, G6 at 88 bpm: pads, a plucked arpeggio, bass and a
-   soft beat). The sounds: a click, a pop when something appears, a whoosh between chapters, a chime when a
-   step works, and typing ticks. scheduleBar() only needs an AudioContext, so scripts/guide-audio.mjs
-   renders the same music offline for the recorded videos. */
+/* Music and sound for the video guides, made with Web Audio: a calm lo-fi loop (Cmaj7, Am7, Fmaj7, G6
+   at 88 bpm: pads, a plucked arpeggio, bass and a soft beat) and short sounds (click, pop, whoosh, blip,
+   chime, tick). scripts/guide-audio.mjs and scripts/node-videos.mjs render them offline in a browser
+   and put them on the recorded videos. */
 
 export const BPM = 88;
 const CHORDS = [[48, 55, 64, 71], [45, 52, 60, 67], [41, 48, 57, 64], [43, 50, 59, 64]];
@@ -69,43 +68,3 @@ export function playSfx(ctx, out, name, t = ctx.currentTime) {
     default:
   }
 }
-
-/* ---- live, in the page ---- */
-let ctx = null, music = null, sfx = null, timer = null, owner = null;
-function live() {
-  if (ctx) return ctx;
-  const AC = window.AudioContext || window.webkitAudioContext;
-  if (!AC) return null;
-  ctx = new AC();
-  const master = ctx.createDynamicsCompressor(); master.connect(ctx.destination);
-  music = ctx.createGain(); music.gain.value = 0;
-  const warm = ctx.createBiquadFilter(); warm.type = 'lowpass'; warm.frequency.value = 3800;
-  music.connect(warm); warm.connect(master);
-  sfx = ctx.createGain(); sfx.gain.value = 0.9; sfx.connect(master);
-  return ctx;
-}
-
-// Starts (or keeps) the music for this guide; another guide starting takes it over.
-export function startMusic(who) {
-  const c = live();
-  if (!c) return;
-  owner = who;
-  c.resume?.();
-  music.gain.cancelScheduledValues(c.currentTime);
-  music.gain.setTargetAtTime(1.2, c.currentTime, 0.4);
-  if (timer) return;
-  let next = c.currentTime + 0.1, bar = 0;
-  const tick = () => { while (next < c.currentTime + 0.6) { scheduleBar(c, music, next, bar++); next += barSeconds(); } };
-  tick(); timer = setInterval(tick, 200);
-}
-export function stopMusic(who) {
-  if (!ctx || (who && who !== owner)) return;
-  music.gain.cancelScheduledValues(ctx.currentTime);
-  music.gain.setTargetAtTime(0, ctx.currentTime, 0.25);
-  clearInterval(timer); timer = null; owner = null;
-}
-export function sound(name, delayMs = 0) {
-  const c = live();
-  if (c) playSfx(c, sfx, name, c.currentTime + delayMs / 1000);
-}
-export const audioSupported = () => typeof window !== 'undefined' && !!(window.AudioContext || window.webkitAudioContext);

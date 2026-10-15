@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Login from './Login.jsx';
 import { AppRunner } from './Apps.jsx';
 import { useUI } from './ui.jsx';
@@ -6,8 +6,7 @@ import { signOut, startSession } from '../lib/auth.js';
 import { listFiles } from '../lib/cloud.js';
 import { publishedApps } from '../lib/apps.js';
 import { serverInfo } from '../lib/backend.js';
-import { NO_AI, refreshAI, sampleP } from '../lib/ai.js';
-import { md } from '../lib/markdown.js';
+import Assistant from './Assistant.jsx';
 
 /* WorkLine Apps (/mobile): the end user's phone app. Two things only: the published workflows (those
    published as apps, Home → Apps, run with a form; and those published as web apps, opened here), and
@@ -223,7 +222,7 @@ function AppsHome({ session, onSignOut }) {
                 ...apps.map(f => ({ key: f.id, ...f.flow.app, label: `Run ${f.flow.app.name}`, onClick: () => setOpenId(f.id) })),
                 ...pages.map(p => ({ key: p.id, name: p.title, icon: '🌐', tone: 'sky', web: true, label: `Open ${p.title}`, onClick: () => setPage(p) })),
               ]} />)}
-          </>) : <MobileChat apps={apps} user={session.user} />}
+          </>) : <Assistant compact user={session.user} />}
         </>)}
       </div>
       <nav className="m-tabs" aria-label="WorkLine Apps">
@@ -234,52 +233,3 @@ function AppsHome({ session, onSignOut }) {
   );
 }
 
-// AI chat: the account's default model (GLM 5.3 Flash when it's set up), kept on this phone.
-const CHAT_KEY = 'linework:m-chat';
-function MobileChat({ apps, user }) {
-  const key = `${CHAT_KEY}:${user.id || user.email || ''}`;
-  const [msgs, setMsgs] = useState(() => { try { return JSON.parse(localStorage.getItem(key) || '[]'); } catch (e) { return []; } });
-  const [text, setText] = useState(''), [busy, setBusy] = useState(false), [off, setOff] = useState(null);
-  const endRef = useRef(null), stop = useRef(null);
-  useEffect(() => { refreshAI().then(s => { if (!s) setOff(NO_AI); }); }, []);
-  useEffect(() => { try { localStorage.setItem(key, JSON.stringify(msgs.slice(-60))); } catch (e) {} endRef.current?.scrollIntoView({ block: 'end' }); }, [msgs, key]);
-  const send = async e => {
-    e?.preventDefault();
-    const q = text.trim();
-    if (!q || busy) return;
-    const sample = await sampleP;
-    if (!sample) { setOff(NO_AI); return; }
-    const history = [...msgs, { who: 'you', text: q }];
-    setMsgs([...history, { who: 'ai', text: '' }]); setText(''); setBusy(true);
-    const names = apps.map(f => f.flow.app.name).join(', ');
-    const prompt = `You are the assistant in WorkLine Apps, a phone app where ${user.name || 'the user'} runs workflows published on WorkLine${names ? ` (here: ${names})` : ''}. Answer briefly and clearly, in the language the user writes in. Use Markdown only for short lists or code.\n\n`
-      + history.slice(-12).map(m => `${m.who === 'you' ? 'User' : 'Assistant'}: ${m.text}`).join('\n\n') + '\n\nAssistant:';
-    const ctl = new AbortController(); stop.current = ctl;
-    try {
-      await sample(prompt, { signal: ctl.signal, onText: ({ text: t }) => setMsgs(m => [...m.slice(0, -1), { who: 'ai', text: t }]) });
-    } catch (err) {
-      const why = err && err.code === 'daily_limit' ? 'Today’s AI limit is used up. It resets at midnight UTC.' : err && err.code === 'signed_out' ? 'Sign in again to use AI.' : err && err.code === 'cancelled' ? null : 'AI didn’t answer. Try again.';
-      setMsgs(m => { const last = m[m.length - 1]; return why ? [...m.slice(0, -1), { who: 'ai', text: last.text || why, error: !last.text }] : m; });
-    }
-    setBusy(false); stop.current = null;
-  };
-  return (
-    <div className="m-chat">
-      {off && <p className="m-note">{off}</p>}
-      {!msgs.length && !off && <div className="m-chat-empty"><b>Ask anything</b><span>Write, translate, plan, or ask how to use a workflow.</span></div>}
-      <div className="m-msgs" aria-live="polite">
-        {msgs.map((m, i) => (m.who === 'you'
-          ? <p key={i} className="m-msg you">{m.text}</p>
-          : <div key={i} className={'m-msg ai' + (m.error ? ' err' : '')}>{m.text ? <div dangerouslySetInnerHTML={{ __html: md(m.text) }} /> : <span className="m-dots" aria-label="Thinking"><i /><i /><i /></span>}</div>))}
-        <div ref={endRef} />
-      </div>
-      <form className="m-ask" onSubmit={send}>
-        {msgs.length > 0 && !busy && <button type="button" className="m-ib" aria-label="New chat" title="New chat" onClick={() => setMsgs([])}>＋</button>}
-        <textarea rows={1} aria-label="Message" placeholder="Message AI…" value={text} onChange={e => setText(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !('ontouchstart' in window)) { e.preventDefault(); send(); } }} />
-        {busy ? <button type="button" className="m-send" aria-label="Stop" onClick={() => stop.current?.abort()}>■</button>
-          : <button className="m-send" aria-label="Send" disabled={!text.trim() || !!off}>↑</button>}
-      </form>
-    </div>
-  );
-}

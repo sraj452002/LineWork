@@ -9,8 +9,10 @@ import { StorageMeter } from './ServerDialogs.jsx';
 import Tools from './Tools.jsx';
 import Templates from './Templates.jsx';
 import Apps from './Apps.jsx';
+import Assistant from './Assistant.jsx';
 
 const IC = {
+  ai: 'M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z',
   grid: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',
   apps: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
   bookmark: 'M6 3h12v18l-6-4-6 4z',
@@ -230,6 +232,7 @@ Reply with ONLY a JSON object: {"title": "...", "doc": "...", "diagrams": [...]}
       else if (e.key === 't' || e.key === 'T') setView('tools');
       else if (e.key === 'p' || e.key === 'P') setView('templates');
       else if (e.key === 'r' || e.key === 'R') setView('apps');
+      else if (e.key === 'i' || e.key === 'I') setView('assistant');
       else if (e.key === 'g' || e.key === 'G') onGuide('app');
     };
     document.addEventListener('keydown', key);
@@ -294,6 +297,9 @@ Reply with ONLY a JSON object: {"title": "...", "doc": "...", "diagrams": [...]}
           <button className="nav" aria-current={view === 'templates' ? 'page' : undefined} onClick={() => setView('templates')}>
             <Ico d={IC.bookmark} /><span>Templates</span><kbd>P</kbd>
           </button>
+          <button className="nav" aria-current={view === 'assistant' ? 'page' : undefined} onClick={() => setView('assistant')}>
+            <Ico d={IC.ai} /><span>AI Assistant</span><kbd>I</kbd>
+          </button>
         </nav>
         <div className="side-sec">
           <h2>Folders</h2>
@@ -316,8 +322,8 @@ Reply with ONLY a JSON object: {"title": "...", "doc": "...", "diagrams": [...]}
         </div>
       </aside>
 
-      <main className="main">
-        <div className="main-in">
+      <main className={'main' + (view === 'assistant' ? ' main-as' : '')}>
+        {view === 'assistant' ? <Assistant user={account} onOpenFile={onOpen} /> : <div className="main-in">
           <header className="topbar">
             <div className="tabs" role="tablist" aria-label="Filter files" hidden={view === 'tools' || view === 'templates' || view === 'apps'}>
               {[['all', 'All'], ['recent', 'Recents']].map(([k, l]) => (
@@ -398,7 +404,7 @@ Reply with ONLY a JSON object: {"title": "...", "doc": "...", "diagrams": [...]}
             </table>
           )}
           </>)}
-        </div>
+        </div>}
         <button className="help-fab" aria-label="Help" aria-haspopup="menu" title="Help" onClick={e => popup(e.currentTarget, [
           { label: 'Video guides', act: () => onGuide('videos') },
           { label: 'Easy start: your first app', act: () => onGuide('easy') },
