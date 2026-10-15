@@ -114,7 +114,7 @@ const Svg = ({ d, fill, size = 20 }) => (
 const ICON = {
   play: 'M8 5.6v12.8a1 1 0 0 0 1.52.85l10.2-6.4a1 1 0 0 0 0-1.7L9.52 4.75A1 1 0 0 0 8 5.6z',
   open: 'M7 17 17 7M9 7h8v8',
-  refresh: 'M20 11a8 8 0 1 0-2.34 5.66M20 4v7h-7',
+  refresh: 'M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8M21 3v5h-5',
   search: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zm9 3-4.35-4.35',
   grid: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',
   spark: 'M12 3l1.9 5.6L19.5 10.5l-5.6 1.9L12 18l-1.9-5.6L4.5 10.5l5.6-1.9zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z',
@@ -126,7 +126,7 @@ function MobileBar({ user, onSignOut, onRefresh, busy, title = 'WorkLine Apps', 
   return (
     <header className="m-bar">
       <div className="m-title">{hello && <small>{hello}</small>}<h1>{title}</h1></div>
-      {onRefresh && <button className="m-ib" aria-label="Refresh" onClick={onRefresh} disabled={busy}><span className={busy ? 'm-spin' : ''}><Svg d={ICON.refresh} size={18} /></span></button>}
+      {onRefresh && <button className="m-ib" aria-label="Refresh" onClick={onRefresh} disabled={busy}><span className={busy ? 'm-spin' : ''}><Svg d={ICON.refresh} size={19} /></span></button>}
       {user && <button className="m-ib m-me" aria-label={`Sign out ${user.email || ''}`} title="Sign out" onClick={onSignOut}>{(user.name || user.email || '?')[0].toUpperCase()}</button>}
     </header>
   );
@@ -227,8 +227,8 @@ function AppsHome({ session, onSignOut }) {
         </>)}
       </div>
       <nav className="m-tabs" aria-label="WorkLine Apps">
-        <button aria-current={tab === 'run' ? 'page' : undefined} onClick={() => { setTab('run'); }}><span className="m-tab-ic"><Svg d={ICON.grid} size={21} /></span>Workflows</button>
-        <button aria-current={tab === 'chat' ? 'page' : undefined} onClick={() => setTab('chat')}><span className="m-tab-ic"><Svg d={ICON.spark} size={21} /></span>AI chat</button>
+        <button aria-current={tab === 'run' ? 'page' : undefined} onClick={() => { setTab('run'); }}><Svg d={ICON.grid} size={19} /><span>Workflows</span></button>
+        <button aria-current={tab === 'chat' ? 'page' : undefined} onClick={() => setTab('chat')}><Svg d={ICON.spark} size={19} /><span>AI chat</span></button>
       </nav>
     </div>
   );
