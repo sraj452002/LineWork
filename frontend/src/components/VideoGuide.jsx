@@ -25,9 +25,9 @@ function NodeVideos() {
       {d && <video key={pick} className="vg-video" controls autoPlay playsInline src={nodeVideoUrl(pick)} aria-label={`Video: ${d.label}`} />}
       <div className="nv-find"><input type="search" placeholder="Find a node (Uppercase, Slack, IF…)" aria-label="Find a node video" value={q} onChange={e => setQ(e.target.value)} /></div>
       {!index ? <p className="muted">Loading…</p> : (
-        <div className="nv-list" role="list">
+        <div className="nv-list">
           {shown.slice(0, 300).map(([t, nd]) => (
-            <button key={t} role="listitem" aria-pressed={pick === t} onClick={() => setPick(t)} aria-label={`Watch ${nd.label}`}>
+            <button key={t} aria-pressed={pick === t} onClick={() => setPick(t)} aria-label={`Watch ${nd.label}`}>
               <b>▶ {nd.label}</b><small>{nd.group} · {Math.round(index[t])}s</small>
             </button>
           ))}
