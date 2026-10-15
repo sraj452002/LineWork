@@ -473,6 +473,53 @@ for (const [k, { defaults, icon, guide, ...d }] of Object.entries(MORE.nodes)) {
   NODES[k] = { ...d, icon: I[icon] || I.plug, more: true, defaults: () => structuredClone(defaults || {}) };
 }
 
+/* The node library's shelves: sections, each with groups. Every app gets a group of its own (its
+   trigger, its main node and its one-job actions, A–Z); the generic nodes added from NOAH Studio's list
+   have their own section. A node's `group` (what it is) stays as it was; this is only where it's shelved. */
+export const NOAH_STUDIO = new Set(['ai.summarize', 'ai.extract', 'ai.classify', 'ai.rewrite', 'ai.translate', 'ai.vision', 'ai.decide', 'ai.score', 'ai.mcp',
+  'core.respond', 'core.pivot', 'core.textsplit', 'core.kv', 'core.graphql', 'file.spreadsheet', 'app.redis', 'core.note',
+  'trigger.error', 'trigger.dbrow', 'trigger.email', 'trigger.calendar']);
+export const SECTIONS = ['Start', 'Build', 'NOAH Studio', 'Tools', 'Apps', 'Data sources'];
+const APP_NAME = { 'trigger.github': 'GitHub', 'trigger.stripe': 'Stripe', 'trigger.shopify': 'Shopify', 'trigger.slack': 'Slack', 'trigger.typeform': 'Typeform', 'trigger.calendly': 'Calendly', 'trigger.telegram': 'Telegram',
+  openai: 'OpenAI', gemini: 'Gemini', deepl: 'DeepL', 'app.email': 'Email', twilio: 'Twilio', ntfy: 'ntfy', 'app.database': 'Database', supabase: 'Supabase', dropbox: 'Dropbox', bitly: 'Bitly' };
+const APP_GROUPS = new Set(['Communication', 'Productivity', 'Developer', 'Sales & payments']);
+const TOOL_GROUPS = new Set(MORE.groups.filter(g => g !== 'Public data'));
+// Which app a node belongs to, if any.
+export function appOf(type, d = nodeDef(type)) {
+  if (APP_NAME[type]) return APP_NAME[type];
+  if (type.startsWith('core.')) return null;
+  if (d.more && d.label.includes(': ')) return d.label.split(': ')[0];
+  if (!d.more && APP_GROUPS.has(d.group)) return d.label;
+  return null;
+}
+// Where a node sits in the library: {section, group}.
+export function shelfOf(type, d = nodeDef(type)) {
+  if (NOAH_STUDIO.has(type)) return { section: 'NOAH Studio', group: d.trigger ? 'Triggers' : d.group === 'AI' ? 'AI' : 'Flow & data' };
+  const app = appOf(type, d);
+  if (app) return { section: 'Apps', group: app };
+  if (d.trigger) return { section: 'Start', group: 'Triggers' };
+  if (TOOL_GROUPS.has(d.group)) return { section: 'Tools', group: d.group };
+  if (d.group === 'Public data' || d.group === 'Storage & feeds') return { section: 'Data sources', group: d.group === 'Public data' ? 'Public data' : 'Feeds & data' };
+  return { section: 'Build', group: type === 'core.http' ? 'Web' : d.group };
+}
+// The library for a list of [type, def]: [{section, groups: [{name, items}]}], apps A–Z, the rest in GROUPS order.
+export function shelves(list) {
+  const at = new Map();
+  for (const [k, d] of list) {
+    const { section, group } = shelfOf(k, d);
+    if (!at.has(section)) at.set(section, new Map());
+    const g = at.get(section);
+    if (!g.has(group)) g.set(group, []);
+    g.get(group).push([k, d]);
+  }
+  const rank = g => { const i = GROUPS.indexOf(g === 'Flow & data' ? 'Flow' : g); return i < 0 ? 999 : i; };
+  return SECTIONS.filter(s => at.has(s)).map(section => ({
+    section,
+    groups: [...at.get(section)].map(([name, items]) => ({ name, items }))
+      .sort((a, b) => (section === 'Apps' ? a.name.localeCompare(b.name) : rank(a.name) - rank(b.name) || a.name.localeCompare(b.name))),
+  }));
+}
+
 export const CODE_BLOCKS = {
   react: { label: 'React (JSX)', starter: `// A React component, App. It gets items: what reached this node.
 function App({ items }) {

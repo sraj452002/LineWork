@@ -8,7 +8,7 @@ import { TOOL_META, TOOL_NODES, TOOL_TESTS } from '../backend/flow-tools.js';
 import { ACTION_META, ACTION_NODES } from '../backend/flow-actions.js';
 import { CRED_FIELDS } from '../backend/flows.js';
 import { moreNodes, OUT } from '../scripts/more-nodes.mjs';
-import { CRED_TYPES, GROUPS, NODES } from '../frontend/src/lib/flows.js';
+import { CRED_TYPES, GROUPS, NODES, NOAH_STUDIO, shelves } from '../frontend/src/lib/flows.js';
 import { NODE_GUIDE } from '../frontend/src/lib/flowguide.js';
 
 // The tool nodes (text, numbers, dates, lists…) and the one-job app actions and public data.
@@ -113,4 +113,19 @@ test('app actions call the right address with the credential, and pass on the an
     await expect(run('github.comment', { repo: 'not a repo', number: 1, body: 'x' }, {}, ctx({ token: 't' }))).rejects.toThrow('owner/name');
     await expect(run('stripe.checkout', { name: 'x', amount: '-5', successUrl: 'https://x.io' }, {}, ctx({ secretKey: 'k' }))).rejects.toThrow('above 0');
   } finally { globalThis.fetch = real; dns.lookup = realLookup; syncBuiltinESMExports(); }
+});
+
+test('the library shelves every node once: each app in its own group, NOAH Studio’s nodes together', () => {
+  const shelf = shelves(Object.entries(NODES));
+  expect(shelf.map(s => s.section)).toEqual(['Start', 'Build', 'NOAH Studio', 'Tools', 'Apps', 'Data sources']);
+  const all = shelf.flatMap(s => s.groups.flatMap(g => g.items.map(([k]) => k)));
+  expect(all.length).toBe(Object.keys(NODES).length);
+  expect(new Set(all).size).toBe(all.length);
+  const group = (section, name) => shelf.find(s => s.section === section).groups.find(g => g.name === name).items.map(([k]) => k);
+  // An app's trigger, its main node and its one-job actions sit together.
+  expect(group('Apps', 'GitHub')).toEqual(expect.arrayContaining(['trigger.github', 'app.github', 'github.comment', 'github.createPull']));
+  expect(group('Apps', 'Google Sheets')).toEqual(expect.arrayContaining(['google.sheets', 'gsheets.update']));
+  const apps = shelf.find(s => s.section === 'Apps').groups.map(g => g.name);
+  expect(apps).toEqual([...apps].sort((a, b) => a.localeCompare(b)));
+  expect(shelf.find(s => s.section === 'NOAH Studio').groups.flatMap(g => g.items.map(([k]) => k)).sort()).toEqual([...NOAH_STUDIO].sort());
 });

@@ -3,7 +3,7 @@ import { useUI } from './ui.jsx';
 import { api, serverInfo } from '../lib/backend.js';
 import { clone, rid } from '../lib/utils.js';
 import {
-  CRED_TYPES, GROUPS, ICON, NODES, createCredential, deleteCredential, emptyFlow, getRun, inputsOf, listCredentials,
+  CRED_TYPES, GROUPS, ICON, NODES, shelfOf, shelves, createCredential, deleteCredential, emptyFlow, getRun, inputsOf, listCredentials,
   listRuns, newNode, nodeDef, outputsOf, outsOf, startRun, updateCredential,
 } from '../lib/flows.js';
 import { LOGOS } from '../lib/flowlogos.js';
@@ -523,42 +523,52 @@ ${more}`;
   );
 }
 
-// The node library on the left: every node by group, searchable; click one to add it (after the selected
-// node), or drag it onto the canvas.
+// The node library on the left: every node in its section and group (each app has its own group),
+// searchable; click one to add it (after the selected node), or drag it onto the canvas.
+const OPEN_SECTIONS = new Set(['Start', 'Build', 'NOAH Studio']);
+const matches = needle => ([k, d]) => !needle || `${d.label} ${d.note} ${d.group} ${k} ${shelfOf(k, d).group}`.toLowerCase().includes(needle);
+// In an app's own group, “GitHub: Comment on an issue” reads as “Comment on an issue”.
+// The app's trigger and its main node (both named after the app) say which is which.
+const shortLabel = (d, group) => (d.label.startsWith(`${group}: `) ? d.label.slice(group.length + 2) : d.trigger ? 'New event (trigger)' : d.label === group && d.fields?.some(f => f.k === 'operation') ? `${group} (pick an action)` : d.label);
 function Library({ open, onToggle, onPick }) {
   const [q, setQ] = useState('');
-  // The tool groups (Text, Numbers, Dates…) and Public data start folded, so the list stays short.
-  const [shut, setShut] = useState(() => Object.fromEntries(GROUPS.map(g => [g, Object.values(NODES).every(d => d.group !== g || d.more)])));
+  // Start, Build and NOAH Studio start open; the tools, the apps and the data sources folded.
+  const [shut, setShut] = useState(() => Object.fromEntries(shelves(Object.entries(NODES)).flatMap(s => s.groups.map(g => [`${s.section}/${g.name}`, !OPEN_SECTIONS.has(s.section)]))));
   if (!open) return <aside className="fv-lib closed"><button className="btn icon-only" aria-label="Show the nodes" title="Nodes" onClick={onToggle}><Ico d="M9 6l6 6-6 6" size={16} /></button></aside>;
   const needle = q.trim().toLowerCase();
-  const list = Object.entries(NODES).filter(([k, d]) => !needle || `${d.label} ${d.note} ${d.group} ${k}`.toLowerCase().includes(needle));
+  const list = Object.entries(NODES).filter(matches(needle));
   return (
     <aside className="fv-lib" aria-label="Nodes">
       <div className="fv-lib-head">
         <b>Nodes</b><small>{Object.keys(NODES).length}</small>
         <button className="btn icon-only" aria-label="Hide the nodes" title="Hide" onClick={onToggle}><Ico d="M15 6l-6 6 6 6" size={16} /></button>
       </div>
-      <label className="fv-lib-search"><Ico d="M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4" size={14} /><input className="fv-lib-q" type="search" placeholder="Search nodes" value={q} onChange={e => setQ(e.target.value)} /></label>
+      <label className="fv-lib-search"><Ico d="M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4" size={14} /><input className="fv-lib-q" type="search" placeholder="Search nodes or apps" value={q} onChange={e => setQ(e.target.value)} /></label>
       <div className="fv-lib-list">
-        {GROUPS.map(g => {
-          const items = list.filter(([, d]) => d.group === g);
-          if (!items.length) return null;
-          const closed = shut[g] && !needle;
-          return (
-            <section key={g}>
-              <button className="fv-lib-g" aria-expanded={!closed} onClick={() => setShut(x => ({ ...x, [g]: !x[g] }))}>
-                <Ico d={closed ? 'M9 6l6 6-6 6' : 'M6 9l6 6 6-6'} size={13} />{g}<small>{items.length}</small>
-              </button>
-              {!closed && items.map(([k, d]) => (
-                <button key={k} className={'fv-lib-item t-' + d.tone} draggable title={d.note}
-                  onDragStart={e => { e.dataTransfer.setData('application/x-workline-node', k); e.dataTransfer.effectAllowed = 'copy'; }}
-                  onClick={() => onPick(k)}>
-                  <i className={badge(d)}><Mark d={d} size={14} /></i><span>{d.label}</span>
-                </button>
-              ))}
-            </section>
-          );
-        })}
+        {shelves(list).map(({ section, groups }) => (
+          <div key={section} className="fv-lib-sec">
+            <h4>{section}<small>{groups.reduce((n, g) => n + g.items.length, 0)}</small></h4>
+            {groups.map(({ name, items }) => {
+              const id = `${section}/${name}`, closed = shut[id] && !needle, d0 = items[0][1];
+              const appGroup = section === 'Apps';
+              return (
+                <section key={name}>
+                  <button className={'fv-lib-g' + (appGroup ? ' app' : '')} aria-expanded={!closed} onClick={() => setShut(x => ({ ...x, [id]: !x[id] }))}>
+                    <Ico d={closed ? 'M9 6l6 6-6 6' : 'M6 9l6 6 6-6'} size={13} />
+                    {appGroup && <i className={badge(d0)}><Mark d={d0} size={12} /></i>}{name}<small>{items.length}</small>
+                  </button>
+                  {!closed && items.map(([k, d]) => (
+                    <button key={k} className={'fv-lib-item t-' + d.tone} draggable title={d.note}
+                      onDragStart={e => { e.dataTransfer.setData('application/x-workline-node', k); e.dataTransfer.effectAllowed = 'copy'; }}
+                      onClick={() => onPick(k)}>
+                      <i className={badge(d)}><Mark d={d} size={14} /></i><span>{appGroup ? shortLabel(d, name) : d.label}</span>
+                    </button>
+                  ))}
+                </section>
+              );
+            })}
+          </div>
+        ))}
         {!list.length && <p className="muted">No node matches.</p>}
       </div>
     </aside>
@@ -571,19 +581,16 @@ function Palette({ at, view, onPick, onClose }) {
   const ref = useRef(null);
   useEffect(() => { ref.current?.querySelector('input')?.focus(); }, []);
   const needle = q.trim().toLowerCase();
-  const list = Object.entries(NODES).filter(([k, d]) => !needle || `${d.label} ${d.note} ${d.group} ${k}`.toLowerCase().includes(needle));
+  const shelved = shelves(Object.entries(NODES).filter(matches(needle))), list = shelved.flatMap(s => s.groups.flatMap(g => g.items));
   return (
     <div className="fv-pal" ref={ref} style={{ left: Math.max(8, at.x * view.k + view.x), top: Math.max(8, at.y * view.k + view.y) }} onPointerDown={e => e.stopPropagation()}>
       <input placeholder="Search nodes" value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') onClose(); if (e.key === 'Enter' && list[0]) onPick(list[0][0]); }} />
       <div className="fv-pal-list">
-        {GROUPS.map(g => {
-          const items = list.filter(([, d]) => d.group === g);
-          return items.length ? (
-            <div key={g}><h5>{g}</h5>
-              {items.map(([k, d]) => <button key={k} className={'t-' + d.tone} onClick={() => onPick(k)}><i className={badge(d)}><Mark d={d} size={15} /></i><span><b>{d.label}</b><small>{d.note}</small></span></button>)}
-            </div>
-          ) : null;
-        })}
+        {shelved.flatMap(s => s.groups).map(({ name, items }) => (
+          <div key={name}><h5>{name}</h5>
+            {items.map(([k, d]) => <button key={k} className={'t-' + d.tone} onClick={() => onPick(k)}><i className={badge(d)}><Mark d={d} size={15} /></i><span><b>{d.label}</b><small>{d.note}</small></span></button>)}
+          </div>
+        ))}
         {!list.length && <p className="muted">No node matches.</p>}
       </div>
     </div>
