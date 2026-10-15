@@ -7,8 +7,8 @@ import { listFiles } from '../lib/cloud.js';
 import { publishedApps } from '../lib/apps.js';
 import { serverInfo } from '../lib/backend.js';
 
-/* WorkLine Apps (/mobile): the phone app. It shows the apps published from the account's workflows
-   (Home → Apps) and its live web pages, and runs them; nothing to edit, nothing about nodes.
+/* WorkLine Apps (/mobile): the phone app. It shows only the workflows published as apps (Home → Apps)
+   and runs them; nothing to edit, nothing about nodes.
    It installs as an app (a PWA: /mobile.webmanifest and /sw.js), and the Android app (mobile/, made
    with Capacitor) opens this same page. */
 
@@ -34,11 +34,6 @@ function useInstallable() {
     return () => els.forEach(el => el.remove());
   }, []);
 }
-
-// Live pages: workflows that are active and start with a Page trigger, at their own link.
-const livePages = files => files.filter(f => !f.archived && f.flow && f.flow.active).flatMap(f => (f.flow.nodes || [])
-  .filter(n => n.type === 'trigger.page' && n.params && n.params.path)
-  .map(n => ({ id: `${f.id}:${n.id}`, title: f.title, url: n.params.link ? `/p/${n.params.link}` : `/api/hook/${n.params.path}`, link: n.params.link })));
 
 export default function MobileApps() {
   useInstallable();
@@ -81,7 +76,6 @@ function AppsHome({ session, onSignOut }) {
     return () => removeEventListener('beforeinstallprompt', keep);
   }, []);
   const apps = files ? publishedApps(files) : [];
-  const pages = files ? livePages(files) : [];
   const open = apps.find(f => f.id === openId);
   const out = async () => { if (await ask({ title: 'Sign out?', text: 'You can sign in again any time.', input: false, ok: 'Sign out' })) onSignOut(); };
   if (open) return (
@@ -91,20 +85,19 @@ function AppsHome({ session, onSignOut }) {
   );
   const needle = q.trim().toLowerCase();
   const shownApps = apps.filter(f => !needle || `${f.flow.app.name} ${f.flow.app.description || ''}`.toLowerCase().includes(needle));
-  const shownPages = pages.filter(p => !needle || `${p.title} ${p.link || ''}`.toLowerCase().includes(needle));
   const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) && !inInstalledApp();
   return (
     <div className="m-shell">
       <MobileBar user={session.user} onSignOut={out} onRefresh={load} busy={busy} />
-      <p className="m-hello">Hi {(session.user.name || session.user.email || '').split(/[ @]/)[0]}! Your apps, ready to run.</p>
+      <p className="m-hello">Hi {(session.user.name || session.user.email || '').split(/[ @]/)[0]}! Your published workflows, ready to run.</p>
       {install && <button className="btn primary m-wide m-install" onClick={async () => { install.prompt(); await install.userChoice.catch(() => {}); setInstall(null); }}>⬇ Install WorkLine Apps</button>}
       {ios && <p className="m-tip">To install: tap <b>Share</b> → <b>Add to Home Screen</b>.</p>}
       <input className="m-search" type="search" placeholder="Search your apps" aria-label="Search your apps" value={q} onChange={e => setQ(e.target.value)} />
       {error && <p className="m-note err">{error} <button className="link" onClick={load}>Try again</button></p>}
       {!files && !error && <div className="m-skel" aria-busy="true"><i /><i /><i /></div>}
       {files && (<>
-        <h2 className="m-h">Apps <small>{shownApps.length}</small></h2>
-        {!apps.length ? <p className="m-note">No apps yet. On WorkLine, open a workflow and press <b>Publish</b>: it shows up here.</p>
+        <h2 className="m-h">Published workflows <small>{shownApps.length}</small></h2>
+        {!apps.length ? <p className="m-note">No published workflows yet. On WorkLine, open a workflow and press <b>Publish</b>: it shows up here.</p>
           : <div className="m-grid">
             {shownApps.map(f => {
               const a = f.flow.app;
@@ -115,16 +108,6 @@ function AppsHome({ session, onSignOut }) {
               );
             })}
           </div>}
-        {pages.length > 0 && (<>
-          <h2 className="m-h">Live pages <small>{shownPages.length}</small></h2>
-          <div className="m-list">
-            {shownPages.map(p => (
-              <a key={p.id} className="m-page" href={p.url} aria-label={`Open the page ${p.title}`}>
-                <i aria-hidden="true">🌐</i><span><b>{p.title}</b><small>{p.link ? `/p/${p.link}` : 'Page link'}</small></span><em aria-hidden="true">›</em>
-              </a>
-            ))}
-          </div>
-        </>)}
       </>)}
       <footer className="m-foot">Make and edit apps on WorkLine on a computer; run them here.</footer>
     </div>

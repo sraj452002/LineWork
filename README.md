@@ -120,11 +120,11 @@ The backend loads `meta.json` when it starts and answers a change only after it'
 
 ## WorkLine Apps: the phone app (PWA and Android)
 
-**WorkLine Apps** runs the apps published from your workflows (Home → Apps) and opens your live pages (`/p/<name>`), on a phone. Make and edit on a computer; run here.
+**WorkLine Apps** shows only your published workflows (Home → Apps) and runs them, on a phone. Make and edit on a computer; run here.
 
 - **Install from the browser (PWA):** open `<your site>/mobile` on the phone and sign in. On Android, Chrome offers **Install** (also the ⬇ button on the page). On iPhone, tap **Share → Add to Home Screen**. It opens in its own window with its own icon, and starts offline to a saved copy. Its files are `frontend/src/components/MobileApps.jsx`, `frontend/public/mobile.webmanifest`, `frontend/public/sw.js` and `frontend/public/icons/`.
 - **Android app (APK):** `mobile/` is a Capacitor app that opens `<your site>/mobile`.
-  - **On GitHub:** **Actions → “Android app (WorkLine Apps)” → Run workflow**, give your site's address, and download the APK from the run's **Artifacts**.
+  - **On GitHub:** **Actions → “Android app (WorkLine Apps)” → Run workflow**, and give your site's address. The APK (`WorkLine-Apps.apk`) is then on the **Releases** page as “WorkLine Apps for Android (latest)”, on the `android-apk` branch, and in the run's **Artifacts**. It is also built whenever `mobile/` changes on master.
   - **On your computer:** with Android Studio installed, run `cd mobile && npm install && node set-site.mjs https://your-site.netlify.app && npm run apk`. The APK is in `android/app/build/outputs/apk/debug/`.
   - **Sign-in:** inside the Android app, use your email and password or GitHub. Google doesn't allow its sign-in inside apps' web views.
 

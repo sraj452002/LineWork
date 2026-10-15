@@ -1,6 +1,7 @@
 # WorkLine Apps for Android: builds the APK (mobile/, a Capacitor app that opens <your site>/mobile).
-# Run it from GitHub → Actions → "Android app (WorkLine Apps)" → Run workflow, with your site's address;
-# the APK is attached to the run (Artifacts → workline-apps-apk). It also runs when mobile/ changes.
+# Run it from GitHub → Actions → "Android app (WorkLine Apps)" → Run workflow, with your site's address.
+# The APK (WorkLine-Apps.apk) is put on the Releases page ("WorkLine Apps for Android (latest)", tag
+# android-latest), on the android-apk branch, and on the run (Artifacts). It also runs when mobile/ changes.
 name: Android app (WorkLine Apps)
 on:
   workflow_dispatch:
@@ -13,7 +14,7 @@ on:
     branches: [master]
     paths: ['mobile/**', '.github/workflows/android-apk.yml']
 permissions:
-  contents: read
+  contents: write
 jobs:
   apk:
     runs-on: ubuntu-latest
@@ -39,7 +40,25 @@ jobs:
       - name: Build the APK
         working-directory: mobile/android
         run: chmod +x gradlew && ./gradlew assembleDebug --no-daemon
+      - name: Name the APK
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk WorkLine-Apps.apk
       - uses: actions/upload-artifact@v4
         with:
           name: workline-apps-apk
-          path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          path: mobile/WorkLine-Apps.apk
+      - name: Put it on the Releases page (replacing the last one)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete android-latest --yes --cleanup-tag || true
+          gh release create android-latest WorkLine-Apps.apk --target "$GITHUB_SHA" --prerelease \
+            --title "WorkLine Apps for Android (latest)" \
+            --notes "Install WorkLine-Apps.apk on an Android phone (allow installs from this browser when asked). It opens your WorkLine site's /mobile page: your published workflows, ready to run. Built from $GITHUB_SHA."
+      - name: Keep it on the android-apk branch too
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p /tmp/apk && cp WorkLine-Apps.apk /tmp/apk/ && cd /tmp/apk
+          git init -q -b android-apk && git add WorkLine-Apps.apk
+          git -c user.name=github-actions -c user.email=github-actions@users.noreply.github.com commit -qm "WorkLine Apps APK from $GITHUB_SHA"
+          git push -qf "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" android-apk
