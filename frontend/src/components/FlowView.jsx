@@ -280,7 +280,9 @@ export default function FlowView({ file, update, visible, saveState = 'Saved', o
     ],
     context: () => {
       const brief = n => `- "${n.name}" (${n.type})${n.credential ? ' [credential set]' : ''}: ${JSON.stringify(n.params || {}).slice(0, 600)}`;
-      const catalog = Object.entries(NODES).map(([k, d]) => `${k}: ${d.label}. ${d.note}${d.fields && d.fields.length ? ` Fields: ${d.fields.map(f => f.k + (f.kind === 'select' && f.options ? `(${f.options.map(o => o[0]).join('|')})` : '')).join(', ')}` : ''}${d.outputs ? ` Outputs: ${d.outputs.join(', ')}` : ''}`).join('\n');
+      const catalog = Object.entries(NODES).filter(([, d]) => !d.more).map(([k, d]) => `${k}: ${d.label}. ${d.note}${d.fields && d.fields.length ? ` Fields: ${d.fields.map(f => f.k + (f.kind === 'select' && f.options ? `(${f.options.map(o => o[0]).join('|')})` : '')).join(', ')}` : ''}${d.outputs ? ` Outputs: ${d.outputs.join(', ')}` : ''}`).join('\n');
+      // The 500-odd tool and app-action nodes, shorter: type(fields), by group.
+      const more = GROUPS.map(g => { const l = Object.entries(NODES).filter(([, d]) => d.more && d.group === g); return l.length ? `${g}: ${l.map(([k, d]) => `${k}(${d.fields.map(f => f.k).join(',')})`).join('; ')}` : ''; }).filter(Boolean).join('\n');
       const last = run && run.nodes ? Object.entries(run.nodes).filter(([, r]) => r.error).map(([id, r]) => `"${byId.get(id)?.name || id}": ${r.error}`).join('\n') : '';
       return `The Workflow view: an n8n-style workflow. Items flow from node to node as JSON; fields can use {{ expressions }} like {{ $json.name }}, {{ $node["Name"].json.x }}, {{ $items.length }}. A Code node (language javascript, typescript, python, lua or sql) gets \`items\` and returns a list.
 ${flow.active ? 'Active.' : 'Not active.'} Nodes:
@@ -290,7 +292,10 @@ ${selected ? `Selected node: "${selected.name}".` : ''}
 ${run ? `Last run: ${run.status}${run.error ? ` — ${run.error}` : ''}${last ? `\nErrors:\n${last}` : ''}` : 'Not run yet.'}
 
 Kinds of node (type: what it is. its fields):
-${catalog}`;
+${catalog}
+
+More nodes, by group: type(fields). Tools work on params.value (usually an expression) and put the result in params.output; app actions need a credential of the app's kind.
+${more}`;
     },
     rules: `One of:
 {"type": "nodes", "nodes": [{"ref": "a", "type": "a node type from the list", "name": "a short name", "params": {"field": "value"}}], "edges": [{"from": "a", "to": "b", "fromPort": "main"}], "after": "name of an existing node to connect the first new node after, or null"}
@@ -522,10 +527,11 @@ ${catalog}`;
 // node), or drag it onto the canvas.
 function Library({ open, onToggle, onPick }) {
   const [q, setQ] = useState('');
-  const [shut, setShut] = useState({});
+  // The tool groups (Text, Numbers, Dates…) and Public data start folded, so the list stays short.
+  const [shut, setShut] = useState(() => Object.fromEntries(GROUPS.map(g => [g, Object.values(NODES).every(d => d.group !== g || d.more)])));
   if (!open) return <aside className="fv-lib closed"><button className="btn icon-only" aria-label="Show the nodes" title="Nodes" onClick={onToggle}><Ico d="M9 6l6 6-6 6" size={16} /></button></aside>;
   const needle = q.trim().toLowerCase();
-  const list = Object.entries(NODES).filter(([, d]) => !needle || `${d.label} ${d.note} ${d.group}`.toLowerCase().includes(needle));
+  const list = Object.entries(NODES).filter(([k, d]) => !needle || `${d.label} ${d.note} ${d.group} ${k}`.toLowerCase().includes(needle));
   return (
     <aside className="fv-lib" aria-label="Nodes">
       <div className="fv-lib-head">
@@ -565,7 +571,7 @@ function Palette({ at, view, onPick, onClose }) {
   const ref = useRef(null);
   useEffect(() => { ref.current?.querySelector('input')?.focus(); }, []);
   const needle = q.trim().toLowerCase();
-  const list = Object.entries(NODES).filter(([, d]) => !needle || `${d.label} ${d.note} ${d.group}`.toLowerCase().includes(needle));
+  const list = Object.entries(NODES).filter(([k, d]) => !needle || `${d.label} ${d.note} ${d.group} ${k}`.toLowerCase().includes(needle));
   return (
     <div className="fv-pal" ref={ref} style={{ left: Math.max(8, at.x * view.k + view.x), top: Math.max(8, at.y * view.k + view.y) }} onPointerDown={e => e.stopPropagation()}>
       <input placeholder="Search nodes" value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') onClose(); if (e.key === 'Enter' && list[0]) onPick(list[0][0]); }} />

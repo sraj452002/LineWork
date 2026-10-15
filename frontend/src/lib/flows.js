@@ -1,6 +1,7 @@
 import { api } from './backend.js';
 import { rid } from './utils.js';
 import { CODE_LANGS, codeLang } from './codelangs.js';
+import { MORE } from './morenodes.js';
 
 /* Workflows in the app: what each kind of node looks like and asks for (the server runs them: see
    backend/flow-nodes.js and flow-apps.js, which read the same param names), the kinds of credentials,
@@ -108,7 +109,8 @@ const EXTRACT = [
 const EMAIL = [{ k: 'to', label: 'To', kind: 'text' }, { k: 'subject', label: 'Subject', kind: 'text' }, { k: 'text', label: 'Text', kind: 'textarea' }, { k: 'html', label: 'HTML (optional)', kind: 'textarea' }, { k: 'from', label: 'From (blank: the credential’s)', kind: 'text' }];
 const LANGS = [['EN-US', 'English (US)'], ['EN-GB', 'English (UK)'], ['HI', 'Hindi'], ['DE', 'German'], ['FR', 'French'], ['ES', 'Spanish'], ['IT', 'Italian'], ['PT-BR', 'Portuguese (Brazil)'], ['NL', 'Dutch'], ['PL', 'Polish'], ['RU', 'Russian'], ['JA', 'Japanese'], ['KO', 'Korean'], ['ZH', 'Chinese'], ['AR', 'Arabic'], ['TR', 'Turkish'], ['ID', 'Indonesian'], ['UK', 'Ukrainian']];
 
-export const GROUPS = ['Triggers', 'Workline', 'Flow', 'Data', 'UI', 'Web', 'AI', 'Communication', 'Productivity', 'Developer', 'Sales & payments', 'Storage & feeds'];
+// The small tool groups (Text, Numbers, Dates…) come after Data; Public data at the end.
+export const GROUPS = ['Triggers', 'Workline', 'Flow', 'Data', ...MORE.groups.filter(g => g !== 'Public data'), 'UI', 'Web', 'AI', 'Communication', 'Productivity', 'Developer', 'Sales & payments', 'Storage & feeds', 'Public data'];
 export const NODES = {
   /* ---- triggers ---- */
   'trigger.manual': { group: 'Triggers', label: 'Run by hand', note: 'Starts when you press Run', icon: I.play, tone: 'green', trigger: true, fields: [] },
@@ -465,6 +467,12 @@ export const NODES = {
 };
 // The Code block (UI): a part of the page in your own HTML, React or Vue. It runs in a frame of its own,
 // with `items` (what reached the node); a starter for each framework, swapped in when the code is untouched.
+/* The tool nodes (text, numbers, dates, lists… in backend/flow-tools.js) and one-job app actions and
+   public data (backend/flow-actions.js), from morenodes.js, which scripts/more-nodes.mjs writes. */
+for (const [k, { defaults, icon, guide, ...d }] of Object.entries(MORE.nodes)) {
+  NODES[k] = { ...d, icon: I[icon] || I.plug, more: true, defaults: () => structuredClone(defaults || {}) };
+}
+
 export const CODE_BLOCKS = {
   react: { label: 'React (JSX)', starter: `// A React component, App. It gets items: what reached this node.
 function App({ items }) {

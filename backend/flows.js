@@ -9,8 +9,10 @@ import { WEB_NODES } from './flow-web.js';
 import { EXTRA_NODES } from './flow-extra.js';
 import { UI_NODES, renderPage, codeBlock } from './flow-ui.js';
 import { installRoutes } from './app-install.js';
+import { TOOL_NODES } from './flow-tools.js';
+import { ACTION_NODES } from './flow-actions.js';
 
-const TYPES = { ...NODE_TYPES, ...APP_NODES, ...WORKLINE_NODES, ...TRIGGER_TYPES, ...WEB_NODES, ...EXTRA_NODES, ...UI_NODES };
+const TYPES = { ...NODE_TYPES, ...APP_NODES, ...WORKLINE_NODES, ...TRIGGER_TYPES, ...WEB_NODES, ...EXTRA_NODES, ...UI_NODES, ...TOOL_NODES, ...ACTION_NODES };
 import { DUMMY, checkPassword, hashPassword, limiter, newToken, tokenHash } from './auth.js';
 
 /* Workflows on the server: credentials, runs, webhooks and schedules. A workflow lives in a file
