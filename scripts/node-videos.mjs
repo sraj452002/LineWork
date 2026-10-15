@@ -17,7 +17,8 @@ import { chromium } from '@playwright/test';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const DIST = join(ROOT, 'frontend/dist');
-const OUT = join(ROOT, 'frontend/public/guides/nodes');
+// NV_OUT=<folder> makes them somewhere else first (copy them in when done).
+const OUT = process.env.NV_OUT ? resolve(process.env.NV_OUT) : join(ROOT, 'frontend/public/guides/nodes');
 const arg = name => (process.argv.find(a => a.startsWith(`--${name}=`)) || '').split('=').slice(1).join('=');
 const flag = name => process.argv.includes(`--${name}`);
 const WORKERS = Number(arg('workers')) || 3;
