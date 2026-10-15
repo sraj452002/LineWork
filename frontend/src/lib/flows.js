@@ -474,12 +474,12 @@ for (const [k, { defaults, icon, guide, ...d }] of Object.entries(MORE.nodes)) {
 }
 
 /* The node library's shelves: sections, each with groups. Every app gets a group of its own (its
-   trigger, its main node and its one-job actions, A–Z); the generic nodes added from NOAH Studio's list
+   trigger, its main node and its one-job actions, A–Z); the more advanced generic nodes (AI helpers, MCP, error handling…)
    have their own section. A node's `group` (what it is) stays as it was; this is only where it's shelved. */
-export const NOAH_STUDIO = new Set(['ai.summarize', 'ai.extract', 'ai.classify', 'ai.rewrite', 'ai.translate', 'ai.vision', 'ai.decide', 'ai.score', 'ai.mcp',
+export const ADVANCED = new Set(['ai.summarize', 'ai.extract', 'ai.classify', 'ai.rewrite', 'ai.translate', 'ai.vision', 'ai.decide', 'ai.score', 'ai.mcp',
   'core.respond', 'core.pivot', 'core.textsplit', 'core.kv', 'core.graphql', 'file.spreadsheet', 'app.redis', 'core.note',
   'trigger.error', 'trigger.dbrow', 'trigger.email', 'trigger.calendar']);
-export const SECTIONS = ['Start', 'Build', 'NOAH Studio', 'Tools', 'Apps', 'Data sources'];
+export const SECTIONS = ['Start', 'Build', 'Advanced', 'Tools', 'Apps', 'Data sources'];
 const APP_NAME = { 'trigger.github': 'GitHub', 'trigger.stripe': 'Stripe', 'trigger.shopify': 'Shopify', 'trigger.slack': 'Slack', 'trigger.typeform': 'Typeform', 'trigger.calendly': 'Calendly', 'trigger.telegram': 'Telegram',
   openai: 'OpenAI', gemini: 'Gemini', deepl: 'DeepL', 'app.email': 'Email', twilio: 'Twilio', ntfy: 'ntfy', 'app.database': 'Database', supabase: 'Supabase', dropbox: 'Dropbox', bitly: 'Bitly' };
 const APP_GROUPS = new Set(['Communication', 'Productivity', 'Developer', 'Sales & payments']);
@@ -494,7 +494,7 @@ export function appOf(type, d = nodeDef(type)) {
 }
 // Where a node sits in the library: {section, group}.
 export function shelfOf(type, d = nodeDef(type)) {
-  if (NOAH_STUDIO.has(type)) return { section: 'NOAH Studio', group: d.trigger ? 'Triggers' : d.group === 'AI' ? 'AI' : 'Flow & data' };
+  if (ADVANCED.has(type)) return { section: 'Advanced', group: d.trigger ? 'Triggers' : d.group === 'AI' ? 'AI' : 'Flow & data' };
   const app = appOf(type, d);
   if (app) return { section: 'Apps', group: app };
   if (d.trigger) return { section: 'Start', group: 'Triggers' };

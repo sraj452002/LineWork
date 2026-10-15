@@ -2722,7 +2722,7 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 @keyframes pl-nudge{40%{transform:translateY(-2px)}}
 @keyframes pl-toast{from{opacity:0;transform:translate(-50%,-14px) scale(.9)}to{opacity:1;transform:translate(-50%,0)}}
 
-/* Node library sections (Start, Build, NOAH Studio, AI, Tools, Apps, Data sources); each app its own group. */
+/* Node library sections (Start, Build, Advanced, Tools, Apps, Data sources); each app its own group. */
 .fv-lib-sec{padding-top:6px}
 .fv-lib-sec + .fv-lib-sec{margin-top:6px;border-top:1px solid var(--line)}
 .fv-lib-sec h4{display:flex;align-items:baseline;gap:6px;margin:8px 6px 2px;font-size:12.5px;font-weight:700;color:var(--ink);letter-spacing:0;text-transform:none}

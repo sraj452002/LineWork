@@ -525,14 +525,14 @@ ${more}`;
 
 // The node library on the left: every node in its section and group (each app has its own group),
 // searchable; click one to add it (after the selected node), or drag it onto the canvas.
-const OPEN_SECTIONS = new Set(['Start', 'Build', 'NOAH Studio']);
+const OPEN_SECTIONS = new Set(['Start', 'Build', 'Advanced']);
 const matches = needle => ([k, d]) => !needle || `${d.label} ${d.note} ${d.group} ${k} ${shelfOf(k, d).group}`.toLowerCase().includes(needle);
 // In an app's own group, “GitHub: Comment on an issue” reads as “Comment on an issue”.
 // The app's trigger and its main node (both named after the app) say which is which.
 const shortLabel = (d, group) => (d.label.startsWith(`${group}: `) ? d.label.slice(group.length + 2) : d.trigger ? 'New event (trigger)' : d.label === group && d.fields?.some(f => f.k === 'operation') ? `${group} (pick an action)` : d.label);
 function Library({ open, onToggle, onPick }) {
   const [q, setQ] = useState('');
-  // Start, Build and NOAH Studio start open; the tools, the apps and the data sources folded.
+  // Start, Build and Advanced start open; the tools, the apps and the data sources folded.
   const [shut, setShut] = useState(() => Object.fromEntries(shelves(Object.entries(NODES)).flatMap(s => s.groups.map(g => [`${s.section}/${g.name}`, !OPEN_SECTIONS.has(s.section)]))));
   if (!open) return <aside className="fv-lib closed"><button className="btn icon-only" aria-label="Show the nodes" title="Nodes" onClick={onToggle}><Ico d="M9 6l6 6-6 6" size={16} /></button></aside>;
   const needle = q.trim().toLowerCase();

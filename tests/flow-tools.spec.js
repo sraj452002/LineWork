@@ -8,7 +8,7 @@ import { TOOL_META, TOOL_NODES, TOOL_TESTS } from '../backend/flow-tools.js';
 import { ACTION_META, ACTION_NODES } from '../backend/flow-actions.js';
 import { CRED_FIELDS } from '../backend/flows.js';
 import { moreNodes, OUT } from '../scripts/more-nodes.mjs';
-import { CRED_TYPES, GROUPS, NODES, NOAH_STUDIO, shelves } from '../frontend/src/lib/flows.js';
+import { CRED_TYPES, GROUPS, NODES, ADVANCED, shelves } from '../frontend/src/lib/flows.js';
 import { NODE_GUIDE } from '../frontend/src/lib/flowguide.js';
 
 // The tool nodes (text, numbers, dates, lists…) and the one-job app actions and public data.
@@ -115,9 +115,9 @@ test('app actions call the right address with the credential, and pass on the an
   } finally { globalThis.fetch = real; dns.lookup = realLookup; syncBuiltinESMExports(); }
 });
 
-test('the library shelves every node once: each app in its own group, NOAH Studio’s nodes together', () => {
+test('the library shelves every node once: each app in its own group, the advanced nodes together', () => {
   const shelf = shelves(Object.entries(NODES));
-  expect(shelf.map(s => s.section)).toEqual(['Start', 'Build', 'NOAH Studio', 'Tools', 'Apps', 'Data sources']);
+  expect(shelf.map(s => s.section)).toEqual(['Start', 'Build', 'Advanced', 'Tools', 'Apps', 'Data sources']);
   const all = shelf.flatMap(s => s.groups.flatMap(g => g.items.map(([k]) => k)));
   expect(all.length).toBe(Object.keys(NODES).length);
   expect(new Set(all).size).toBe(all.length);
@@ -127,5 +127,5 @@ test('the library shelves every node once: each app in its own group, NOAH Studi
   expect(group('Apps', 'Google Sheets')).toEqual(expect.arrayContaining(['google.sheets', 'gsheets.update']));
   const apps = shelf.find(s => s.section === 'Apps').groups.map(g => g.name);
   expect(apps).toEqual([...apps].sort((a, b) => a.localeCompare(b)));
-  expect(shelf.find(s => s.section === 'NOAH Studio').groups.flatMap(g => g.items.map(([k]) => k)).sort()).toEqual([...NOAH_STUDIO].sort());
+  expect(shelf.find(s => s.section === 'Advanced').groups.flatMap(g => g.items.map(([k]) => k)).sort()).toEqual([...ADVANCED].sort());
 });
