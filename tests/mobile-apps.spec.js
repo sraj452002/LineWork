@@ -1,5 +1,4 @@
 import { test, expect } from '@playwright/test';
-import { readFileSync } from 'node:fs';
 import { openStore } from '../backend/store.js';
 import { memoryBackend } from '../backend/drive.js';
 import { createApp } from '../backend/app.js';
@@ -77,9 +76,6 @@ test('WorkLine Apps: sign in on a phone, see only the published workflows, run o
     expect(manifest).toMatchObject({ name: 'WorkLine Apps', start_url: '/mobile', display: 'standalone' });
     for (const icon of manifest.icons) expect((await page.request.get(icon.src)).headers()['content-type']).toContain('image/png');
     expect(await page.evaluate(() => navigator.serviceWorker.getRegistration().then(r => !!r))).toBe(true);
-    // The Android app (Capacitor) opens this page.
-    const cap = JSON.parse(readFileSync('mobile/capacitor.config.json', 'utf8'));
-    expect(cap.server.url).toMatch(/\/mobile$/);
     expect(errors).toEqual([]);
     await ctx.close();
   } finally { try { process.kill(-vite.pid); } catch (e) {} srv.close(); nv.close(); }

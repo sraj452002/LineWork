@@ -80,7 +80,7 @@ const ID = /^[\w-]{1,80}$/;
 // A page's own link name: /p/<name>.
 export const PAGE_LINK = /^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$/;
 
-export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secret = '' }) {
+export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secret = '', storeOwner = '' }) {
   const m = store.meta;
 
   /* ---- credentials ---- */
@@ -227,6 +227,22 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
         start(uid, t.fileId, other, t.nodeId, [{ json: { workflowId: fileId, workflow: file?.title || null, runId: run.id, trigger: run.trigger, error: run.error, failedNode: failed?.name || null, failedAt: new Date(run.finished).toISOString() } }], 'error');
       } catch (e) { console.error('An On error workflow could not start:', e.message); }
     }
+  };
+  // A published app's start: its trigger, and the form's answers (only the inputs the app declares).
+  const appStart = (flow, body) => {
+    const app = flow && flow.app;
+    if (!app || !app.published) return { status: 404, error: { error: 'not_found', message: 'That app isn’t published.' } };
+    const from = flow.nodes.find(n => n.id === app.startId) || flow.nodes.find(n => n.type === 'trigger.manual') || flow.nodes.find(n => String(n.type).startsWith('trigger.'));
+    if (!from) return { status: 400, error: { error: 'no_start', message: 'The app’s workflow has no trigger to start from.' } };
+    const given = body && typeof body.input === 'object' && body.input ? body.input : {};
+    const input = {};
+    for (const f of Array.isArray(app.inputs) ? app.inputs : []) {
+      const key = String(f.key || ''), v = given[key];
+      if (!key) continue;
+      if (f.required && (v === undefined || v === null || String(v).trim() === '')) return { status: 400, error: { error: 'missing', message: `Fill in ${f.label || key}.` } };
+      input[key] = f.kind === 'number' ? (v === '' || v == null ? null : Number(v)) : f.kind === 'yesno' ? v === true || v === 'true' : String(v ?? '').slice(0, 20_000);
+    }
+    return { from, input };
   };
   const savedFlow = async (uid, fileId) => {
     const text = await store.readFile(uid, fileId);
@@ -622,22 +638,69 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
     api.post('/flows/:fileId/app', signedIn, async (req, res) => {
       if (!ID.test(req.params.fileId)) return res.status(400).json({ error: 'bad_id' });
       const flow = await savedFlow(req.user.id, req.params.fileId);
-      const app = flow && flow.app;
-      if (!app || !app.published) return res.status(404).json({ error: 'not_found', message: 'That app isn’t published.' });
-      const from = flow.nodes.find(n => n.id === app.startId) || flow.nodes.find(n => n.type === 'trigger.manual') || flow.nodes.find(n => String(n.type).startsWith('trigger.'));
-      if (!from) return res.status(400).json({ error: 'no_start', message: 'The app’s workflow has no trigger to start from.' });
-      const given = req.body && typeof req.body.input === 'object' && req.body.input ? req.body.input : {};
-      const input = {};
-      for (const f of Array.isArray(app.inputs) ? app.inputs : []) {
-        const key = String(f.key || ''), v = given[key];
-        if (!key) continue;
-        if (f.required && (v === undefined || v === null || String(v).trim() === '')) return res.status(400).json({ error: 'missing', message: `Fill in ${f.label || key}.` });
-        input[key] = f.kind === 'number' ? (v === '' || v == null ? null : Number(v)) : f.kind === 'yesno' ? v === true || v === 'true' : String(v ?? '').slice(0, 20_000);
-      }
+      const got = appStart(flow, req.body);
+      if (got.error) return res.status(got.status).json(got.error);
       try {
-        const run = start(req.user.id, req.params.fileId, flow, from.id, [{ json: input }], 'app');
+        const run = start(req.user.id, req.params.fileId, flow, got.from.id, [{ json: got.input }], 'app');
         res.status(202).json({ runId: run.id });
       } catch (e) { res.status(e.code === 'busy' ? 429 : 400).json({ error: e.code || 'flow_error', message: e.message }); }
+    });
+
+    /* ---- the public store: one account's published apps (STORE_OWNER), for anyone ----
+       The WorkLine Apps phone app shows these without signing in: their names and forms, and runs them
+       with the owner's workflow (and credentials), so only that account can be the store, and runs are
+       limited per visitor. A run answers with what the app shows (its output node's items), waiting up
+       to 20 seconds; a longer one answers with a token to ask again with. */
+    const storeUid = () => { const e = String(storeOwner || '').trim().toLowerCase(); return e ? store.s.userByEmail.get(e)?.id || null : null; };
+    const storeRuns = new Map(); // token → {run, flow, expires}
+    const storeLimit = limiter({ max: 30, windowMs: 10 * 60_000 });
+    const appInfo = (id, a) => ({ id, name: String(a.name || 'App').slice(0, 80), description: String(a.description || '').slice(0, 300), icon: a.icon || '✨', tone: a.tone || 'blue', show: a.show || 'auto',
+      inputs: (Array.isArray(a.inputs) ? a.inputs : []).map(f => ({ key: f.key, label: f.label, kind: f.kind, required: !!f.required, options: f.options, placeholder: f.placeholder, hint: f.hint })) });
+    const shown = (flow, r) => {
+      const ok = id => r.nodes[id]?.status === 'success', app = flow.app || {};
+      const ids = app.outputId && ok(app.outputId) ? [app.outputId] : flow.nodes.filter(n => ok(n.id) && !flow.edges.some(e => e.from === n.id && ok(e.to))).map(n => n.id);
+      let out = ids.flatMap(id => Object.values(r.nodes[id].output || {}).flat()).slice(0, 2000);
+      while (out.length > 1 && JSON.stringify(out).length > 1_000_000) out = out.slice(0, Math.floor(out.length / 2));
+      return out;
+    };
+    // x: {run, flow, result} (result: the engine's, with each node's whole output, once it's done).
+    const answer = (res, x) => {
+      if (x.run.status === 'running' || !x.finished) return null;
+      if (x.run.status !== 'success' || !x.result) return res.status(422).json({ status: 'error', error: x.run.error || 'The workflow failed.' });
+      return res.json({ status: 'success', items: shown(x.flow, x.result) });
+    };
+    api.get('/store', async (req, res) => {
+      const uid = storeUid();
+      if (!uid) return res.status(404).json({ error: 'no_store', message: 'This server has no public apps (set STORE_OWNER on the server to an account’s email).' });
+      const files = await store.listFiles(uid);
+      const apps = files.filter(f => f && !f.archived && f.flow && f.flow.app && f.flow.app.published).map(f => appInfo(f.id, f.flow.app));
+      res.set('cache-control', 'no-store').json({ name: store.s.userById?.get?.(uid)?.name || null, apps });
+    });
+    api.post('/store/:fileId/run', async (req, res) => {
+      const uid = storeUid();
+      if (!uid) return res.status(404).json({ error: 'no_store' });
+      if (!ID.test(req.params.fileId)) return res.status(400).json({ error: 'bad_id' });
+      if (storeLimit.blocked(req.ip)) return res.status(429).json({ error: 'rate_limited', message: 'Too many runs from here. Try again in a few minutes.' });
+      const flow = await savedFlow(uid, req.params.fileId).catch(() => null);
+      const got = appStart(flow, req.body);
+      if (got.error) return res.status(got.status).json(got.error);
+      storeLimit.fail(req.ip);
+      let run;
+      try { run = start(uid, req.params.fileId, flow, got.from.id, [{ json: got.input }], 'app'); }
+      catch (e) { return res.status(e.code === 'busy' ? 429 : 400).json({ error: e.code || 'flow_error', message: e.message }); }
+      const x = { run, flow, result: null, finished: false, expires: Date.now() + 30 * 60_000 };
+      const done = run.done.then(d => { x.result = d.result; x.finished = true; });
+      await Promise.race([done, new Promise(r => setTimeout(r, 20_000))]);
+      if (answer(res, x) !== null) return;
+      const token = randomBytes(16).toString('hex');
+      for (const [k, v] of storeRuns) if (v.expires < Date.now()) storeRuns.delete(k);
+      storeRuns.set(token, x);
+      res.status(202).json({ status: 'running', token });
+    });
+    api.get('/store/runs/:token', (req, res) => {
+      const x = storeRuns.get(req.params.token);
+      if (!x) return res.status(404).json({ error: 'not_found' });
+      if (answer(res, x) === null) res.status(202).json({ status: 'running', token: req.params.token });
     });
     api.get('/flows/:fileId/runs', signedIn, (req, res) => {
       const list = (m.runs[req.user.id] || {})[req.params.fileId] || [];

@@ -29,6 +29,8 @@ const app = createApp(store, {
   aiModel: env.ANTHROPIC_MODEL || 'claude-sonnet-5-5',
   aiBase: env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com',
   nvidiaKey: env.NVIDIA_API_KEY || '',
+  // The account whose published apps anyone can run in the WorkLine Apps phone app (/run), by email.
+  storeOwner: env.STORE_OWNER || '',
   nvidiaModel: env.NVIDIA_MODEL || NVIDIA_MODELS,
   nvidiaBase: env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1',
   aiDailyLimit: num(env.AI_DAILY_LIMIT, 50),

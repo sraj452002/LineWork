@@ -96,6 +96,7 @@ Settings are environment variables; [`backend/.env.example`](backend/.env.exampl
 | `GOOGLE_DRIVE_FOLDER_ID` | | The Drive folder. Empty: the backend makes "Linework data" and prints its id. |
 | `DATA_DIR` | | A local folder instead of Drive (relative to `backend/`), for development. |
 | `ANTHROPIC_API_KEY` | | Turns AI on. `ANTHROPIC_MODEL` picks the model. |
+| `STORE_OWNER` | | An account's email: its published workflows are open to everyone at `/run` (the end users' phone app). |
 | `NVIDIA_API_KEY` | | Also (or instead) turns on NVIDIA's models (build.nvidia.com). `NVIDIA_MODEL` picks them, comma-separated (default `z-ai/glm-5.3-flash,nvidia/nemotron-3.5-lightning-30b-a3b`: GLM 5.3 Flash and NVIDIA Nemotron), each a choice in the AI chat, `NVIDIA_BASE_URL` another OpenAI-style endpoint. With both keys, people pick the model in the AI chat. |
 | `AI_DAILY_LIMIT` | `50` | `0` for no limit. |
 | `ALLOW_SIGNUP` | `false` | `true` lets anyone create an account. Off: only the accounts already there and `DEFAULT_USERS` (Google/GitHub can still sign in to existing ones). |
@@ -119,6 +120,8 @@ The backend loads `meta.json` when it starts and answers a change only after it'
 ## Workflows
 
 ## WorkLine Apps: the phone app (PWA and Android)
+
+**For your end users (`/run`, what the Android APK opens):** set `STORE_OWNER` on the server to your account's email. Then anyone can open `<your site>/run`, or the APK, and see the workflows you published (Home → Apps), fill in the form and run them, with no account and nothing else on screen. Runs use your workflows and your credentials, so only that one account's published workflows are shown, and each visitor can start at most 30 runs per 10 minutes. The server routes are `GET /api/store`, `POST /api/store/:fileId/run`, and `GET /api/store/runs/:token` for runs longer than 20 seconds.
 
 **WorkLine Apps** is the end user's app, with two tabs and nothing else: **Workflows** (run the workflows published as apps, Home → Apps) and **AI chat** (the default model, GLM 5.3 Flash when NVIDIA is set up). Make and edit on a computer; run here.
 

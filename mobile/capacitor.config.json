@@ -5,7 +5,7 @@
   "appendUserAgent": "WorkLineApp",
   "backgroundColor": "#E7EBE5",
   "server": {
-    "url": "https://work-line.netlify.app/mobile",
+    "url": "https://work-line.netlify.app/run",
     "androidScheme": "https",
     "errorPath": "offline.html"
   },

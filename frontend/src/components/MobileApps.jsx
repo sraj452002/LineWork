@@ -15,7 +15,9 @@ import { md } from '../lib/markdown.js';
    It installs as an app (a PWA: /mobile.webmanifest and /sw.js), and the Android app (mobile/, made
    with Capacitor) opens this same page. */
 
-export const isMobileShell = () => /^\/mobile\/?$/.test(location.pathname);
+export const isMobileShell = () => /^\/(mobile|run)\/?$/.test(location.pathname);
+// /run: the end users' app. The server's public apps (STORE_OWNER's published workflows), no sign-in.
+const isStore = () => /^\/run\/?$/.test(location.pathname);
 // Inside the installed app (the PWA in its own window, or the Android app), home is /mobile.
 export const inInstalledApp = () => {
   try { return matchMedia('(display-mode: standalone)').matches || /WorkLineApp/.test(navigator.userAgent); } catch (e) { return false; }
@@ -26,7 +28,7 @@ function useInstallable() {
   useEffect(() => {
     const add = (tag, attrs) => { const el = document.createElement(tag); Object.assign(el, attrs); el.dataset.mobile = '1'; document.head.appendChild(el); return el; };
     const els = [
-      add('link', { rel: 'manifest', href: '/mobile.webmanifest' }),
+      add('link', { rel: 'manifest', href: isStore() ? '/run.webmanifest' : '/mobile.webmanifest' }),
       add('link', { rel: 'apple-touch-icon', href: '/icons/apple-touch-icon.png' }),
       add('meta', { name: 'theme-color', content: '#1D2320' }),
       add('meta', { name: 'apple-mobile-web-app-capable', content: 'yes' }),
@@ -40,6 +42,63 @@ function useInstallable() {
 
 export default function MobileApps() {
   useInstallable();
+  return isStore() ? <StoreApp /> : <OwnerApp />;
+}
+
+// The end users' app: the published workflows, run with a form. Nothing else, and no account needed.
+function StoreApp() {
+  const [store, setStore] = useState(null), [error, setError] = useState(null), [busy, setBusy] = useState(false), [openId, setOpenId] = useState(null);
+  const load = () => {
+    setBusy(true); setError(null);
+    fetch('/api/store', { cache: 'no-store' }).then(r => r.json().then(j => (r.ok ? j : Promise.reject(new Error(j.message || 'Couldn’t load the workflows.')))))
+      .then(j => { setStore(j); setBusy(false); }, e => { setError(e.message || 'Couldn’t load the workflows. Check the internet.'); setBusy(false); });
+  };
+  useEffect(() => {
+    load();
+    let last = Date.now();
+    const again = () => { if (document.visibilityState === 'visible' && Date.now() - last > 3000) { last = Date.now(); load(); } };
+    document.addEventListener('visibilitychange', again); addEventListener('focus', again);
+    return () => { document.removeEventListener('visibilitychange', again); removeEventListener('focus', again); };
+  }, []);
+  const apps = store ? store.apps : [];
+  const open = apps.find(a => a.id === openId);
+  // Runs it on the server; a long one is asked about again until it's done.
+  const runner = async form => {
+    const post = await fetch(`/api/store/${encodeURIComponent(open.id)}/run`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ input: form }) });
+    let j = await post.json().catch(() => ({}));
+    for (let i = 0; i < 200 && j.status === 'running' && j.token; i++) {
+      await new Promise(r => setTimeout(r, 1500));
+      const r = await fetch(`/api/store/runs/${j.token}`, { cache: 'no-store' });
+      j = await r.json().catch(() => ({ status: 'error', error: 'Lost the run.' }));
+    }
+    if (j.status === 'success') return { status: 'success', items: j.items || [] };
+    return { status: 'error', error: j.error || j.message || 'It couldn’t run.' };
+  };
+  if (open) return (
+    <div className="m-shell m-run">
+      <AppRunner file={{ id: open.id, flow: { nodes: [], edges: [], app: open } }} server runner={runner} backLabel="← Workflows" onBack={() => setOpenId(null)} />
+    </div>
+  );
+  return (
+    <div className="m-shell">
+      <MobileBar onRefresh={load} busy={busy} title="Workflows" />
+      {error && <p className="m-note err">{error} <button className="link" onClick={load}>Try again</button></p>}
+      {!store && !error && <div className="m-skel" aria-busy="true"><i /><i /><i /></div>}
+      {store && (!apps.length ? <p className="m-note">No workflows here yet.</p>
+        : <div className="m-grid">
+          {apps.map(a => (
+            <button key={a.id} className={'m-app t-' + a.tone} onClick={() => setOpenId(a.id)} aria-label={`Run ${a.name}`}>
+              <i aria-hidden="true">{a.icon}</i><b>{a.name}</b>{a.description && <small>{a.description}</small>}
+              <span className="m-go">▶ Run</span>
+            </button>
+          ))}
+        </div>)}
+    </div>
+  );
+}
+
+// The account owner's own view (/mobile): their published workflows, and AI chat.
+function OwnerApp() {
   // undefined while checking; null when nobody is signed in.
   const [session, setSession] = useState(undefined);
   useEffect(() => { startSession().then(setSession, () => setSession(null)); }, []);

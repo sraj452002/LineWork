@@ -1,7 +1,7 @@
 {
   "name": "workline-apps-android",
   "private": true,
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "WorkLine Apps for Android: a Capacitor app that opens the published apps page (/mobile) of a WorkLine site.",
   "scripts": {
     "sync": "cap sync android",
