@@ -165,7 +165,7 @@ Workflows run on the backend (`backend/flows.js`, `flow-engine.js`, `flow-nodes.
 - **Workflow**: the nodes, the selected one, the last run and every kind of node → a workflow built from a description, or one node's settings changed (a Code node's code, an expression).
 - **App**: the page's code and its workflows → the page rewritten.
 
-It uses whichever model is picked (Claude, GLM 5.3 Flash or NVIDIA Nemotron) and counts toward the daily AI limit.
+It uses whichever model is picked (Claude, GLM 5.3 Flash or NVIDIA Nemotron; GLM 5.3 Flash, the fast one, is the default when NVIDIA_API_KEY is set, and pictures go to Claude) and counts toward the daily AI limit.
 
 ## Pages made of nodes (no code)
 

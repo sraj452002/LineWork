@@ -44,6 +44,7 @@ test('NVIDIA models (GLM 5.3 Flash, Nemotron): the API streams its answer and re
 
     // The API: both models offered; an NVIDIA request becomes a chat completion with thinking on.
     const status = await page.evaluate(() => fetch('/api/ai/status').then(r => r.json()));
+    expect(status.default).toBe('nvidia:z-ai/glm-5.3-flash'); // the fast one, unless someone picks another
     expect(status.providers.map(p => [p.id, p.label])).toEqual([['claude', 'Claude'], ['nvidia:z-ai/glm-5.3-flash', 'GLM 5.3 Flash'], ['nvidia', 'NVIDIA Nemotron']]);
     // GLM 5.3 Flash: the same API, with NVIDIA's suggested settings for it.
     const glm = await page.evaluate(() => fetch('/api/ai', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ prompt: 'Which is larger, 9.11 or 9.8?', provider: 'nvidia:z-ai/glm-5.3-flash' }) }).then(r => r.text()));
@@ -62,7 +63,7 @@ test('NVIDIA models (GLM 5.3 Flash, Nemotron): the API streams its answer and re
     await page.getByRole('button', { name: 'Create a Blank File' }).click();
     const chat = page.getByRole('complementary', { name: 'AI chat' });
     const picker = chat.getByLabel('AI model');
-    await expect(picker).toHaveValue('claude');
+    await expect(picker).toHaveValue('nvidia:z-ai/glm-5.3-flash');
     await picker.selectOption('nvidia');
     await chat.getByRole('button', { name: 'Document' }).click();
     await chat.getByLabel('Describe what to create or edit').fill('A rate limiter');

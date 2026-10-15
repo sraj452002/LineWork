@@ -224,10 +224,12 @@ export function createApp(store, opts = {}) {
     ...(aiKey ? [{ id: 'claude', label: 'Claude', model: aiModel, images: true }] : []),
     ...(nvidiaKey ? nvidiaModels.map(model => ({ id: /nemotron/i.test(model) ? 'nvidia' : `nvidia:${model}`, label: nvidiaLabel(model), model, images: false, thinking: true, nvidia: true })) : []),
   ];
+  // The default: GLM 5.3 Flash when NVIDIA is set up (it answers fast), else the first one.
+  const defaultProvider = providers.find(p => p.model === 'z-ai/glm-5.3-flash') || providers[0] || null;
   api.get('/ai/status', (req, res) => {
     const used = req.user ? store.aiUsed(req.user.id) : 0;
     const reason = !providers.length ? 'no_key' : !req.user ? 'signed_out' : aiDailyLimit > 0 && used >= aiDailyLimit ? 'daily_limit' : null;
-    res.json({ enabled: !reason, reason, limit: aiDailyLimit, used, providers });
+    res.json({ enabled: !reason, reason, limit: aiDailyLimit, used, providers, default: defaultProvider?.id || null });
   });
   /* ---- live databases (the Database view): see dbconnect.js ---- */
   api.post('/db', signedIn, async (req, res) => {
@@ -238,7 +240,7 @@ export function createApp(store, opts = {}) {
   api.post('/ai', signedIn, async (req, res) => {
     if (!providers.length) return res.status(503).json({ error: 'not_configured' });
     const b = req.body || {};
-    const provider = providers.find(p => p.id === b.provider) || providers[0];
+    const provider = providers.find(p => p.id === b.provider) || defaultProvider;
     const prompt = typeof b.prompt === 'string' ? b.prompt : '';
     if (!prompt) return res.status(400).json({ error: 'bad_request' });
     if (prompt.length > 400_000) return res.status(413).json({ error: 'too_large' });
