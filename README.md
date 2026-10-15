@@ -120,7 +120,7 @@ The backend loads `meta.json` when it starts and answers a change only after it'
 
 ## WorkLine Apps: the phone app (PWA and Android)
 
-**WorkLine Apps** shows only your published workflows (Home → Apps) and runs them, on a phone. Make and edit on a computer; run here.
+**WorkLine Apps** is the end user's app, with two tabs and nothing else: **Workflows** (run the workflows published as apps, Home → Apps) and **AI chat** (the default model, GLM 5.3 Flash when NVIDIA is set up). Make and edit on a computer; run here.
 
 - **Install from the browser (PWA):** open `<your site>/mobile` on the phone and sign in. On Android, Chrome offers **Install** (also the ⬇ button on the page). On iPhone, tap **Share → Add to Home Screen**. It opens in its own window with its own icon, and starts offline to a saved copy. Its files are `frontend/src/components/MobileApps.jsx`, `frontend/public/mobile.webmanifest`, `frontend/public/sw.js` and `frontend/public/icons/`.
 - **Android app (APK):** `mobile/` is a Capacitor app that opens `<your site>/mobile`.
