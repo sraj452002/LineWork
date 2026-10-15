@@ -118,6 +118,16 @@ The backend loads `meta.json` when it starts and answers a change only after it'
 
 ## Workflows
 
+## WorkLine Apps: the phone app (PWA and Android)
+
+**WorkLine Apps** runs the apps published from your workflows (Home → Apps) and opens your live pages (`/p/<name>`), on a phone. Make and edit on a computer; run here.
+
+- **Install from the browser (PWA):** open `<your site>/mobile` on the phone and sign in. On Android, Chrome offers **Install** (also the ⬇ button on the page). On iPhone, tap **Share → Add to Home Screen**. It opens in its own window with its own icon, and starts offline to a saved copy. Its files are `frontend/src/components/MobileApps.jsx`, `frontend/public/mobile.webmanifest`, `frontend/public/sw.js` and `frontend/public/icons/`.
+- **Android app (APK):** `mobile/` is a Capacitor app that opens `<your site>/mobile`.
+  - **On GitHub:** **Actions → “Android app (WorkLine Apps)” → Run workflow**, give your site's address, and download the APK from the run's **Artifacts**.
+  - **On your computer:** with Android Studio installed, run `cd mobile && npm install && node set-site.mjs https://your-site.netlify.app && npm run apk`. The APK is in `android/app/build/outputs/apk/debug/`.
+  - **Sign-in:** inside the Android app, use your email and password or GitHub. Google doesn't allow its sign-in inside apps' web views.
+
 **Video guides** (Help → Video guides, or the ▶ Video guides tab in any guide): “Build a workflow in 60 seconds” and “A tour of WorkLine”, each animated in the page (`frontend/src/components/VideoGuide.jsx`: a cursor, captions, chapters, play and pause, drawn with no video file) or as a recorded video of the real app (`frontend/public/guides/*.mp4`, H.264 so Safari plays it too).
 
 The **Workflow** view (View menu → Automate, or **Tools → Automation**; its guide, with every node explained, is under Help → Workflows guide or the **Guide** button) builds n8n-style automations: nodes on a canvas, joined by dragging from a node's output dot to another's input. Data moves between nodes as a list of items; fields can read them with expressions, `{{ $json.name }}` for the item coming in and `{{ $node["Name"].json.x }}` for an earlier node's output.

@@ -1,0 +1,15 @@
+{
+  "appId": "app.workline.apps",
+  "appName": "WorkLine Apps",
+  "webDir": "www",
+  "appendUserAgent": "WorkLineApp",
+  "backgroundColor": "#E7EBE5",
+  "server": {
+    "url": "https://work-line.netlify.app/mobile",
+    "androidScheme": "https",
+    "errorPath": "offline.html"
+  },
+  "android": {
+    "allowMixedContent": false
+  }
+}

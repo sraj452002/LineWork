@@ -64,7 +64,7 @@ export default function Apps({ files, q = '', onEdit, onUpdate }) {
   );
 }
 
-function AppRunner({ file, server, onBack, onEdit, onRemove }) {
+export function AppRunner({ file, server, onBack, onEdit, onRemove }) {
   const { toast } = useUI();
   const a = file.flow.app;
   const inputs = a.inputs || [];
