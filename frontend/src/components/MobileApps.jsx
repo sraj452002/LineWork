@@ -227,8 +227,8 @@ function AppsHome({ session, onSignOut }) {
         </>)}
       </div>
       <nav className="m-tabs" aria-label="WorkLine Apps">
-        <button aria-current={tab === 'run' ? 'page' : undefined} onClick={() => { setTab('run'); }}><Svg d={ICON.grid} size={19} />Workflows</button>
-        <button aria-current={tab === 'chat' ? 'page' : undefined} onClick={() => setTab('chat')}><Svg d={ICON.spark} size={19} />AI chat</button>
+        <button aria-current={tab === 'run' ? 'page' : undefined} onClick={() => { setTab('run'); }}><span className="m-tab-ic"><Svg d={ICON.grid} size={21} /></span>Workflows</button>
+        <button aria-current={tab === 'chat' ? 'page' : undefined} onClick={() => setTab('chat')}><span className="m-tab-ic"><Svg d={ICON.spark} size={21} /></span>AI chat</button>
       </nav>
     </div>
   );
