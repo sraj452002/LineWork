@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { audioSupported, sound, startMusic, stopMusic } from '../lib/guideAudio.js';
 
 /* Animated video guides: a little film of the app, drawn here (no video file), with a cursor that moves
    and clicks, captions, chapters and play / pause. Each guide is a stage of parts (a node, a string, a
@@ -189,10 +190,14 @@ function Part({ id, p, st, flowing, sel, typed }) {
 }
 
 /* ---- the player ---- */
+const SOUND_KEY = 'linework:guide-sound';
 export function AnimatedGuide({ guide, autoPlay = false }) {
   const [i, setI] = useState(0);
   const [playing, setPlaying] = useState(autoPlay);
   const [typed, setTyped] = useState(null);
+  // Music and sound (on unless turned off; remembered).
+  const [audio, setAudio] = useState(() => { try { return localStorage.getItem(SOUND_KEY) !== 'off'; } catch (e) { return true; } });
+  const loud = audio && playing && audioSupported();
   const steps = guide.steps;
   const step = steps[i];
   // Everything turned on (and node states) up to this step.
@@ -211,19 +216,34 @@ export function AnimatedGuide({ guide, autoPlay = false }) {
     const t = setTimeout(() => { if (i < steps.length - 1) setI(i + 1); else setPlaying(false); }, step.ms);
     return () => clearTimeout(t);
   }, [playing, i, step, steps.length]);
+  // Music while it plays; it fades out on pause, at the end, or when the guide goes away.
+  useEffect(() => { if (loud) startMusic(guide.id); else stopMusic(guide.id); }, [loud, guide.id]);
+  useEffect(() => () => stopMusic(guide.id), [guide.id]);
+  // Each step's sounds, timed to the picture: the cursor lands and clicks at 0.9s.
+  useEffect(() => {
+    if (!loud) return;
+    if (step.chapter && i > 0) sound('whoosh');
+    if (step.click) sound('click', 900);
+    if ((step.on || []).some(id => guide.parts[id] && guide.parts[id].kind !== 'ring')) sound('pop', step.click ? 1050 : 300);
+    const st = Object.values(step.st || {});
+    if (st.includes('run')) sound('blip', 250);
+    if (st.includes('ok') && !st.includes('run')) sound('chime', 300);
+    if (i === steps.length - 1) sound('chime', step.ms - 400);
+  }, [i, loud]); // eslint-disable-line react-hooks/exhaustive-deps
+  const toggleAudio = () => setAudio(a => { try { localStorage.setItem(SOUND_KEY, a ? 'off' : 'on'); } catch (e) {} return !a; });
   // The publish dialog types its link name.
   useEffect(() => {
     const dlg = Object.entries(guide.parts).find(([id, p]) => p.kind === 'dialog' && (step.on || []).includes(id));
     if (!dlg) { setTyped(null); return undefined; }
     const word = dlg[1].lines[1]; let n = 0;
     setTyped('');
-    const t = setInterval(() => { n++; setTyped(word.slice(0, n)); if (n >= word.length) clearInterval(t); }, 90);
+    const t = setInterval(() => { n++; setTyped(word.slice(0, n)); if (loud) sound('tick'); if (n >= word.length) clearInterval(t); }, 90);
     return () => clearInterval(t);
-  }, [i, guide, step]);
+  }, [i, guide, step]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const go = k => { setI(Math.max(0, Math.min(steps.length - 1, k))); };
   return (
-    <figure className="vg" aria-label={`Animated guide: ${guide.title}`}>
+    <figure className="vg" aria-label={`Animated guide: ${guide.title}`} data-sound={loud ? 'on' : 'off'}>
       <div className="vg-stage" onClick={() => setPlaying(x => !x)}>
         <div className="vg-bar"><span className="vg-dots"><i /><i /><i /></span><b>{guide.id === 'tour' ? 'WorkLine' : 'My first workflow'}</b>
           {guide.id === 'workflow' && <span className="vg-tools"><i className={step.cur && step.cur[0] > 75 && step.cur[0] < 82 && step.click ? 'press' : ''}>Publish web app</i><i className={`run ${step.cur && step.cur[0] > 84 && step.click ? 'press' : ''}`}>▶ Run workflow</i></span>}
@@ -245,6 +265,7 @@ export function AnimatedGuide({ guide, autoPlay = false }) {
           <i style={{ width: `${((done + (playing ? step.ms : 0)) / total) * 100}%`, transitionDuration: playing ? `${step.ms}ms` : '0ms' }} key={`p${i}${playing}`} />
         </div>
         <span className="vg-count">{i + 1} / {steps.length}</span>
+        {audioSupported() && <button className="btn vg-sound" aria-label="Music and sound" aria-pressed={audio} title={audio ? 'Turn music and sound off' : 'Turn music and sound on'} onClick={toggleAudio}>{audio ? '🔊' : '🔇'}</button>}
       </div>
       <div className="vg-chapters" role="group" aria-label="Chapters">
         {chapters.map(([c, k]) => {

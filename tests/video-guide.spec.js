@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 
 // Help → Video guides: each guide animated in the page (a cursor, captions, chapters), or as a recorded video.
 test('video guides play by themselves, step and jump by chapter, and offer the recorded video', async ({ page }) => {
@@ -17,8 +17,17 @@ test('video guides play by themselves, step and jump by chapter, and offer the r
   await expect(g.locator('.vg-count')).toHaveText('1 / 13');
   // Play: it moves on by itself, and the cursor and parts follow.
   await g.getByRole('button', { name: 'Play' }).click();
+  // Music and sound while it plays (made in the page with Web Audio), and a button to turn them off.
+  await expect(g).toHaveAttribute('data-sound', 'on');
+  await expect(g.getByRole('button', { name: 'Music and sound' })).toHaveAttribute('aria-pressed', 'true');
   await expect(g.locator('.vg-count')).toHaveText('2 / 13', { timeout: 6000 });
+  await g.getByRole('button', { name: 'Music and sound' }).click();
+  await expect(g).toHaveAttribute('data-sound', 'off');
+  expect(await page.evaluate(() => localStorage.getItem('linework:guide-sound'))).toBe('off');
+  await g.getByRole('button', { name: 'Music and sound' }).click();
+  await expect(g).toHaveAttribute('data-sound', 'on');
   await g.getByRole('button', { name: 'Pause' }).click();
+  await expect(g).toHaveAttribute('data-sound', 'off');
   // Chapters jump; Run lights a node up and the strings carry beads.
   await g.getByRole('group', { name: 'Chapters' }).getByRole('button', { name: 'Run' }).click();
   await g.getByRole('button', { name: 'Pause' }).click();
@@ -33,6 +42,8 @@ test('video guides play by themselves, step and jump by chapter, and offer the r
   const video = page.getByLabel('Video: Build a workflow in 60 seconds');
   await expect(video).toHaveAttribute('src', '/guides/workflow.mp4');
   for (const f of ['workflow.mp4', 'workflow.jpg', 'tour.mp4', 'tour.jpg']) expect(statSync(`frontend/public/guides/${f}`).size, f).toBeGreaterThan(10_000);
+  // The recorded videos have a soundtrack (AAC audio, from scripts/guide-audio.mjs).
+  for (const f of ['workflow.mp4', 'tour.mp4']) expect(readFileSync(`frontend/public/guides/${f}`).includes('mp4a'), f).toBe(true);
   const head = await page.request.get('/guides/workflow.mp4');
   expect(head.ok()).toBe(true);
 

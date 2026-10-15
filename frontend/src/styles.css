@@ -2819,6 +2819,7 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .vg-progress{flex:1;height:6px;border-radius:3px;background:var(--grid2);overflow:hidden}
 .vg-progress i{display:block;height:100%;background:var(--hi);transition-property:width;transition-timing-function:linear}
 .vg-count{font-size:12px;color:var(--ink2);min-width:42px;text-align:right}
+.vg-sound{min-width:38px;padding:4px 8px;font-size:15px;line-height:1}
 .vg-chapters{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .vg-chapters button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:4px 12px;font-size:12.5px;cursor:pointer;color:var(--ink2)}
 .vg-chapters button[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:transparent}
