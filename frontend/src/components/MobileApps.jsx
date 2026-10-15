@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Login from './Login.jsx';
 import { AppRunner } from './Apps.jsx';
 import { useUI } from './ui.jsx';
@@ -6,9 +6,11 @@ import { signOut, startSession } from '../lib/auth.js';
 import { listFiles } from '../lib/cloud.js';
 import { publishedApps } from '../lib/apps.js';
 import { serverInfo } from '../lib/backend.js';
+import { NO_AI, refreshAI, sampleP } from '../lib/ai.js';
+import { md } from '../lib/markdown.js';
 
-/* WorkLine Apps (/mobile): the phone app. It shows only the workflows published as apps (Home → Apps)
-   and runs them; nothing to edit, nothing about nodes.
+/* WorkLine Apps (/mobile): the end user's phone app. Two things only: run the workflows published as
+   apps (Home → Apps), and chat with AI. Nothing to edit, nothing about nodes.
    It installs as an app (a PWA: /mobile.webmanifest and /sw.js), and the Android app (mobile/, made
    with Capacitor) opens this same page. */
 
@@ -51,23 +53,25 @@ export default function MobileApps() {
   return <AppsHome session={session} onSignOut={async () => { await signOut('cloud'); setSession(null); }} />;
 }
 
-function MobileBar({ user, onSignOut, onRefresh, busy }) {
+function MobileBar({ user, onSignOut, onRefresh, busy, title = 'WorkLine Apps' }) {
   return (
     <header className="m-bar">
       <img className="m-logo" src="/icons/icon-192.png" alt="" />
-      <h1>WorkLine Apps</h1>
+      <h1>{title}</h1>
       {onRefresh && <button className="m-ib" aria-label="Refresh" onClick={onRefresh} disabled={busy}><span className={busy ? 'm-spin' : ''}>↻</span></button>}
       {user && <button className="m-ib m-me" aria-label={`Sign out ${user.email || ''}`} title="Sign out" onClick={onSignOut}>{(user.name || user.email || '?')[0].toUpperCase()}</button>}
     </header>
   );
 }
 
+// The end user's app: two tabs, run a published workflow, or chat with AI. Nothing else.
 function AppsHome({ session, onSignOut }) {
   const { ask } = useUI();
+  const [tab, setTab] = useState('run');
   const [files, setFiles] = useState(null), [error, setError] = useState(null), [busy, setBusy] = useState(false);
   const [openId, setOpenId] = useState(null), [server, setServer] = useState(undefined), [q, setQ] = useState('');
   const [install, setInstall] = useState(null);
-  const load = () => { setBusy(true); setError(null); listFiles().then(f => { setFiles(f); setBusy(false); }, e => { setError(e.message || 'Couldn’t load your apps.'); setBusy(false); }); };
+  const load = () => { setBusy(true); setError(null); listFiles().then(f => { setFiles(f); setBusy(false); }, e => { setError(e.message || 'Couldn’t load your workflows.'); setBusy(false); }); };
   useEffect(() => {
     load();
     serverInfo().then(i => setServer(!!(i && (i.features || []).includes('flows'))));
@@ -78,38 +82,87 @@ function AppsHome({ session, onSignOut }) {
   const apps = files ? publishedApps(files) : [];
   const open = apps.find(f => f.id === openId);
   const out = async () => { if (await ask({ title: 'Sign out?', text: 'You can sign in again any time.', input: false, ok: 'Sign out' })) onSignOut(); };
-  if (open) return (
-    <div className="m-shell m-run">
-      <AppRunner file={open} server={server} onBack={() => setOpenId(null)} />
-    </div>
-  );
   const needle = q.trim().toLowerCase();
   const shownApps = apps.filter(f => !needle || `${f.flow.app.name} ${f.flow.app.description || ''}`.toLowerCase().includes(needle));
-  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) && !inInstalledApp();
   return (
-    <div className="m-shell">
-      <MobileBar user={session.user} onSignOut={out} onRefresh={load} busy={busy} />
-      <p className="m-hello">Hi {(session.user.name || session.user.email || '').split(/[ @]/)[0]}! Your published workflows, ready to run.</p>
-      {install && <button className="btn primary m-wide m-install" onClick={async () => { install.prompt(); await install.userChoice.catch(() => {}); setInstall(null); }}>⬇ Install WorkLine Apps</button>}
-      {ios && <p className="m-tip">To install: tap <b>Share</b> → <b>Add to Home Screen</b>.</p>}
-      <input className="m-search" type="search" placeholder="Search your apps" aria-label="Search your apps" value={q} onChange={e => setQ(e.target.value)} />
-      {error && <p className="m-note err">{error} <button className="link" onClick={load}>Try again</button></p>}
-      {!files && !error && <div className="m-skel" aria-busy="true"><i /><i /><i /></div>}
-      {files && (<>
-        <h2 className="m-h">Published workflows <small>{shownApps.length}</small></h2>
-        {!apps.length ? <p className="m-note">No published workflows yet. On WorkLine, open a workflow and press <b>Publish</b>: it shows up here.</p>
-          : <div className="m-grid">
-            {shownApps.map(f => {
-              const a = f.flow.app;
-              return (
-                <button key={f.id} className={'m-app t-' + (a.tone || 'blue')} onClick={() => setOpenId(f.id)} aria-label={`Open the app ${a.name}`}>
-                  <i aria-hidden="true">{a.icon || '✨'}</i><b>{a.name}</b>{a.description && <small>{a.description}</small>}
-                </button>
-              );
-            })}
-          </div>}
-      </>)}
-      <footer className="m-foot">Make and edit apps on WorkLine on a computer; run them here.</footer>
+    <div className="m-app-shell">
+      <div className="m-shell">
+        {open && tab === 'run' ? <div className="m-run"><AppRunner file={open} server={server} onBack={() => setOpenId(null)} /></div> : (<>
+          <MobileBar user={session.user} onSignOut={out} onRefresh={tab === 'run' ? load : null} busy={busy} title={tab === 'run' ? 'Workflows' : 'AI chat'} />
+          {install && <button className="btn primary m-wide m-install" onClick={async () => { install.prompt(); await install.userChoice.catch(() => {}); setInstall(null); }}>⬇ Install WorkLine Apps</button>}
+          {tab === 'run' ? (<>
+            {apps.length > 6 && <input className="m-search" type="search" placeholder="Search workflows" aria-label="Search workflows" value={q} onChange={e => setQ(e.target.value)} />}
+            {error && <p className="m-note err">{error} <button className="link" onClick={load}>Try again</button></p>}
+            {!files && !error && <div className="m-skel" aria-busy="true"><i /><i /><i /></div>}
+            {files && (!apps.length ? <p className="m-note">No published workflows yet. On WorkLine, open a workflow and press <b>Publish</b>: it shows up here.</p>
+              : <div className="m-grid">
+                {shownApps.map(f => {
+                  const a = f.flow.app;
+                  return (
+                    <button key={f.id} className={'m-app t-' + (a.tone || 'blue')} onClick={() => setOpenId(f.id)} aria-label={`Run ${a.name}`}>
+                      <i aria-hidden="true">{a.icon || '✨'}</i><b>{a.name}</b>{a.description && <small>{a.description}</small>}
+                      <span className="m-go">▶ Run</span>
+                    </button>
+                  );
+                })}
+              </div>)}
+          </>) : <MobileChat apps={apps} user={session.user} />}
+        </>)}
+      </div>
+      <nav className="m-tabs" aria-label="WorkLine Apps">
+        <button aria-current={tab === 'run' ? 'page' : undefined} onClick={() => { setTab('run'); }}><span aria-hidden="true">▶</span>Workflows</button>
+        <button aria-current={tab === 'chat' ? 'page' : undefined} onClick={() => setTab('chat')}><span aria-hidden="true">✨</span>AI chat</button>
+      </nav>
+    </div>
+  );
+}
+
+// AI chat: the account's default model (GLM 5.3 Flash when it's set up), kept on this phone.
+const CHAT_KEY = 'linework:m-chat';
+function MobileChat({ apps, user }) {
+  const key = `${CHAT_KEY}:${user.id || user.email || ''}`;
+  const [msgs, setMsgs] = useState(() => { try { return JSON.parse(localStorage.getItem(key) || '[]'); } catch (e) { return []; } });
+  const [text, setText] = useState(''), [busy, setBusy] = useState(false), [off, setOff] = useState(null);
+  const endRef = useRef(null), stop = useRef(null);
+  useEffect(() => { refreshAI().then(s => { if (!s) setOff(NO_AI); }); }, []);
+  useEffect(() => { try { localStorage.setItem(key, JSON.stringify(msgs.slice(-60))); } catch (e) {} endRef.current?.scrollIntoView({ block: 'end' }); }, [msgs, key]);
+  const send = async e => {
+    e?.preventDefault();
+    const q = text.trim();
+    if (!q || busy) return;
+    const sample = await sampleP;
+    if (!sample) { setOff(NO_AI); return; }
+    const history = [...msgs, { who: 'you', text: q }];
+    setMsgs([...history, { who: 'ai', text: '' }]); setText(''); setBusy(true);
+    const names = apps.map(f => f.flow.app.name).join(', ');
+    const prompt = `You are the assistant in WorkLine Apps, a phone app where ${user.name || 'the user'} runs workflows published on WorkLine${names ? ` (here: ${names})` : ''}. Answer briefly and clearly, in the language the user writes in. Use Markdown only for short lists or code.\n\n`
+      + history.slice(-12).map(m => `${m.who === 'you' ? 'User' : 'Assistant'}: ${m.text}`).join('\n\n') + '\n\nAssistant:';
+    const ctl = new AbortController(); stop.current = ctl;
+    try {
+      await sample(prompt, { signal: ctl.signal, onText: ({ text: t }) => setMsgs(m => [...m.slice(0, -1), { who: 'ai', text: t }]) });
+    } catch (err) {
+      const why = err && err.code === 'daily_limit' ? 'Today’s AI limit is used up. It resets at midnight UTC.' : err && err.code === 'signed_out' ? 'Sign in again to use AI.' : err && err.code === 'cancelled' ? null : 'AI didn’t answer. Try again.';
+      setMsgs(m => { const last = m[m.length - 1]; return why ? [...m.slice(0, -1), { who: 'ai', text: last.text || why, error: !last.text }] : m; });
+    }
+    setBusy(false); stop.current = null;
+  };
+  return (
+    <div className="m-chat">
+      {off && <p className="m-note">{off}</p>}
+      {!msgs.length && !off && <div className="m-chat-empty"><b>Ask anything</b><span>Write, translate, plan, or ask how to use a workflow.</span></div>}
+      <div className="m-msgs" aria-live="polite">
+        {msgs.map((m, i) => (m.who === 'you'
+          ? <p key={i} className="m-msg you">{m.text}</p>
+          : <div key={i} className={'m-msg ai' + (m.error ? ' err' : '')}>{m.text ? <div dangerouslySetInnerHTML={{ __html: md(m.text) }} /> : <span className="m-dots" aria-label="Thinking"><i /><i /><i /></span>}</div>))}
+        <div ref={endRef} />
+      </div>
+      <form className="m-ask" onSubmit={send}>
+        {msgs.length > 0 && !busy && <button type="button" className="m-ib" aria-label="New chat" title="New chat" onClick={() => setMsgs([])}>＋</button>}
+        <textarea rows={1} aria-label="Message" placeholder="Message AI…" value={text} onChange={e => setText(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !('ontouchstart' in window)) { e.preventDefault(); send(); } }} />
+        {busy ? <button type="button" className="m-send" aria-label="Stop" onClick={() => stop.current?.abort()}>■</button>
+          : <button className="m-send" aria-label="Send" disabled={!text.trim() || !!off}>↑</button>}
+      </form>
     </div>
   );
 }
