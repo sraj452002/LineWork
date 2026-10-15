@@ -63,7 +63,7 @@ test('WorkLine Apps: sign in on a phone, see only the published workflows, run o
     await page.screenshot({ path: 'test-results/mobile-apps-run.png' });
 
     // The other tab: AI chat (and nothing else).
-    await expect(page.getByRole('navigation', { name: 'WorkLine Apps' }).getByRole('button')).toHaveText(['▶Workflows', '✨AI chat']);
+    await expect(page.getByRole('navigation', { name: 'WorkLine Apps' }).getByRole('button')).toHaveText(['Workflows', 'AI chat']);
     await page.getByRole('button', { name: 'AI chat' }).click();
     await page.getByLabel('Message').fill('Hello');
     await page.getByRole('button', { name: 'Send' }).click();
