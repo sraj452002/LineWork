@@ -4,9 +4,9 @@ import { openStore } from '../backend/store.js';
 import { memoryBackend } from '../backend/drive.js';
 import { createApp } from '../backend/app.js';
 
-// WorkLine Apps (/mobile): the phone app. Signed in, it lists the account's published apps and live
-// pages, runs an app, and is installable (a manifest, icons and a service worker).
-test('WorkLine Apps: sign in on a phone, see the published apps and pages, run one; installable', async ({ browser }) => {
+// WorkLine Apps (/mobile): the phone app. Signed in, it lists only the account's published workflows,
+// runs one, and is installable (a manifest, icons and a service worker).
+test('WorkLine Apps: sign in on a phone, see only the published workflows, run one; installable', async ({ browser }) => {
   test.setTimeout(150_000);
   const { spawn } = await import('node:child_process');
   const srv = createApp(await openStore(memoryBackend()), { requireVerified: false }).listen(0);
@@ -25,7 +25,7 @@ test('WorkLine Apps: sign in on a phone, see the published apps and pages, run o
     await page.getByLabel('Password').fill('a long password');
     await page.getByRole('button', { name: 'Create account' }).click();
     await expect(page.getByRole('heading', { name: 'WorkLine Apps' })).toBeVisible();
-    await expect(page.getByText('No apps yet.')).toBeVisible();
+    await expect(page.getByText('No published workflows yet.')).toBeVisible();
 
     // A published app (a greeting) and a live page, made on the account.
     const flow = {
@@ -41,7 +41,8 @@ test('WorkLine Apps: sign in on a phone, see the published apps and pages, run o
     await page.request.put('/api/files/f_greet', { data: { id: 'f_greet', title: 'Greeter', diagrams: [{ id: 'd1', type: 'architecture', name: 'D', code: '', manual: {}, dir: 'LR', style: 'color' }], active: 0, doc: '', updated: Date.now(), view: 'flow', flow } });
     await page.getByRole('button', { name: 'Refresh' }).click();
     await expect(page.getByRole('button', { name: 'Open the app Greeter' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Open the page Greeter' })).toHaveAttribute('href', '/p/hello-maya');
+    // Only published workflows: the live page isn't listed.
+    await expect(page.getByRole('link', { name: 'Open the page Greeter' })).toHaveCount(0);
     await page.screenshot({ path: 'test-results/mobile-apps.png' });
 
     // Search, then run the app.
