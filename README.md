@@ -118,6 +118,8 @@ The backend loads `meta.json` when it starts and answers a change only after it'
 
 ## Workflows
 
+**Video guides** (Help → Video guides, or the ▶ Video guides tab in any guide): “Build a workflow in 60 seconds” and “A tour of WorkLine”, each animated in the page (`frontend/src/components/VideoGuide.jsx`: a cursor, captions, chapters, play and pause, drawn with no video file) or as a recorded video of the real app (`frontend/public/guides/*.mp4`, H.264 so Safari plays it too).
+
 The **Workflow** view (View menu → Automate, or **Tools → Automation**; its guide, with every node explained, is under Help → Workflows guide or the **Guide** button) builds n8n-style automations: nodes on a canvas, joined by dragging from a node's output dot to another's input. Data moves between nodes as a list of items; fields can read them with expressions, `{{ $json.name }}` for the item coming in and `{{ $node["Name"].json.x }}` for an earlier node's output.
 
 - **Triggers:** Run by hand, **Webhook** (a secret URL, `<APP_URL>/api/hook/<token>`, that any app can call), **Schedule** (every N minutes, hours or days, or daily at a UTC time), and (`backend/flow-triggers.js`):

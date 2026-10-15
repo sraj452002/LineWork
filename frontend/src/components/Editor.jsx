@@ -191,6 +191,7 @@ export default function Editor({ file, files, update, saveState, onBack, onRenam
           ...(onHistory ? [{ label: 'Version history…', note: 'See and restore earlier versions', act: onHistory }] : []),
           '-',
           ...(onDelete ? [{ label: 'Delete file', danger: true, act: onDelete }, '-'] : []),
+          { label: 'Video guides', note: 'Watch how it works, animated', act: () => onGuide('videos') },
           { label: 'How to use Workline', note: 'Guide to the whole app', act: () => onGuide('app') },
           { label: 'Workflows guide', note: 'Triggers, expressions and every node', act: () => onGuide('flow') },
           { label: 'Custom apps guide', note: 'Your own UI on workflows, dashboards, code languages', act: () => onGuide('apps') },
