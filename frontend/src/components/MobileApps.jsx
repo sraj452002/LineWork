@@ -81,18 +81,16 @@ function StoreApp() {
   );
   return (
     <div className="m-shell">
-      <MobileBar onRefresh={load} busy={busy} title="Workflows" />
+      <MobileBar onRefresh={load} busy={busy} title="Workflows" hello={store && store.name ? store.name : greeting()} />
       {error && <p className="m-note err">{error} <button className="link" onClick={load}>Try again</button></p>}
       {!store && !error && <div className="m-skel" aria-busy="true"><i /><i /><i /></div>}
       {store && (!apps.length ? <p className="m-note">No workflows here yet.</p>
-        : <div className="m-grid">
-          {apps.map(a => (
-            <button key={a.id} className={'m-app t-' + a.tone} onClick={() => setOpenId(a.id)} aria-label={`Run ${a.name}`}>
-              <i aria-hidden="true">{a.icon}</i><b>{a.name}</b>{a.description && <small>{a.description}</small>}
-              <span className="m-go">▶ Run</span>
-            </button>
-          ))}
-        </div>)}
+        : <>
+          <Count n={apps.length} />
+          <div className="m-grid">
+            {apps.map((a, i) => <AppCard key={a.id} i={i} {...a} label={`Run ${a.name}`} onClick={() => setOpenId(a.id)} />)}
+          </div>
+        </>)}
     </div>
   );
 }
@@ -113,16 +111,31 @@ function OwnerApp() {
   return <AppsHome session={session} onSignOut={async () => { await signOut('cloud'); setSession(null); }} />;
 }
 
-function MobileBar({ user, onSignOut, onRefresh, busy, title = 'WorkLine Apps' }) {
+// One workflow: its icon on a tinted tile, its name and what it does, and a play button.
+function AppCard({ name, description, icon, tone, label, go = '▶', i = 0, onClick }) {
+  return (
+    <button className={'m-app t-' + (tone || 'blue')} style={{ animationDelay: `${Math.min(i, 8) * 45}ms` }} onClick={onClick} aria-label={label}>
+      <i aria-hidden="true">{icon || '✨'}</i>
+      <span className="m-app-txt"><b>{name}</b>{description && <small>{description}</small>}</span>
+      <span className="m-go" aria-hidden="true">{go}</span>
+    </button>
+  );
+}
+
+const greeting = () => { const h = new Date().getHours(); return h < 5 ? 'Good night' : h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'; };
+
+function MobileBar({ user, onSignOut, onRefresh, busy, title = 'WorkLine Apps', hello }) {
   return (
     <header className="m-bar">
       <img className="m-logo" src="/icons/icon-192.png" alt="" />
-      <h1>{title}</h1>
+      <div className="m-title">{hello && <small>{hello}</small>}<h1>{title}</h1></div>
       {onRefresh && <button className="m-ib" aria-label="Refresh" onClick={onRefresh} disabled={busy}><span className={busy ? 'm-spin' : ''}>↻</span></button>}
       {user && <button className="m-ib m-me" aria-label={`Sign out ${user.email || ''}`} title="Sign out" onClick={onSignOut}>{(user.name || user.email || '?')[0].toUpperCase()}</button>}
     </header>
   );
 }
+
+const Count = ({ n }) => <p className="m-count"><b>{n}</b> {n === 1 ? 'workflow' : 'workflows'} ready to run</p>;
 
 // Workflows published as web apps ("Publish web app": active, with a Page trigger), at their own link.
 const livePages = files => files.filter(f => !f.archived && f.flow && f.flow.active).flatMap(f => (f.flow.nodes || [])
@@ -170,30 +183,20 @@ function AppsHome({ session, onSignOut }) {
     <div className="m-app-shell">
       <div className="m-shell">
         {open && tab === 'run' ? <div className="m-run"><AppRunner file={open} server={server} onBack={() => setOpenId(null)} /></div> : (<>
-          <MobileBar user={session.user} onSignOut={out} onRefresh={tab === 'run' ? load : null} busy={busy} title={tab === 'run' ? 'Workflows' : 'AI chat'} />
+          <MobileBar user={session.user} onSignOut={out} onRefresh={tab === 'run' ? load : null} busy={busy} title={tab === 'run' ? 'Workflows' : 'AI chat'} hello={`${greeting()}${session.user.name ? `, ${session.user.name.split(' ')[0]}` : ''}`} />
           {install && <button className="btn primary m-wide m-install" onClick={async () => { install.prompt(); await install.userChoice.catch(() => {}); setInstall(null); }}>⬇ Install WorkLine Apps</button>}
           {tab === 'run' ? (<>
             {apps.length + pages.length > 6 && <input className="m-search" type="search" placeholder="Search workflows" aria-label="Search workflows" value={q} onChange={e => setQ(e.target.value)} />}
             {error && <p className="m-note err">{error} <button className="link" onClick={load}>Try again</button></p>}
             {!files && !error && <div className="m-skel" aria-busy="true"><i /><i /><i /></div>}
             {files && (!apps.length && !pages.length ? <p className="m-note">No published workflows yet. On WorkLine, open a workflow and press <b>Publish</b>: it shows up here.</p>
-              : <div className="m-grid">
-                {shownApps.map(f => {
-                  const a = f.flow.app;
-                  return (
-                    <button key={f.id} className={'m-app t-' + (a.tone || 'blue')} onClick={() => setOpenId(f.id)} aria-label={`Run ${a.name}`}>
-                      <i aria-hidden="true">{a.icon || '✨'}</i><b>{a.name}</b>{a.description && <small>{a.description}</small>}
-                      <span className="m-go">▶ Run</span>
-                    </button>
-                  );
-                })}
-                {shownPages.map(p => (
-                  <button key={p.id} className="m-app t-sky" onClick={() => setPage(p)} aria-label={`Open ${p.title}`}>
-                    <i aria-hidden="true">🌐</i><b>{p.title}</b><small>Web app</small>
-                    <span className="m-go">Open</span>
-                  </button>
-                ))}
-              </div>)}
+              : <>
+                <Count n={apps.length + pages.length} />
+                <div className="m-grid">
+                  {shownApps.map((f, i) => <AppCard key={f.id} i={i} {...f.flow.app} label={`Run ${f.flow.app.name}`} onClick={() => setOpenId(f.id)} />)}
+                  {shownPages.map((p, i) => <AppCard key={p.id} i={shownApps.length + i} name={p.title} description="Web app" icon="🌐" tone="sky" go="↗" label={`Open ${p.title}`} onClick={() => setPage(p)} />)}
+                </div>
+              </>)}
           </>) : <MobileChat apps={apps} user={session.user} />}
         </>)}
       </div>
