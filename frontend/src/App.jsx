@@ -14,10 +14,14 @@ import { refreshAI } from './lib/ai.js';
 import { clone, rid } from './lib/utils.js';
 import { dg } from './lib/engines.js';
 import { serverInfo, sharedToken } from './lib/backend.js';
+import MobileApps, { inInstalledApp, isMobileShell } from './components/MobileApps.jsx';
 import { AccountDialog, HistoryDialog, ShareDialog, SharedFile, StorageWarning, storageLevel } from './components/ServerDialogs.jsx';
 
 export default function App() {
-  return <UIProvider>{sharedToken() ? <Shared /> : <Main />}</UIProvider>;
+  // Inside the installed WorkLine Apps (the PWA or the Android app), home is /mobile: after a Google or
+  // GitHub sign-in comes back to /, go there.
+  if (location.pathname === '/' && inInstalledApp()) { location.replace('/mobile' + location.hash); return null; }
+  return <UIProvider>{isMobileShell() ? <MobileApps /> : sharedToken() ? <Shared /> : <Main />}</UIProvider>;
 }
 
 // A share link (/s/<token>) opens just that file, with or without an account.

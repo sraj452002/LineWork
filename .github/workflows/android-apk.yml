@@ -1,0 +1,45 @@
+# WorkLine Apps for Android: builds the APK (mobile/, a Capacitor app that opens <your site>/mobile).
+# Run it from GitHub → Actions → "Android app (WorkLine Apps)" → Run workflow, with your site's address;
+# the APK is attached to the run (Artifacts → workline-apps-apk). It also runs when mobile/ changes.
+name: Android app (WorkLine Apps)
+on:
+  workflow_dispatch:
+    inputs:
+      site_url:
+        description: Your WorkLine site (the app opens <site>/mobile)
+        default: https://work-line.netlify.app
+        required: true
+  push:
+    branches: [master]
+    paths: ['mobile/**', '.github/workflows/android-apk.yml']
+permissions:
+  contents: read
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+      - name: Point the app at the site
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          SITE_URL: ${{ inputs.site_url }}
+        run: node set-site.mjs "$SITE_URL"
+      - run: npx cap sync android
+      - name: Build the APK
+        working-directory: mobile/android
+        run: chmod +x gradlew && ./gradlew assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: workline-apps-apk
+          path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
