@@ -96,7 +96,7 @@ Settings are environment variables; [`backend/.env.example`](backend/.env.exampl
 | `GOOGLE_DRIVE_FOLDER_ID` | | The Drive folder. Empty: the backend makes "Linework data" and prints its id. |
 | `DATA_DIR` | | A local folder instead of Drive (relative to `backend/`), for development. |
 | `ANTHROPIC_API_KEY` | | Turns AI on. `ANTHROPIC_MODEL` picks the model. |
-| `NVIDIA_API_KEY` | | Also (or instead) turns on NVIDIA's models (build.nvidia.com). `NVIDIA_MODEL` picks one (default `nvidia/nemotron-3.5-lightning-30b-a3b`), `NVIDIA_BASE_URL` another OpenAI-style endpoint. With both keys, people pick the model in the AI chat. |
+| `NVIDIA_API_KEY` | | Also (or instead) turns on NVIDIA's models (build.nvidia.com). `NVIDIA_MODEL` picks them, comma-separated (default `z-ai/glm-5.3-flash,nvidia/nemotron-3.5-lightning-30b-a3b`: GLM 5.3 Flash and NVIDIA Nemotron), each a choice in the AI chat, `NVIDIA_BASE_URL` another OpenAI-style endpoint. With both keys, people pick the model in the AI chat. |
 | `AI_DAILY_LIMIT` | `50` | `0` for no limit. |
 | `ALLOW_SIGNUP` | `false` | `true` lets anyone create an account. Off: only the accounts already there and `DEFAULT_USERS` (Google/GitHub can still sign in to existing ones). |
 | `RESEND_API_KEY` or `SMTP_URL`, `MAIL_FROM` | | Email: confirmation and reset links. |
@@ -163,7 +163,7 @@ Workflows run on the backend (`backend/flows.js`, `flow-engine.js`, `flow-nodes.
 - **Workflow**: the nodes, the selected one, the last run and every kind of node → a workflow built from a description, or one node's settings changed (a Code node's code, an expression).
 - **App**: the page's code and its workflows → the page rewritten.
 
-It uses whichever model is picked (Claude or NVIDIA Nemotron) and counts toward the daily AI limit.
+It uses whichever model is picked (Claude, GLM 5.3 Flash or NVIDIA Nemotron) and counts toward the daily AI limit.
 
 ## Pages made of nodes (no code)
 

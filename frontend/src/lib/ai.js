@@ -1,5 +1,5 @@
 // AI calls go to /api/ai on the Workline API (../../backend), which holds the API keys. The server may
-// offer more than one model (Claude, NVIDIA Nemotron); the one picked in the AI chat is kept per browser.
+// offer more than one model (Claude, GLM 5.3 Flash, NVIDIA Nemotron); the one picked in the AI chat is kept per browser.
 const PROVIDER_KEY = 'linework:ai-provider';
 export let aiProviders = [];
 export const aiProvider = () => {
