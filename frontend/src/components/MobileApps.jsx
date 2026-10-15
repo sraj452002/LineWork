@@ -9,8 +9,9 @@ import { serverInfo } from '../lib/backend.js';
 import { NO_AI, refreshAI, sampleP } from '../lib/ai.js';
 import { md } from '../lib/markdown.js';
 
-/* WorkLine Apps (/mobile): the end user's phone app. Two things only: run the workflows published as
-   apps (Home → Apps), and chat with AI. Nothing to edit, nothing about nodes.
+/* WorkLine Apps (/mobile): the end user's phone app. Two things only: the published workflows (those
+   published as apps, Home → Apps, run with a form; and those published as web apps, opened here), and
+   chat with AI. Nothing to edit, nothing about nodes. The list reloads whenever the app comes back.
    It installs as an app (a PWA: /mobile.webmanifest and /sw.js), and the Android app (mobile/, made
    with Capacitor) opens this same page. */
 
@@ -64,6 +65,11 @@ function MobileBar({ user, onSignOut, onRefresh, busy, title = 'WorkLine Apps' }
   );
 }
 
+// Workflows published as web apps ("Publish web app": active, with a Page trigger), at their own link.
+const livePages = files => files.filter(f => !f.archived && f.flow && f.flow.active).flatMap(f => (f.flow.nodes || [])
+  .filter(n => n.type === 'trigger.page' && n.params && n.params.path)
+  .map(n => ({ id: `${f.id}:${n.id}`, title: (f.flow.nodes.length && n.params.title) || f.title, url: n.params.link ? `/p/${n.params.link}` : `/api/hook/${n.params.path}` })));
+
 // The end user's app: two tabs, run a published workflow, or chat with AI. Nothing else.
 function AppsHome({ session, onSignOut }) {
   const { ask } = useUI();
@@ -72,6 +78,13 @@ function AppsHome({ session, onSignOut }) {
   const [openId, setOpenId] = useState(null), [server, setServer] = useState(undefined), [q, setQ] = useState('');
   const [install, setInstall] = useState(null);
   const load = () => { setBusy(true); setError(null); listFiles().then(f => { setFiles(f); setBusy(false); }, e => { setError(e.message || 'Couldn’t load your workflows.'); setBusy(false); }); };
+  // Back in the app (from another app, or the phone woke up): the list again, so what was just published shows.
+  useEffect(() => {
+    let last = Date.now();
+    const again = () => { if (document.visibilityState === 'visible' && Date.now() - last > 3000) { last = Date.now(); load(); } };
+    document.addEventListener('visibilitychange', again); addEventListener('focus', again);
+    return () => { document.removeEventListener('visibilitychange', again); removeEventListener('focus', again); };
+  }, []);
   useEffect(() => {
     load();
     serverInfo().then(i => setServer(!!(i && (i.features || []).includes('flows'))));
@@ -80,10 +93,20 @@ function AppsHome({ session, onSignOut }) {
     return () => removeEventListener('beforeinstallprompt', keep);
   }, []);
   const apps = files ? publishedApps(files) : [];
+  const pages = files ? livePages(files) : [];
   const open = apps.find(f => f.id === openId);
+  const [page, setPage] = useState(null);
   const out = async () => { if (await ask({ title: 'Sign out?', text: 'You can sign in again any time.', input: false, ok: 'Sign out' })) onSignOut(); };
   const needle = q.trim().toLowerCase();
   const shownApps = apps.filter(f => !needle || `${f.flow.app.name} ${f.flow.app.description || ''}`.toLowerCase().includes(needle));
+  const shownPages = pages.filter(p => !needle || p.title.toLowerCase().includes(needle));
+  // A web app opens here, full screen, with a way back.
+  if (page) return (
+    <div className="m-page-view">
+      <div className="m-page-bar"><button className="btn" onClick={() => setPage(null)}>← Workflows</button><b>{page.title}</b></div>
+      <iframe title={page.title} src={page.url} />
+    </div>
+  );
   return (
     <div className="m-app-shell">
       <div className="m-shell">
@@ -91,10 +114,10 @@ function AppsHome({ session, onSignOut }) {
           <MobileBar user={session.user} onSignOut={out} onRefresh={tab === 'run' ? load : null} busy={busy} title={tab === 'run' ? 'Workflows' : 'AI chat'} />
           {install && <button className="btn primary m-wide m-install" onClick={async () => { install.prompt(); await install.userChoice.catch(() => {}); setInstall(null); }}>⬇ Install WorkLine Apps</button>}
           {tab === 'run' ? (<>
-            {apps.length > 6 && <input className="m-search" type="search" placeholder="Search workflows" aria-label="Search workflows" value={q} onChange={e => setQ(e.target.value)} />}
+            {apps.length + pages.length > 6 && <input className="m-search" type="search" placeholder="Search workflows" aria-label="Search workflows" value={q} onChange={e => setQ(e.target.value)} />}
             {error && <p className="m-note err">{error} <button className="link" onClick={load}>Try again</button></p>}
             {!files && !error && <div className="m-skel" aria-busy="true"><i /><i /><i /></div>}
-            {files && (!apps.length ? <p className="m-note">No published workflows yet. On WorkLine, open a workflow and press <b>Publish</b>: it shows up here.</p>
+            {files && (!apps.length && !pages.length ? <p className="m-note">No published workflows yet. On WorkLine, open a workflow and press <b>Publish</b>: it shows up here.</p>
               : <div className="m-grid">
                 {shownApps.map(f => {
                   const a = f.flow.app;
@@ -105,6 +128,12 @@ function AppsHome({ session, onSignOut }) {
                     </button>
                   );
                 })}
+                {shownPages.map(p => (
+                  <button key={p.id} className="m-app t-sky" onClick={() => setPage(p)} aria-label={`Open ${p.title}`}>
+                    <i aria-hidden="true">🌐</i><b>{p.title}</b><small>Web app</small>
+                    <span className="m-go">Open</span>
+                  </button>
+                ))}
               </div>)}
           </>) : <MobileChat apps={apps} user={session.user} />}
         </>)}

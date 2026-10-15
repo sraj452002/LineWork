@@ -2895,3 +2895,7 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .m-ask textarea{flex:1;min-height:44px;max-height:140px;resize:none;border-radius:22px;border:1px solid var(--line);background:var(--surface);padding:11px 16px;font-size:16px;line-height:1.35}
 .m-send{width:44px;height:44px;border-radius:50%;border:0;background:var(--ink);color:var(--paper);font-size:20px;font-weight:700;cursor:pointer;flex:none}
 .m-send:disabled{opacity:.35}
+.m-page-view{position:fixed;inset:0;display:flex;flex-direction:column;background:var(--paper);z-index:20}
+.m-page-bar{display:flex;align-items:center;gap:10px;padding:calc(env(safe-area-inset-top,0px) + 8px) 12px 8px;border-bottom:1px solid var(--line);background:var(--surface)}
+.m-page-bar b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.m-page-view iframe{flex:1;width:100%;border:0;background:#fff}
