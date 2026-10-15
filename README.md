@@ -96,7 +96,7 @@ Settings are environment variables; [`backend/.env.example`](backend/.env.exampl
 | `GOOGLE_DRIVE_FOLDER_ID` | | The Drive folder. Empty: the backend makes "Linework data" and prints its id. |
 | `DATA_DIR` | | A local folder instead of Drive (relative to `backend/`), for development. |
 | `ANTHROPIC_API_KEY` | | Turns AI on. `ANTHROPIC_MODEL` picks the model. |
-| `NVIDIA_API_KEY` | | Also (or instead) turns on NVIDIA's models (build.nvidia.com). `NVIDIA_MODEL` picks one (default `nvidia/nemotron-3.5-lightning-30b-a3b`), `NVIDIA_BASE_URL` another OpenAI-style endpoint. With both keys, people pick the model in the AI chat. |
+| `NVIDIA_API_KEY` | | Also (or instead) turns on NVIDIA's models (build.nvidia.com). `NVIDIA_MODEL` picks them, comma-separated (default `z-ai/glm-5.3-flash,nvidia/nemotron-3.5-lightning-30b-a3b`: GLM 5.3 Flash and NVIDIA Nemotron), each a choice in the AI chat, `NVIDIA_BASE_URL` another OpenAI-style endpoint. With both keys, people pick the model in the AI chat. |
 | `AI_DAILY_LIMIT` | `50` | `0` for no limit. |
 | `ALLOW_SIGNUP` | `false` | `true` lets anyone create an account. Off: only the accounts already there and `DEFAULT_USERS` (Google/GitHub can still sign in to existing ones). |
 | `RESEND_API_KEY` or `SMTP_URL`, `MAIL_FROM` | | Email: confirmation and reset links. |
@@ -117,6 +117,8 @@ What's in the folder: `meta.json` (accounts with scrypt password hashes, session
 The backend loads `meta.json` when it starts and answers a change only after it's written to Drive. Stop the backend before `npm run admin`, which edits the same `meta.json`.
 
 ## Workflows
+
+**Video guides** (Help → Video guides, or the ▶ Video guides tab in any guide): “Build a workflow in 60 seconds” and “A tour of WorkLine”, each animated in the page (`frontend/src/components/VideoGuide.jsx`: a cursor, captions, chapters, play and pause, drawn with no video file) or as a recorded video of the real app (`frontend/public/guides/*.mp4`, H.264 so Safari plays it too).
 
 The **Workflow** view (View menu → Automate, or **Tools → Automation**; its guide, with every node explained, is under Help → Workflows guide or the **Guide** button) builds n8n-style automations: nodes on a canvas, joined by dragging from a node's output dot to another's input. Data moves between nodes as a list of items; fields can read them with expressions, `{{ $json.name }}` for the item coming in and `{{ $node["Name"].json.x }}` for an earlier node's output.
 
@@ -142,6 +144,8 @@ The **Workflow** view (View menu → Automate, or **Tools → Automation**; its 
 
 **Save, export and import.** Changes save by themselves; **Save** (or Ctrl+S) saves at once. **Export** downloads the workflow as a `.json` file without credentials, signing secrets or webhook URLs (each node notes which kind of credential it needs). **Import** opens such a file, or a workflow exported from **n8n**: its common nodes become ours (expressions `={{ … }}` carry over; a Code node gets an n8n-style `$input`), others become placeholders named after them. **Template** keeps the workflow in **Templates** (home page sidebar), to start new ones from. After a run, **Download results** (beside Runs) saves what each node gave.
 
+**650 nodes.** Besides the flow, data, AI and app nodes, there are about 300 small **tools** that work on one value of each item without any account (`backend/flow-tools.js`): Text (case, slug, find and replace, find emails or links…), Numbers (round, percent, GST, loan EMI, SIP, statistics, money and lakh/crore formats), Dates (format in a time zone, add, difference, working days, financial year), Lists, Objects, Encode & hash (Base64, URL, SHA-256, HMAC, JWT), Check (email, phone, PAN, GSTIN, IFSC, Aadhaar, UPI, IBAN, card numbers…), Convert (units, colours, Roman numerals, numbers in words, CSV/Markdown/HTML tables) and Generate (ids, OTPs, passwords, sample people). Each reads `value` (usually an expression) and puts its result at `output`; each has examples that are both its guide entry and its test (`tests/flow-tools.spec.js`). About 220 more are one-job **app actions** and **public data** (`backend/flow-actions.js`): “GitHub: Comment on an issue”, “Stripe: Create a checkout link”, “Slack: Message a person”, “Telegram: Send a poll”… using the same credentials as each app's main node, and PIN codes, IFSC codes, public holidays, Wikipedia, air quality, npm and more with no key. In the node library they're shelved in sections (`shelves()` in `frontend/src/lib/flows.js`): **Start**, **Build**, **Advanced** (AI helpers, MCP, On error, Respond to webhook, Pivot…), **Tools**, **Apps** (one group per app, A–Z: its trigger, its main node and its one-job actions together) and **Data sources**. The editor reads both from `frontend/src/lib/morenodes.js`, which `node scripts/more-nodes.mjs` writes (a test checks it's up to date).
+
 Each app node asks for a credential of its kind (an API key or token; the dialog says where to find it). Node types are described in `frontend/src/lib/flows.js` (fields, ports, credentials) and run by `backend/flow-nodes.js` (flow and data) and `backend/flow-apps.js` (apps); `tests/flow-nodes.spec.js` checks the two agree. App logos come from simple-icons (`npm run icons`-style script: `node scripts/build-flow-logos.mjs` in `frontend/`).
 
 Workflows run on the backend (`backend/flows.js`, `flow-engine.js`, `flow-nodes.js`): **Run workflow** runs what's in the editor and shows each node's output; a workflow switched **Active** (and saved) listens on its webhooks and runs on its schedules. Each workflow keeps its last 20 runs in the account's Drive folder, counted in its storage.
@@ -161,7 +165,7 @@ Workflows run on the backend (`backend/flows.js`, `flow-engine.js`, `flow-nodes.
 - **Workflow**: the nodes, the selected one, the last run and every kind of node → a workflow built from a description, or one node's settings changed (a Code node's code, an expression).
 - **App**: the page's code and its workflows → the page rewritten.
 
-It uses whichever model is picked (Claude or NVIDIA Nemotron) and counts toward the daily AI limit.
+It uses whichever model is picked (Claude, GLM 5.3 Flash or NVIDIA Nemotron; GLM 5.3 Flash, the fast one, is the default when NVIDIA_API_KEY is set, and pictures go to Claude) and counts toward the daily AI limit.
 
 ## Pages made of nodes (no code)
 
@@ -352,6 +356,8 @@ backend/                the API (Render)
   flows.js              workflows: credentials, runs, webhooks and schedules
   flow-engine.js        runs a workflow: order, items, {{ expressions }}
   flow-nodes.js         what each workflow node does (HTTP, Code, Slack, GitHub…)
+  flow-tools.js         ~300 tool nodes (text, numbers, dates, lists, checks…) with their examples
+  flow-actions.js       ~220 one-job app actions and public-data nodes
   flow-extra.js         AI helpers, MCP, GraphQL, Redis, spreadsheet files, pivot, key-value store, more triggers
   flow-code.js          the Code node's languages: the sandbox processes and Piston / Judge0 runners
   code-sandbox.js       the sandbox process (JavaScript, TypeScript, Python, Lua, SQL)

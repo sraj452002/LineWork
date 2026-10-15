@@ -5,6 +5,7 @@ import { GROUPS, NODES } from '../lib/flows.js';
 import { NODE_GUIDE } from '../lib/flowguide.js';
 import { NodeCard } from './NodeGuide.jsx';
 import { Brand, useUI } from './ui.jsx';
+import VideoGuides from './VideoGuide.jsx';
 import { EASY, VIDEO_LIST_URL } from '../lib/readymade.js';
 
 /* ---- examples, kept small so each one teaches one idea ---- */
@@ -851,8 +852,8 @@ export default function Guide({ which, onWhich, onClose, onTry }) {
   const [q, setQ] = useState('');
   const flow = String(which).startsWith('flow');
   const lit = flow && String(which).includes(':') ? String(which).split(':')[1] : null;
-  const apps = which === 'apps', easy = which === 'easy';
-  const sections = easy ? easyGuide() : which === 'erd' ? erdGuide(onTry, theme) : apps ? appsGuide() : flow ? flowGuide(q, setQ, lit) : appGuide();
+  const apps = which === 'apps', easy = which === 'easy', videos = which === 'videos';
+  const sections = videos ? [{ id: 'videos', title: 'Video guides', body: <VideoGuides /> }] : easy ? easyGuide() : which === 'erd' ? erdGuide(onTry, theme) : apps ? appsGuide() : flow ? flowGuide(q, setQ, lit) : appGuide();
 
   useEffect(() => {
     if (lit) { setQ(''); setTimeout(() => document.getElementById('g-node-' + lit)?.scrollIntoView({ block: 'start' }), 30); }
@@ -873,8 +874,9 @@ export default function Guide({ which, onWhich, onClose, onTry }) {
         <Brand />
         <span className="grow" />
         <div className="seg" role="group" aria-label="Choose a guide">
+          <button aria-pressed={videos} onClick={() => onWhich('videos')}>▶ Video guides</button>
           <button aria-pressed={easy} onClick={() => onWhich('easy')}>Easy start</button>
-          <button aria-pressed={which !== 'erd' && !flow && !apps && !easy} onClick={() => onWhich('app')}>Using Workline</button>
+          <button aria-pressed={which !== 'erd' && !flow && !apps && !easy && !videos} onClick={() => onWhich('app')}>Using Workline</button>
           <button aria-pressed={flow} onClick={() => onWhich('flow')}>Workflows</button>
           <button aria-pressed={apps} onClick={() => onWhich('apps')}>Custom apps</button>
           <button aria-pressed={which === 'erd'} onClick={() => onWhich('erd')}>Database schemas</button>
@@ -892,8 +894,8 @@ export default function Guide({ which, onWhich, onClose, onTry }) {
           </nav>
           <article className="g-doc">
             <header>
-              <h1>{easy ? 'Easy start: make your first app' : which === 'erd' ? 'Database schemas (ERD)' : apps ? 'Custom apps' : flow ? 'Workflows' : 'How to use Workline'}</h1>
-              <p>{easy ? 'No experience needed. First you make a workflow (it does the work), then an app on top of it (what people see). Three complete examples.' : apps ? 'Your own page, in HTML, CSS and JavaScript, on top of your workflows: a form, a dashboard, a chat or a video player, at a link anyone can open.'
+              <h1>{videos ? 'Video guides' : easy ? 'Easy start: make your first app' : which === 'erd' ? 'Database schemas (ERD)' : apps ? 'Custom apps' : flow ? 'Workflows' : 'How to use Workline'}</h1>
+              <p>{videos ? 'Watch how WorkLine works: animated right here, or as a recorded video of the real app. Click a chapter to jump to it.' : easy ? 'No experience needed. First you make a workflow (it does the work), then an app on top of it (what people see). Three complete examples.' : apps ? 'Your own page, in HTML, CSS and JavaScript, on top of your workflows: a form, a dashboard, a chat or a video player, at a link anyone can open.'
                 : which === 'erd'
                 ? 'Describe tables, columns and relationships as text, and Workline draws the entity relationship diagram.'
                 : flow ? 'Automations like n8n: a trigger starts them, nodes do the steps, and they run on the Workline server.'

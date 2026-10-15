@@ -4,6 +4,8 @@
    what: a sentence or two. ex: an example of using it. out: the items it passes on.
    fields (optional): a note for a field, by its key, where its label isn't enough. */
 
+import { MORE } from './morenodes.js';
+
 const APP_OUT = 'One item per input item: the app’s answer (an id, a link, a status). The item’s old fields are replaced, so read them from an earlier node with {{ $node["Name"].json.x }}.';
 const LIST_OUT = 'For “list” operations, one item per record the app returns; otherwise the app’s answer for each item.';
 const EMAIL = {
@@ -168,6 +170,9 @@ export const NODE_GUIDE = {
 
 /* Where each kind of credential comes from, step by step (shown under “Set it up”). The fields named
    here are the ones the credential dialog asks for (CRED_TYPES in flows.js). */
+// The tool and app-action nodes bring their own words (backend/flow-tools.js, flow-actions.js).
+for (const [k, d] of Object.entries(MORE.nodes)) NODE_GUIDE[k] = d.guide;
+
 export const CRED_SETUP = {
   imap: ['Find your mail server’s IMAP settings (Gmail: imap.gmail.com, port 993; Outlook: outlook.office365.com, port 993).', 'Gmail: turn on 2-Step Verification, then myaccount.google.com → Security → App passwords → make one, and use it as the password.', 'User is usually your whole email address.'],
   coderunner: ['Piston: run your own server (github.com/engineer-man/piston, a Docker container) and install the languages you want; Service: piston, URL: its address, e.g. https://piston.example.com. The public Piston API needs a token from its maintainers.', 'Judge0: on RapidAPI, subscribe to Judge0 CE (it has a free plan); Service: judge0, URL: https://judge0-ce.p.rapidapi.com, API key: your RapidAPI key. Your own Judge0 server: its URL and its auth token, if it has one.'],

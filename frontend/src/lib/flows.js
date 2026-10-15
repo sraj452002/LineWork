@@ -1,6 +1,7 @@
 import { api } from './backend.js';
 import { rid } from './utils.js';
 import { CODE_LANGS, codeLang } from './codelangs.js';
+import { MORE } from './morenodes.js';
 
 /* Workflows in the app: what each kind of node looks like and asks for (the server runs them: see
    backend/flow-nodes.js and flow-apps.js, which read the same param names), the kinds of credentials,
@@ -108,7 +109,8 @@ const EXTRACT = [
 const EMAIL = [{ k: 'to', label: 'To', kind: 'text' }, { k: 'subject', label: 'Subject', kind: 'text' }, { k: 'text', label: 'Text', kind: 'textarea' }, { k: 'html', label: 'HTML (optional)', kind: 'textarea' }, { k: 'from', label: 'From (blank: the credential’s)', kind: 'text' }];
 const LANGS = [['EN-US', 'English (US)'], ['EN-GB', 'English (UK)'], ['HI', 'Hindi'], ['DE', 'German'], ['FR', 'French'], ['ES', 'Spanish'], ['IT', 'Italian'], ['PT-BR', 'Portuguese (Brazil)'], ['NL', 'Dutch'], ['PL', 'Polish'], ['RU', 'Russian'], ['JA', 'Japanese'], ['KO', 'Korean'], ['ZH', 'Chinese'], ['AR', 'Arabic'], ['TR', 'Turkish'], ['ID', 'Indonesian'], ['UK', 'Ukrainian']];
 
-export const GROUPS = ['Triggers', 'Workline', 'Flow', 'Data', 'UI', 'Web', 'AI', 'Communication', 'Productivity', 'Developer', 'Sales & payments', 'Storage & feeds'];
+// The small tool groups (Text, Numbers, Dates…) come after Data; Public data at the end.
+export const GROUPS = ['Triggers', 'Workline', 'Flow', 'Data', ...MORE.groups.filter(g => g !== 'Public data'), 'UI', 'Web', 'AI', 'Communication', 'Productivity', 'Developer', 'Sales & payments', 'Storage & feeds', 'Public data'];
 export const NODES = {
   /* ---- triggers ---- */
   'trigger.manual': { group: 'Triggers', label: 'Run by hand', note: 'Starts when you press Run', icon: I.play, tone: 'green', trigger: true, fields: [] },
@@ -201,6 +203,7 @@ export const NODES = {
       { k: 'title', label: 'Title', kind: 'text' }, { k: 'description', label: 'Description', kind: 'textarea' },
       { k: 'theme', label: 'Look', kind: 'select', options: [['light', 'Light'], ['dark', 'Dark']] },
       { k: 'width', label: 'Width', kind: 'select', options: [['normal', 'Normal'], ['wide', 'Wide']] },
+      { k: 'link', label: 'Custom link (optional)', kind: 'text', hint: 'starplay → your site/p/starplay' },
       { k: 'css', label: 'Page CSS (optional)', kind: 'textarea', hint: 'body { background: #0b0b14 }\n.btn.on { background: #1f80e0 }\n.n-player video { border-radius: 20px }' },
     ],
     help: 'The workflow gets { action, query, form }: action is "open" when the page is opened, or the name of the form that was sent; query is the link’s ?… values (Buttons set them); form is the answers.',
@@ -464,6 +467,59 @@ export const NODES = {
 };
 // The Code block (UI): a part of the page in your own HTML, React or Vue. It runs in a frame of its own,
 // with `items` (what reached the node); a starter for each framework, swapped in when the code is untouched.
+/* The tool nodes (text, numbers, dates, lists… in backend/flow-tools.js) and one-job app actions and
+   public data (backend/flow-actions.js), from morenodes.js, which scripts/more-nodes.mjs writes. */
+for (const [k, { defaults, icon, guide, ...d }] of Object.entries(MORE.nodes)) {
+  NODES[k] = { ...d, icon: I[icon] || I.plug, more: true, defaults: () => structuredClone(defaults || {}) };
+}
+
+/* The node library's shelves: sections, each with groups. Every app gets a group of its own (its
+   trigger, its main node and its one-job actions, A–Z); the more advanced generic nodes (AI helpers, MCP, error handling…)
+   have their own section. A node's `group` (what it is) stays as it was; this is only where it's shelved. */
+export const ADVANCED = new Set(['ai.summarize', 'ai.extract', 'ai.classify', 'ai.rewrite', 'ai.translate', 'ai.vision', 'ai.decide', 'ai.score', 'ai.mcp',
+  'core.respond', 'core.pivot', 'core.textsplit', 'core.kv', 'core.graphql', 'file.spreadsheet', 'app.redis', 'core.note',
+  'trigger.error', 'trigger.dbrow', 'trigger.email', 'trigger.calendar']);
+export const SECTIONS = ['Start', 'Build', 'Advanced', 'Tools', 'Apps', 'Data sources'];
+const APP_NAME = { 'trigger.github': 'GitHub', 'trigger.stripe': 'Stripe', 'trigger.shopify': 'Shopify', 'trigger.slack': 'Slack', 'trigger.typeform': 'Typeform', 'trigger.calendly': 'Calendly', 'trigger.telegram': 'Telegram',
+  openai: 'OpenAI', gemini: 'Gemini', deepl: 'DeepL', 'app.email': 'Email', twilio: 'Twilio', ntfy: 'ntfy', 'app.database': 'Database', supabase: 'Supabase', dropbox: 'Dropbox', bitly: 'Bitly' };
+const APP_GROUPS = new Set(['Communication', 'Productivity', 'Developer', 'Sales & payments']);
+const TOOL_GROUPS = new Set(MORE.groups.filter(g => g !== 'Public data'));
+// Which app a node belongs to, if any.
+export function appOf(type, d = nodeDef(type)) {
+  if (APP_NAME[type]) return APP_NAME[type];
+  if (type.startsWith('core.')) return null;
+  if (d.more && d.label.includes(': ')) return d.label.split(': ')[0];
+  if (!d.more && APP_GROUPS.has(d.group)) return d.label;
+  return null;
+}
+// Where a node sits in the library: {section, group}.
+export function shelfOf(type, d = nodeDef(type)) {
+  if (ADVANCED.has(type)) return { section: 'Advanced', group: d.trigger ? 'Triggers' : d.group === 'AI' ? 'AI' : 'Flow & data' };
+  const app = appOf(type, d);
+  if (app) return { section: 'Apps', group: app };
+  if (d.trigger) return { section: 'Start', group: 'Triggers' };
+  if (TOOL_GROUPS.has(d.group)) return { section: 'Tools', group: d.group };
+  if (d.group === 'Public data' || d.group === 'Storage & feeds') return { section: 'Data sources', group: d.group === 'Public data' ? 'Public data' : 'Feeds & data' };
+  return { section: 'Build', group: type === 'core.http' ? 'Web' : d.group };
+}
+// The library for a list of [type, def]: [{section, groups: [{name, items}]}], apps A–Z, the rest in GROUPS order.
+export function shelves(list) {
+  const at = new Map();
+  for (const [k, d] of list) {
+    const { section, group } = shelfOf(k, d);
+    if (!at.has(section)) at.set(section, new Map());
+    const g = at.get(section);
+    if (!g.has(group)) g.set(group, []);
+    g.get(group).push([k, d]);
+  }
+  const rank = g => { const i = GROUPS.indexOf(g === 'Flow & data' ? 'Flow' : g); return i < 0 ? 999 : i; };
+  return SECTIONS.filter(s => at.has(s)).map(section => ({
+    section,
+    groups: [...at.get(section)].map(([name, items]) => ({ name, items }))
+      .sort((a, b) => (section === 'Apps' ? a.name.localeCompare(b.name) : rank(a.name) - rank(b.name) || a.name.localeCompare(b.name))),
+  }));
+}
+
 export const CODE_BLOCKS = {
   react: { label: 'React (JSX)', starter: `// A React component, App. It gets items: what reached this node.
 function App({ items }) {

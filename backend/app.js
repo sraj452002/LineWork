@@ -15,10 +15,15 @@ import { electronRoute } from './app-install.js';
 const MAX_FILE = 4_000_000;
 const ID = /^[\w-]{1,80}$/;
 
+// NVIDIA's models offered by default (NVIDIA_MODEL overrides, comma-separated), and their names in the app.
+export const NVIDIA_MODELS = 'z-ai/glm-5.3-flash,nvidia/nemotron-3.5-lightning-30b-a3b';
+const NVIDIA_NAMES = { 'z-ai/glm-5.3-flash': 'GLM 5.3 Flash', 'nvidia/nemotron-3.5-lightning-30b-a3b': 'NVIDIA Nemotron' };
+export const nvidiaLabel = m => NVIDIA_NAMES[m] || (/nemotron/i.test(m) ? 'NVIDIA Nemotron' : m.split('/').pop().replace(/[-_]+/g, ' ').replace(/\b([a-z])/g, c => c.toUpperCase()).replace(/\bGlm\b/, 'GLM'));
+
 export function createApp(store, opts = {}) {
   const {
     allowSignup = true, aiKey = '', aiModel = 'claude-sonnet-5-5', aiBase = 'https://api.anthropic.com',
-    nvidiaKey = '', nvidiaModel = 'nvidia/nemotron-3.5-lightning-30b-a3b', nvidiaBase = 'https://integrate.api.nvidia.com/v1',
+    nvidiaKey = '', nvidiaModel = NVIDIA_MODELS, nvidiaBase = 'https://integrate.api.nvidia.com/v1',
     aiDailyLimit = 50, trustProxy = false,
     mailer = createMailer(), oauth = {}, appUrl = '', allowLocal = false, dbAllowPrivate = false, dbTimeout = 30_000,
   } = opts;
@@ -37,6 +42,7 @@ export function createApp(store, opts = {}) {
   const flows = createFlows({ store, ai: { key: aiKey, base: aiBase, model: aiModel, dailyLimit: aiDailyLimit }, mailer, allowPrivate: dbAllowPrivate, secret: opts.flowSecret || '' });
   api.use('/hook', flows.hooks);
   api.use('/ui', flows.ui); // published custom apps: public pages, like webhooks
+  api.use('/p', flows.pages); // pages made of nodes at a name of their own (/p/<name> on the site)
   api.use((req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
   // Changes must come from the app's own site, sending JSON. Cross-site forms can do neither.
   // Through the frontend's proxy a request arrives addressed to this host, from a page at APP_URL.
@@ -211,14 +217,19 @@ export function createApp(store, opts = {}) {
      Models: Claude (ANTHROPIC_API_KEY) and NVIDIA's (NVIDIA_API_KEY, an OpenAI-style API at
      integrate.api.nvidia.com). Each request picks one; the answer streams back in Anthropic's event
      format either way, so the app reads one format. */
+  // NVIDIA_MODEL may name several, comma-separated; each is a choice in the AI chat. Nemotron keeps the
+  // id “nvidia” (choices people saved earlier still work); the others are nvidia:<model>.
+  const nvidiaModels = String(nvidiaModel || '').split(',').map(m => m.trim()).filter(Boolean);
   const providers = [
     ...(aiKey ? [{ id: 'claude', label: 'Claude', model: aiModel, images: true }] : []),
-    ...(nvidiaKey ? [{ id: 'nvidia', label: 'NVIDIA Nemotron', model: nvidiaModel, images: false, thinking: true }] : []),
+    ...(nvidiaKey ? nvidiaModels.map(model => ({ id: /nemotron/i.test(model) ? 'nvidia' : `nvidia:${model}`, label: nvidiaLabel(model), model, images: false, thinking: true, nvidia: true })) : []),
   ];
+  // The default: GLM 5.3 Flash when NVIDIA is set up (it answers fast), else the first one.
+  const defaultProvider = providers.find(p => p.model === 'z-ai/glm-5.3-flash') || providers[0] || null;
   api.get('/ai/status', (req, res) => {
     const used = req.user ? store.aiUsed(req.user.id) : 0;
     const reason = !providers.length ? 'no_key' : !req.user ? 'signed_out' : aiDailyLimit > 0 && used >= aiDailyLimit ? 'daily_limit' : null;
-    res.json({ enabled: !reason, reason, limit: aiDailyLimit, used, providers });
+    res.json({ enabled: !reason, reason, limit: aiDailyLimit, used, providers, default: defaultProvider?.id || null });
   });
   /* ---- live databases (the Database view): see dbconnect.js ---- */
   api.post('/db', signedIn, async (req, res) => {
@@ -229,7 +240,7 @@ export function createApp(store, opts = {}) {
   api.post('/ai', signedIn, async (req, res) => {
     if (!providers.length) return res.status(503).json({ error: 'not_configured' });
     const b = req.body || {};
-    const provider = providers.find(p => p.id === b.provider) || providers[0];
+    const provider = providers.find(p => p.id === b.provider) || defaultProvider;
     const prompt = typeof b.prompt === 'string' ? b.prompt : '';
     if (!prompt) return res.status(400).json({ error: 'bad_request' });
     if (prompt.length > 400_000) return res.status(413).json({ error: 'too_large' });
@@ -246,7 +257,7 @@ export function createApp(store, opts = {}) {
       : prompt;
     const ctl = new AbortController();
     res.on('close', () => ctl.abort());
-    if (provider.id === 'nvidia') return nvidiaStream(prompt, res, ctl);
+    if (provider.nvidia) return nvidiaStream(provider.model, prompt, res, ctl);
     let up;
     try {
       up = await fetch(`${aiBase}/v1/messages`, {
@@ -268,15 +279,18 @@ export function createApp(store, opts = {}) {
   // NVIDIA (OpenAI-style chat completions, streamed). Its chunks carry the answer in delta.content and
   // the model's reasoning in delta.reasoning_content; they're passed on as Anthropic-style text_delta and
   // thinking_delta events.
-  async function nvidiaStream(prompt, res, ctl) {
+  async function nvidiaStream(model, prompt, res, ctl) {
     let up;
     try {
       up = await fetch(`${nvidiaBase.replace(/\/+$/, '')}/chat/completions`, {
         method: 'POST', signal: ctl.signal,
         headers: { authorization: `Bearer ${nvidiaKey}`, 'content-type': 'application/json', accept: 'text/event-stream' },
         body: JSON.stringify({
-          model: nvidiaModel, messages: [{ role: 'user', content: prompt }], stream: true,
-          temperature: 1, top_p: 0.95, max_tokens: 16384, reasoning_budget: 16384, chat_template_kwargs: { enable_thinking: true },
+          model, messages: [{ role: 'user', content: prompt }], stream: true,
+          // Nemotron thinks first, with its own settings; the others (GLM…) take NVIDIA's suggested ones.
+          ...(/nemotron/i.test(model)
+            ? { temperature: 1, top_p: 0.95, max_tokens: 16384, reasoning_budget: 16384, chat_template_kwargs: { enable_thinking: true } }
+            : { temperature: 0.5, top_p: 1, max_tokens: 8192 }),
         }),
       });
     } catch (e) {

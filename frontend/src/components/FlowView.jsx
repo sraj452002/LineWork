@@ -3,7 +3,7 @@ import { useUI } from './ui.jsx';
 import { api, serverInfo } from '../lib/backend.js';
 import { clone, rid } from '../lib/utils.js';
 import {
-  CRED_TYPES, GROUPS, ICON, NODES, createCredential, deleteCredential, emptyFlow, getRun, inputsOf, listCredentials,
+  CRED_TYPES, GROUPS, ICON, NODES, shelfOf, shelves, createCredential, deleteCredential, emptyFlow, getRun, inputsOf, listCredentials,
   listRuns, newNode, nodeDef, outputsOf, outsOf, startRun, updateCredential,
 } from '../lib/flows.js';
 import { LOGOS } from '../lib/flowlogos.js';
@@ -280,7 +280,9 @@ export default function FlowView({ file, update, visible, saveState = 'Saved', o
     ],
     context: () => {
       const brief = n => `- "${n.name}" (${n.type})${n.credential ? ' [credential set]' : ''}: ${JSON.stringify(n.params || {}).slice(0, 600)}`;
-      const catalog = Object.entries(NODES).map(([k, d]) => `${k}: ${d.label}. ${d.note}${d.fields && d.fields.length ? ` Fields: ${d.fields.map(f => f.k + (f.kind === 'select' && f.options ? `(${f.options.map(o => o[0]).join('|')})` : '')).join(', ')}` : ''}${d.outputs ? ` Outputs: ${d.outputs.join(', ')}` : ''}`).join('\n');
+      const catalog = Object.entries(NODES).filter(([, d]) => !d.more).map(([k, d]) => `${k}: ${d.label}. ${d.note}${d.fields && d.fields.length ? ` Fields: ${d.fields.map(f => f.k + (f.kind === 'select' && f.options ? `(${f.options.map(o => o[0]).join('|')})` : '')).join(', ')}` : ''}${d.outputs ? ` Outputs: ${d.outputs.join(', ')}` : ''}`).join('\n');
+      // The 500-odd tool and app-action nodes, shorter: type(fields), by group.
+      const more = GROUPS.map(g => { const l = Object.entries(NODES).filter(([, d]) => d.more && d.group === g); return l.length ? `${g}: ${l.map(([k, d]) => `${k}(${d.fields.map(f => f.k).join(',')})`).join('; ')}` : ''; }).filter(Boolean).join('\n');
       const last = run && run.nodes ? Object.entries(run.nodes).filter(([, r]) => r.error).map(([id, r]) => `"${byId.get(id)?.name || id}": ${r.error}`).join('\n') : '';
       return `The Workflow view: an n8n-style workflow. Items flow from node to node as JSON; fields can use {{ expressions }} like {{ $json.name }}, {{ $node["Name"].json.x }}, {{ $items.length }}. A Code node (language javascript, typescript, python, lua or sql) gets \`items\` and returns a list.
 ${flow.active ? 'Active.' : 'Not active.'} Nodes:
@@ -290,7 +292,10 @@ ${selected ? `Selected node: "${selected.name}".` : ''}
 ${run ? `Last run: ${run.status}${run.error ? ` — ${run.error}` : ''}${last ? `\nErrors:\n${last}` : ''}` : 'Not run yet.'}
 
 Kinds of node (type: what it is. its fields):
-${catalog}`;
+${catalog}
+
+More nodes, by group: type(fields). Tools work on params.value (usually an expression) and put the result in params.output; app actions need a credential of the app's kind.
+${more}`;
     },
     rules: `One of:
 {"type": "nodes", "nodes": [{"ref": "a", "type": "a node type from the list", "name": "a short name", "params": {"field": "value"}}], "edges": [{"from": "a", "to": "b", "fromPort": "main"}], "after": "name of an existing node to connect the first new node after, or null"}
@@ -512,47 +517,58 @@ ${catalog}`;
         </div>
       )}
       {publish && <PublishDialog file={file} flow={flow} change={change} onClose={() => setPublish(false)} />}
-      {webPub && pageNode && <WebPublishDialog flow={flow} node={pageNode} server={server} change={change} onForm={() => { setWebPub(false); setPublish(true); }} onClose={() => setWebPub(false)} />}
+      {webPub && pageNode && <WebPublishDialog fileId={file.id} flow={flow} node={pageNode} server={server} change={change} onForm={() => { setWebPub(false); setPublish(true); }} onClose={() => setWebPub(false)} />}
       {credDlg && <Credentials types={credDlg.types} creds={creds} onChanged={loadCreds} onPick={credDlg.pick} onClose={() => setCredDlg(null)} ask={ask} toast={toast} />}
     </div>
   );
 }
 
-// The node library on the left: every node by group, searchable; click one to add it (after the selected
-// node), or drag it onto the canvas.
+// The node library on the left: every node in its section and group (each app has its own group),
+// searchable; click one to add it (after the selected node), or drag it onto the canvas.
+const OPEN_SECTIONS = new Set(['Start', 'Build', 'Advanced']);
+const matches = needle => ([k, d]) => !needle || `${d.label} ${d.note} ${d.group} ${k} ${shelfOf(k, d).group}`.toLowerCase().includes(needle);
+// In an app's own group, “GitHub: Comment on an issue” reads as “Comment on an issue”.
+// The app's trigger and its main node (both named after the app) say which is which.
+const shortLabel = (d, group) => (d.label.startsWith(`${group}: `) ? d.label.slice(group.length + 2) : d.trigger ? 'New event (trigger)' : d.label === group && d.fields?.some(f => f.k === 'operation') ? `${group} (pick an action)` : d.label);
 function Library({ open, onToggle, onPick }) {
   const [q, setQ] = useState('');
-  const [shut, setShut] = useState({});
+  // Start, Build and Advanced start open; the tools, the apps and the data sources folded.
+  const [shut, setShut] = useState(() => Object.fromEntries(shelves(Object.entries(NODES)).flatMap(s => s.groups.map(g => [`${s.section}/${g.name}`, !OPEN_SECTIONS.has(s.section)]))));
   if (!open) return <aside className="fv-lib closed"><button className="btn icon-only" aria-label="Show the nodes" title="Nodes" onClick={onToggle}><Ico d="M9 6l6 6-6 6" size={16} /></button></aside>;
   const needle = q.trim().toLowerCase();
-  const list = Object.entries(NODES).filter(([, d]) => !needle || `${d.label} ${d.note} ${d.group}`.toLowerCase().includes(needle));
+  const list = Object.entries(NODES).filter(matches(needle));
   return (
     <aside className="fv-lib" aria-label="Nodes">
       <div className="fv-lib-head">
         <b>Nodes</b><small>{Object.keys(NODES).length}</small>
         <button className="btn icon-only" aria-label="Hide the nodes" title="Hide" onClick={onToggle}><Ico d="M15 6l-6 6 6 6" size={16} /></button>
       </div>
-      <label className="fv-lib-search"><Ico d="M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4" size={14} /><input className="fv-lib-q" type="search" placeholder="Search nodes" value={q} onChange={e => setQ(e.target.value)} /></label>
+      <label className="fv-lib-search"><Ico d="M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4" size={14} /><input className="fv-lib-q" type="search" placeholder="Search nodes or apps" value={q} onChange={e => setQ(e.target.value)} /></label>
       <div className="fv-lib-list">
-        {GROUPS.map(g => {
-          const items = list.filter(([, d]) => d.group === g);
-          if (!items.length) return null;
-          const closed = shut[g] && !needle;
-          return (
-            <section key={g}>
-              <button className="fv-lib-g" aria-expanded={!closed} onClick={() => setShut(x => ({ ...x, [g]: !x[g] }))}>
-                <Ico d={closed ? 'M9 6l6 6-6 6' : 'M6 9l6 6 6-6'} size={13} />{g}<small>{items.length}</small>
-              </button>
-              {!closed && items.map(([k, d]) => (
-                <button key={k} className={'fv-lib-item t-' + d.tone} draggable title={d.note}
-                  onDragStart={e => { e.dataTransfer.setData('application/x-workline-node', k); e.dataTransfer.effectAllowed = 'copy'; }}
-                  onClick={() => onPick(k)}>
-                  <i className={badge(d)}><Mark d={d} size={14} /></i><span>{d.label}</span>
-                </button>
-              ))}
-            </section>
-          );
-        })}
+        {shelves(list).map(({ section, groups }) => (
+          <div key={section} className="fv-lib-sec">
+            <h4>{section}<small>{groups.reduce((n, g) => n + g.items.length, 0)}</small></h4>
+            {groups.map(({ name, items }) => {
+              const id = `${section}/${name}`, closed = shut[id] && !needle, d0 = items[0][1];
+              const appGroup = section === 'Apps';
+              return (
+                <section key={name}>
+                  <button className={'fv-lib-g' + (appGroup ? ' app' : '')} aria-expanded={!closed} onClick={() => setShut(x => ({ ...x, [id]: !x[id] }))}>
+                    <Ico d={closed ? 'M9 6l6 6-6 6' : 'M6 9l6 6 6-6'} size={13} />
+                    {appGroup && <i className={badge(d0)}><Mark d={d0} size={12} /></i>}{name}<small>{items.length}</small>
+                  </button>
+                  {!closed && items.map(([k, d]) => (
+                    <button key={k} className={'fv-lib-item t-' + d.tone} draggable title={d.note}
+                      onDragStart={e => { e.dataTransfer.setData('application/x-workline-node', k); e.dataTransfer.effectAllowed = 'copy'; }}
+                      onClick={() => onPick(k)}>
+                      <i className={badge(d)}><Mark d={d} size={14} /></i><span>{appGroup ? shortLabel(d, name) : d.label}</span>
+                    </button>
+                  ))}
+                </section>
+              );
+            })}
+          </div>
+        ))}
         {!list.length && <p className="muted">No node matches.</p>}
       </div>
     </aside>
@@ -565,19 +581,16 @@ function Palette({ at, view, onPick, onClose }) {
   const ref = useRef(null);
   useEffect(() => { ref.current?.querySelector('input')?.focus(); }, []);
   const needle = q.trim().toLowerCase();
-  const list = Object.entries(NODES).filter(([, d]) => !needle || `${d.label} ${d.note} ${d.group}`.toLowerCase().includes(needle));
+  const shelved = shelves(Object.entries(NODES).filter(matches(needle))), list = shelved.flatMap(s => s.groups.flatMap(g => g.items));
   return (
     <div className="fv-pal" ref={ref} style={{ left: Math.max(8, at.x * view.k + view.x), top: Math.max(8, at.y * view.k + view.y) }} onPointerDown={e => e.stopPropagation()}>
       <input placeholder="Search nodes" value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') onClose(); if (e.key === 'Enter' && list[0]) onPick(list[0][0]); }} />
       <div className="fv-pal-list">
-        {GROUPS.map(g => {
-          const items = list.filter(([, d]) => d.group === g);
-          return items.length ? (
-            <div key={g}><h5>{g}</h5>
-              {items.map(([k, d]) => <button key={k} className={'t-' + d.tone} onClick={() => onPick(k)}><i className={badge(d)}><Mark d={d} size={15} /></i><span><b>{d.label}</b><small>{d.note}</small></span></button>)}
-            </div>
-          ) : null;
-        })}
+        {shelved.flatMap(s => s.groups).map(({ name, items }) => (
+          <div key={name}><h5>{name}</h5>
+            {items.map(([k, d]) => <button key={k} className={'t-' + d.tone} onClick={() => onPick(k)}><i className={badge(d)}><Mark d={d} size={15} /></i><span><b>{d.label}</b><small>{d.note}</small></span></button>)}
+          </div>
+        ))}
         {!list.length && <p className="muted">No node matches.</p>}
       </div>
     </div>
@@ -742,10 +755,28 @@ function Field({ f, value, onChange }) {
 // The account's credentials: add, change (secrets left empty are kept) and remove.
 // Publish a page made of nodes as a web app: turning it on makes the Page trigger's link answer (it's the
 // workflow's Active switch, saved with it); the dialog hands out the link and how to put it on a phone.
-function WebPublishDialog({ flow, node, server, change, onForm, onClose }) {
+function WebPublishDialog({ fileId, flow, node, server, change, onForm, onClose }) {
   const { toast } = useUI();
-  const link = `${location.origin}/api/hook/${(node.params || {}).path}`;
+  const hookLink = `${location.origin}/api/hook/${(node.params || {}).path}`;
   const live = !!flow.active;
+  // A name of its own: your site/p/<name>. Checked as it's typed; first come, first served.
+  const name = String((node.params || {}).link || '');
+  const [check, setCheck] = useState(null); // {ok, taken, live, reason}
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!name) { setCheck(null); return undefined; }
+    const t = setTimeout(() => api(`/flows/link/${encodeURIComponent(name)}?file=${encodeURIComponent(fileId)}`).then(setCheck, () => setCheck(null)), tick ? 0 : 300);
+    return () => clearTimeout(t);
+  }, [name, fileId, tick]);
+  // Live and free but not yet ours: it becomes ours once the change is saved, so ask again until then.
+  useEffect(() => {
+    if (!live || !check || !check.ok || check.live) return undefined;
+    const t = setTimeout(() => setTick(x => x + 1), 1500);
+    return () => clearTimeout(t);
+  }, [live, check]);
+  const setName = v => change(f => { const n = f.nodes.find(x => x.id === node.id); if (n) (n.params ||= {}).link = v.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 40); });
+  const named = name && check && check.ok;
+  const link = named ? `${location.origin}/p/${name}` : hookLink;
   const turn = on => {
     change(f => { f.active = on; });
     dispatchEvent(new Event('workline:save'));
@@ -758,6 +789,9 @@ function WebPublishDialog({ flow, node, server, change, onForm, onClose }) {
         <p className="muted">This workflow draws a page (it starts with a <b>Page</b> trigger). Publish it and the page is a web app at its own link: anyone can open it on a phone or computer, no account needed. It always runs the saved workflow.</p>
         {!server && <p className="err">Sign in to the Workline server to publish: the server is what answers the link.</p>}
         <label className={'fv-active' + (live ? ' on' : '')}><input type="checkbox" checked={live} disabled={!server} onChange={e => turn(e.target.checked)} /><i />{live ? 'Live: anyone with the link can use it' : 'Not published'}</label>
+        <h4>A name for its link</h4>
+        <div className="fv-row fv-pub-name"><span className="muted">{location.host}/p/</span><input aria-label="Custom link name" placeholder="starplay" value={name} onChange={e => setName(e.target.value)} /></div>
+        {name && check && <p className={check.ok ? 'ok' : 'err'}>{check.reason || (check.taken ? 'Taken: pick another name.' : check.live ? 'Yours: the link works.' : live ? 'Free: it’s yours once saved.' : 'Free: publish to take it.')}</p>}
         <h4>Its link</h4>
         <div className="fv-row"><input readOnly aria-label="Web app link" value={link} onFocus={e => e.target.select()} />
           <button type="button" className="btn" onClick={() => { navigator.clipboard?.writeText(link); toast('Link copied'); }}>Copy</button>

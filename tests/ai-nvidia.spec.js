@@ -21,7 +21,7 @@ const fakeNvidia = () => createServer((req, res) => {
   });
 });
 
-test('NVIDIA Nemotron: the API streams its answer and reasoning; the AI chat picks it and shows its thinking', async ({ browser }) => {
+test('NVIDIA models (GLM 5.3 Flash, Nemotron): the API streams its answer and reasoning; the AI chat picks it and shows its thinking', async ({ browser }) => {
   test.setTimeout(150_000);
   const nv = fakeNvidia().listen(0);
   const { spawn } = await import('node:child_process');
@@ -44,7 +44,13 @@ test('NVIDIA Nemotron: the API streams its answer and reasoning; the AI chat pic
 
     // The API: both models offered; an NVIDIA request becomes a chat completion with thinking on.
     const status = await page.evaluate(() => fetch('/api/ai/status').then(r => r.json()));
-    expect(status.providers.map(p => p.id)).toEqual(['claude', 'nvidia']);
+    expect(status.default).toBe('nvidia:z-ai/glm-5.3-flash'); // the fast one, unless someone picks another
+    expect(status.providers.map(p => [p.id, p.label])).toEqual([['claude', 'Claude'], ['nvidia:z-ai/glm-5.3-flash', 'GLM 5.3 Flash'], ['nvidia', 'NVIDIA Nemotron']]);
+    // GLM 5.3 Flash: the same API, with NVIDIA's suggested settings for it.
+    const glm = await page.evaluate(() => fetch('/api/ai', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ prompt: 'Which is larger, 9.11 or 9.8?', provider: 'nvidia:z-ai/glm-5.3-flash' }) }).then(r => r.text()));
+    expect(glm).toContain('"type":"text_delta","text":"# Rate limiter');
+    expect(calls.at(-1).body).toMatchObject({ model: 'z-ai/glm-5.3-flash', temperature: 0.5, top_p: 1, stream: true, messages: [{ role: 'user', content: 'Which is larger, 9.11 or 9.8?' }] });
+    expect(calls.at(-1).body.chat_template_kwargs).toBeUndefined();
     const raw = await page.evaluate(() => fetch('/api/ai', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ prompt: 'Hi', provider: 'nvidia' }) }).then(r => r.text()));
     expect(raw).toContain('"type":"thinking_delta","thinking":"The user wants a design doc. "');
     expect(raw).toContain('"type":"text_delta","text":"# Rate limiter');
@@ -57,7 +63,7 @@ test('NVIDIA Nemotron: the API streams its answer and reasoning; the AI chat pic
     await page.getByRole('button', { name: 'Create a Blank File' }).click();
     const chat = page.getByRole('complementary', { name: 'AI chat' });
     const picker = chat.getByLabel('AI model');
-    await expect(picker).toHaveValue('claude');
+    await expect(picker).toHaveValue('nvidia:z-ai/glm-5.3-flash');
     await picker.selectOption('nvidia');
     await chat.getByRole('button', { name: 'Document' }).click();
     await chat.getByLabel('Describe what to create or edit').fill('A rate limiter');

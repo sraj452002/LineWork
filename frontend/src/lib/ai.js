@@ -1,11 +1,15 @@
 // AI calls go to /api/ai on the Workline API (../../backend), which holds the API keys. The server may
-// offer more than one model (Claude, NVIDIA Nemotron); the one picked in the AI chat is kept per browser.
+// offer more than one model (Claude, GLM 5.3 Flash, NVIDIA Nemotron); the one picked in the AI chat is kept per browser.
 const PROVIDER_KEY = 'linework:ai-provider';
 export let aiProviders = [];
+// The server's default (GLM 5.3 Flash, the fast one, when it's set up) until someone picks another.
+let aiDefault = null;
 export const aiProvider = () => {
   let id = null; try { id = localStorage.getItem(PROVIDER_KEY); } catch(_){}
-  return aiProviders.find(p => p.id === id) || aiProviders[0] || null;
+  return aiProviders.find(p => p.id === id) || aiProviders.find(p => p.id === aiDefault) || aiProviders[0] || null;
 };
+// Pictures go to a model that reads them (Claude), whichever is picked.
+const providerFor = images => { const p = aiProvider(); return images && images.length && p && !p.images ? aiProviders.find(x => x.images) || p : p; };
 export const setAIProvider = id => { try { localStorage.setItem(PROVIDER_KEY, id); } catch(_){} };
 // A model that reasons first (Nemotron) sends its thinking as it goes; listeners see it (the chat shows it).
 const thinkers = new Set();
@@ -14,7 +18,7 @@ function createSample(){
   const sample = async (input, opts = {}) => {
     const prompt = typeof input === 'string' ? input : input.map(t => t.content).join('\n\n');
     let res;
-    try{ res = await fetch('/api/ai', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({prompt, tier:opts.modelTier || 'default', provider:aiProvider()?.id, ...(opts.images && opts.images.length ? {images:opts.images} : {})}), signal:opts.signal}); }
+    try{ res = await fetch('/api/ai', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({prompt, tier:opts.modelTier || 'default', provider:providerFor(opts.images)?.id, ...(opts.images && opts.images.length ? {images:opts.images} : {})}), signal:opts.signal}); }
     catch(e){ throw {code: e && e.name === 'AbortError' ? 'cancelled' : 'unavailable'}; }
         if(res.status === 401) throw {code:'signed_out'};
     if(res.status === 429){ const j = await res.json().catch(() => null); throw {code: j && j.error === 'daily_limit' ? 'daily_limit' : 'rate_limited'}; }
@@ -55,6 +59,7 @@ function createSample(){
       : j && j.reason === 'daily_limit' ? `You’ve used today’s ${j.limit} AI requests. They reset at midnight UTC. Everything else still works.`
       : j && j.limit !== undefined ? AI_NO_KEY_SERVER : AI_NO_KEY;
     aiProviders = (j && j.providers) || [];
+    aiDefault = (j && j.default) || null;
     return j && j.enabled ? sample : null;
   }).catch(() => null);
 }

@@ -65,10 +65,27 @@ test('a page made of nodes is published as a web app, and unpublished', async ({
     await v.getByRole('link', { name: '🏏 Sports' }).click();
     await expect(v.getByRole('cell', { name: 'India vs Australia' })).toBeVisible();
 
+    // A name of its own: /p/<name>, checked as it's typed.
+    await dlg.getByLabel('Custom link name').fill('StarPlay Test!');
+    await expect(dlg.getByLabel('Custom link name')).toHaveValue('starplaytest');
+    await expect(dlg.getByText('Yours: the link works.')).toBeVisible({ timeout: 15_000 });
+    await expect(dlg.getByLabel('Web app link')).toHaveValue(`${url}/p/starplaytest`);
+    await v.goto(`${url}/p/starplaytest`);
+    await expect(v.locator('h1').first()).toHaveText('StarPlay 2');
+    await v.goto(`${url}/p/starplaytest?page=sports`); // its pages and buttons work there too
+    await expect(v.getByRole('cell', { name: 'India vs Australia' })).toBeVisible();
+    // Someone else can't have it; a name nobody has is free; a bad name says why.
+    expect(await (await page.request.get('/api/flows/link/starplaytest?file=another')).json()).toMatchObject({ ok: false, taken: true });
+    expect(await (await page.request.get('/api/flows/link/somethingelse')).json()).toMatchObject({ ok: true });
+    expect((await (await page.request.get('/api/flows/link/x')).json()).reason).toMatch(/3 to 40/);
+    expect((await fetch(`${url}/p/nobody-here`, { headers: { accept: 'text/html' } })).status).toBe(404);
+
     // Unpublish: the link says it isn't live.
     await dlg.getByRole('button', { name: 'Unpublish' }).click();
     await expect(page.getByRole('button', { name: 'Publish web app' })).toBeVisible();
     await expect.poll(async () => { await v.goto(link); return v.locator('h1').first().textContent(); }, { timeout: 20_000 }).toBe('This app isn’t live');
+    await v.goto(`${url}/p/starplaytest`); // its name stops working too
+    await expect(v.locator('h1').first()).toHaveText('This app isn’t live');
     await visitor.close(); await off.close();
     expect(errors).toEqual([]);
     await ctx.close();

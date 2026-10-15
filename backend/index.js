@@ -2,7 +2,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openStore } from './store.js';
 import { backendFromEnv } from './drive.js';
-import { createApp } from './app.js';
+import { NVIDIA_MODELS, createApp } from './app.js';
 import { ensureUsers } from './accounts.js';
 import { createMailer } from './mail.js';
 
@@ -29,7 +29,7 @@ const app = createApp(store, {
   aiModel: env.ANTHROPIC_MODEL || 'claude-sonnet-5-5',
   aiBase: env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com',
   nvidiaKey: env.NVIDIA_API_KEY || '',
-  nvidiaModel: env.NVIDIA_MODEL || 'nvidia/nemotron-3.5-lightning-30b-a3b',
+  nvidiaModel: env.NVIDIA_MODEL || NVIDIA_MODELS,
   nvidiaBase: env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1',
   aiDailyLimit: num(env.AI_DAILY_LIMIT, 50),
   trustProxy: env.TRUST_PROXY ? (/^\d+$/.test(env.TRUST_PROXY) ? Number(env.TRUST_PROXY) : env.TRUST_PROXY) : false,
