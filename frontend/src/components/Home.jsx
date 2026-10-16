@@ -298,7 +298,7 @@ Reply with ONLY a JSON object: {"title": "...", "doc": "...", "diagrams": [...]}
             <Ico d={IC.bookmark} /><span>Templates</span><kbd>P</kbd>
           </button>
           <button className="nav" aria-current={view === 'assistant' ? 'page' : undefined} onClick={() => setView('assistant')}>
-            <Ico d={IC.ai} /><span>AI Assistant</span><kbd>I</kbd>
+            <Ico d={IC.ai} /><span>Nemo AI</span><kbd>I</kbd>
           </button>
         </nav>
         <div className="side-sec">

@@ -48,7 +48,8 @@ test('the AI assistant chats like Claude and uses the account’s tools: nodes, 
     await page.getByLabel('Email').fill('maya@example.com');
     await page.getByLabel('Password').fill('a long password');
     await page.getByRole('button', { name: 'Create account' }).click();
-    await page.getByRole('button', { name: 'AI Assistant' }).click();
+    await page.getByRole('button', { name: 'Nemo AI' }).click();
+    await expect(page.getByText('I’m Nemo')).toBeVisible();
     await expect(page.getByRole('heading', { level: 1 })).toContainText(/Good (morning|afternoon|evening)|Up late/);
 
     // A question it answers by running a node, shown as a card that opens to what went in and came back.
@@ -63,6 +64,7 @@ test('the AI assistant chats like Claude and uses the account’s tools: nodes, 
     await expect(card).toContainText('HELLO FROM WORKLINE');
     await expect(answer.locator('pre .as-copy')).toHaveText('Copy');
     // The model was given the tools, and the tool's real result.
+    expect(seen[0].messages[0].content).toContain('You are Nemo');
     expect(seen[0].tools.map(t => t.function.name)).toEqual(expect.arrayContaining(['list_workflows', 'run_workflow', 'find_nodes', 'run_node', 'read_file', 'create_doc']));
     expect(seen[1].messages.find(m => m.role === 'tool').content).toContain('HELLO FROM WORKLINE');
 
@@ -82,7 +84,7 @@ test('the AI assistant chats like Claude and uses the account’s tools: nodes, 
     await page.screenshot({ path: 'test-results/assistant.png' });
 
     await page.reload();
-    await page.getByRole('button', { name: 'AI Assistant' }).click();
+    await page.getByRole('button', { name: 'Nemo AI' }).click();
     await page.locator('.as-pick', { hasText: 'uppercase' }).click();
     await expect(page.locator('.as-msg.ai').last()).toContainText('All set.');
     expect(errors).toEqual([]);

@@ -181,7 +181,7 @@ export default function Assistant({ user, compact = false, onOpenFile }) {
           ))}
         </div>
       )}
-      <textarea ref={boxRef} rows={1} value={text} aria-label="Message" placeholder={msgs.length ? 'Reply…' : 'How can I help you today?'}
+      <textarea ref={boxRef} rows={1} value={text} aria-label="Message" placeholder={msgs.length ? 'Reply to Nemo…' : 'How can Nemo help you today?'}
         onChange={e => setText(e.target.value)} onPaste={e => { const f = [...(e.clipboardData?.files || [])]; if (f.length) { e.preventDefault(); attach(f); } }}
         onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && !(compact && 'ontouchstart' in window)) { e.preventDefault(); send(); } }} />
       <div className="as-row">
@@ -215,7 +215,7 @@ export default function Assistant({ user, compact = false, onOpenFile }) {
           </nav>
         </aside>
       )}
-      <section className="as-main" aria-label="AI assistant">
+      <section className="as-main" aria-label="Nemo, the AI assistant">
         <header className="as-top">
           <button className="as-ib" aria-label={side ? 'Hide chats' : 'Show chats'} title="Chats" onClick={() => setSide(s => !s)}><Ico d={IC.clock} /></button>
           <b className="as-title">{chat ? chat.title : ''}</b>
@@ -224,6 +224,7 @@ export default function Assistant({ user, compact = false, onOpenFile }) {
         {!msgs.length ? (
           <div className="as-hero">
             <h1><span className="as-star" aria-hidden="true"><Ico d={IC.ai} /></span>{greet()}{first ? `, ${first}` : ''}</h1>
+            <p className="as-intro">I’m <b>Nemo</b>, your WorkLine AI. Ask me anything, or have me run your workflows and nodes.</p>
             {composer}
             <div className="as-chips">{SUGGEST.map(([label, q]) => <button key={label} onClick={() => send(q)}>{label}</button>)}</div>
             <p className="as-fine">It can run your workflows and nodes, read your files and write docs. It asks before sending or changing anything in other apps.</p>
@@ -247,7 +248,7 @@ export default function Assistant({ user, compact = false, onOpenFile }) {
               ) : <Answer key={m.id} m={m} live={busy && k === msgs.length - 1} last={k === msgs.length - 1} onRetry={retry} onOpenFile={onOpenFile} />))}
             </div>
           </div>
-          <div className="as-foot">{composer}<p className="as-fine">AI can make mistakes. Check what matters.</p></div>
+          <div className="as-foot">{composer}<p className="as-fine">Nemo can make mistakes. Check what matters.</p></div>
         </>)}
       </section>
     </div>

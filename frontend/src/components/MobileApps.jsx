@@ -211,7 +211,7 @@ function AppsHome({ session, onSignOut }) {
     <div className="m-app-shell">
       <div className="m-shell">
         {open && tab === 'run' ? <div className="m-run"><AppRunner file={open} server={server} onBack={() => setOpenId(null)} /></div> : (<>
-          <MobileBar user={session.user} onSignOut={out} onRefresh={tab === 'run' ? load : null} busy={busy} title={tab === 'run' ? 'Workflows' : 'AI chat'}
+          <MobileBar user={session.user} onSignOut={out} onRefresh={tab === 'run' ? load : null} busy={busy} title={tab === 'run' ? 'Workflows' : 'Nemo'}
             hello={`${greeting()}${session.user.name ? `, ${session.user.name.split(' ')[0]}` : ''}`} />
           {install && <button className="btn primary m-wide m-install" onClick={async () => { install.prompt(); await install.userChoice.catch(() => {}); setInstall(null); }}>⬇ Install WorkLine Apps</button>}
           {tab === 'run' ? (<>
@@ -227,7 +227,7 @@ function AppsHome({ session, onSignOut }) {
       </div>
       <nav className="m-tabs" aria-label="WorkLine Apps">
         <button aria-current={tab === 'run' ? 'page' : undefined} onClick={() => { setTab('run'); }}><Svg d={ICON.grid} size={19} /><span>Workflows</span></button>
-        <button aria-current={tab === 'chat' ? 'page' : undefined} onClick={() => setTab('chat')}><Svg d={ICON.spark} size={19} /><span>AI chat</span></button>
+        <button aria-current={tab === 'chat' ? 'page' : undefined} onClick={() => setTab('chat')}><Svg d={ICON.spark} size={19} /><span>Nemo</span></button>
       </nav>
     </div>
   );

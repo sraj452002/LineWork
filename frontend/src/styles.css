@@ -2936,3 +2936,4 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .as-row .grow{flex:1}
 .m-app-shell .as-send{background:linear-gradient(135deg,#7C3AED,#3B82F6)}
 .m-app-shell .as-av{background:linear-gradient(135deg,#8B5CF6,#3B82F6);color:#fff}
+.as-intro{margin:-8px 0 0;color:var(--ink2);font-size:15px;text-align:center}
