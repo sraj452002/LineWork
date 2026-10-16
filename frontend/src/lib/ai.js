@@ -1,8 +1,8 @@
 // AI calls go to /api/ai on the Workline API (../../backend), which holds the API keys. The server may
-// offer more than one model (Claude, GLM 5.3 Flash, NVIDIA Nemotron); the one picked in the AI chat is kept per browser.
+// offer more than one model (Claude, DeepSeek V4.1 Flash, NVIDIA Nemotron); the one picked in the AI chat is kept per browser.
 const PROVIDER_KEY = 'linework:ai-provider';
 export let aiProviders = [];
-// The server's default (GLM 5.3 Flash, the fast one, when it's set up) until someone picks another.
+// The server's default (DeepSeek V4.1 Flash, the fast one, when it's set up) until someone picks another.
 let aiDefault = null;
 export const aiProvider = () => {
   let id = null; try { id = localStorage.getItem(PROVIDER_KEY); } catch(_){}

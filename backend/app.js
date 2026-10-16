@@ -17,8 +17,8 @@ const MAX_FILE = 4_000_000;
 const ID = /^[\w-]{1,80}$/;
 
 // NVIDIA's models offered by default (NVIDIA_MODEL overrides, comma-separated), and their names in the app.
-export const NVIDIA_MODELS = 'z-ai/glm-5.3-flash,nvidia/nemotron-3.5-lightning-30b-a3b';
-const NVIDIA_NAMES = { 'z-ai/glm-5.3-flash': 'GLM 5.3 Flash', 'nvidia/nemotron-3.5-lightning-30b-a3b': 'NVIDIA Nemotron' };
+export const NVIDIA_MODELS = 'deepseek-ai/deepseek-v4.1-flash,nvidia/nemotron-3.5-lightning-30b-a3b';
+const NVIDIA_NAMES = { 'deepseek-ai/deepseek-v4.1-flash': 'DeepSeek V4.1 Flash', 'z-ai/glm-5.3-flash': 'GLM 5.3 Flash', 'nvidia/nemotron-3.5-lightning-30b-a3b': 'NVIDIA Nemotron' };
 export const nvidiaLabel = m => NVIDIA_NAMES[m] || (/nemotron/i.test(m) ? 'NVIDIA Nemotron' : m.split('/').pop().replace(/[-_]+/g, ' ').replace(/\b([a-z])/g, c => c.toUpperCase()).replace(/\bGlm\b/, 'GLM'));
 
 export function createApp(store, opts = {}) {
@@ -225,8 +225,10 @@ export function createApp(store, opts = {}) {
     ...(aiKey ? [{ id: 'claude', label: 'Claude', model: aiModel, images: true }] : []),
     ...(nvidiaKey ? nvidiaModels.map(model => ({ id: /nemotron/i.test(model) ? 'nvidia' : `nvidia:${model}`, label: nvidiaLabel(model), model, images: false, thinking: true, nvidia: true })) : []),
   ];
-  // The default: GLM 5.3 Flash when NVIDIA is set up (it answers fast), else the first one.
-  const defaultProvider = providers.find(p => p.model === 'z-ai/glm-5.3-flash') || providers[0] || null;
+  // The default: DeepSeek V4.1 Flash when NVIDIA is set up (advanced, and it answers fast), else GLM 5.3
+  // Flash if it's still listed, else the first one.
+  const FAST = ['deepseek-ai/deepseek-v4.1-flash', 'z-ai/glm-5.3-flash'];
+  const defaultProvider = FAST.map(m => providers.find(p => p.model === m)).find(Boolean) || providers[0] || null;
   api.get('/ai/status', (req, res) => {
     const used = req.user ? store.aiUsed(req.user.id) : 0;
     const reason = !providers.length ? 'no_key' : !req.user ? 'signed_out' : aiDailyLimit > 0 && used >= aiDailyLimit ? 'daily_limit' : null;
@@ -294,7 +296,7 @@ export function createApp(store, opts = {}) {
         headers: { authorization: `Bearer ${nvidiaKey}`, 'content-type': 'application/json', accept: 'text/event-stream' },
         body: JSON.stringify({
           model, messages: [{ role: 'user', content: prompt }], stream: true,
-          // Nemotron thinks first, with its own settings; the others (GLM…) take NVIDIA's suggested ones.
+          // Nemotron thinks first, with its own settings; the others (DeepSeek…) take NVIDIA's suggested ones.
           ...(/nemotron/i.test(model)
             ? { temperature: 1, top_p: 0.95, max_tokens: 16384, reasoning_budget: 16384, chat_template_kwargs: { enable_thinking: true } }
             : { temperature: 0.5, top_p: 1, max_tokens: 8192 }),
