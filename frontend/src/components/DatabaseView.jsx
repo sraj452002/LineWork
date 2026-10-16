@@ -6,6 +6,7 @@ import {
 import { downloads } from '../lib/ai.js';
 import { newSheet } from '../lib/sheet.js';
 import { useUI } from './ui.jsx';
+import Loading from './Loading.jsx';
 
 /* The Database view: connect to a live database, see its tables and the relationships between them (and draw them
    on the canvas), browse and edit rows, and run queries. Connections are kept in this browser (lib/dbclient.js);
@@ -438,7 +439,7 @@ function DataPane({ conn, table, ask, toast, onChanged }) {
         ))}
         <button className="btn" onClick={() => setFilters(fs => [...fs, { col: table.columns[0] && table.columns[0].name, op: 'contains', value: '' }])}>+ Filter</button>
         <span className="grow" />
-        {busy && <span className="dbv-busy">Loading…</span>}
+        {busy && <Loading inline />}
         {canEdit && <button className="btn" onClick={() => setAdding(Object.fromEntries(table.columns.map(c => [c.name, ''])))}><Ic d={ICON.plus} />Add row</button>}
         <button className="dbv-ib" aria-label="Reload rows" title="Reload" onClick={load}><Ic d={ICON.refresh} /></button>
       </div>

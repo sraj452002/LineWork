@@ -6,6 +6,7 @@ import { readSql } from '../lib/sql.js';
 import { rid } from '../lib/utils.js';
 import { emptyFlow, newNode } from '../lib/flows.js';
 import { importFlow } from '../lib/flowio.js';
+import { readZip, zipSummary } from '../lib/zipimport.js';
 import { STARTERS } from '../lib/starters.js';
 import { useUI } from './ui.jsx';
 
@@ -29,18 +30,55 @@ const ICON = {
   node: 'M12 3l8 4.5v9L12 21l-8-4.5v-9zM9 10v4l3 2 3-2',
   live: 'M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zM4 6v6c0 1.7 3.6 3 8 3M20 6v4M4 12v6c0 1.7 3.6 3 8 3M17 14l-3 4h4l-3 4',
   auto: 'M3 9h6v6H3zM15 3.5h6v6h-6zM15 14.5h6v6h-6zM9 12h3l1.5-5.5H15M12 12l1.5 5.5H15',
+  zip: 'M6 3h9l4 4v14H6zM15 3v4h4M10 3v2h2v2h-2v2h2v2h-2v3h2v3h-2z',
 };
 
 export default function Tools({ q = '', onCreate, onGenerate, busy }) {
   const { ask, toast } = useUI();
-  const csvRef = useRef(null), sqlRef = useRef(null), flowRef = useRef(null);
+  const csvRef = useRef(null), sqlRef = useRef(null), flowRef = useRef(null), zipRef = useRef(null);
   const importWorkflow = async f => {
     if (!f) return;
+    if (/\.zip$/i.test(f.name)) { importZip(f); return; }
     try {
       const got = importFlow(await f.text());
       onCreate(blank(got.name || f.name.replace(/(\.workflow)?\.json$/i, '') || 'Workflow', { view: 'flow', flow: got.flow }));
       if (got.skipped.length) toast(`${got.skipped.length} kind${got.skipped.length === 1 ? '' : 's'} of n8n node became placeholders.`);
     } catch (e) { toast(e.message || 'Couldn’t read that file.'); }
+  };
+  // A .zip: what's inside is listed, then each workflow, sheet, schema and doc becomes a file, and the
+  // source files one code project (with their folders).
+  const importZip = async f => {
+    if (!f) return;
+    let z;
+    try { z = await readZip(f); } catch (e) { toast(e.message || 'Couldn’t read that zip.'); return; }
+    const what = zipSummary(z);
+    const any = z.workflows.length + z.sheets.length + z.schemas.length + z.docs.length + z.code.length;
+    if (!any) { toast(`Nothing in “${f.name}” can be opened in Workline${z.skipped.length ? ` (${z.skipped.length} other files)` : ''}.`); return; }
+    const names = [...z.workflows, ...z.sheets, ...z.schemas, ...z.docs].map(x => x.path);
+    const list = names.slice(0, 8).join(', ') + (names.length > 8 ? `, and ${names.length - 8} more` : '');
+    const ok = await ask({ title: `Import “${f.name}”?`, text: `It has ${what}${list ? ` (${list})` : ''}. Each becomes a file.${z.skipped.length ? ` ${z.skipped.length} other file${z.skipped.length === 1 ? '' : 's'} (pictures, binaries…) stay out.` : ''}`, input: false, ok: 'Import' });
+    if (!ok) return;
+    let made = 0;
+    for (const w of z.workflows) { onCreate(blank(w.title, { view: 'flow', flow: w.flow })); made++; }
+    for (const sh of z.sheets) {
+      try {
+        if (sh.buffer) {
+          const { readXlsx } = await import('../lib/xlsx.js');
+          const sheets = await readXlsx(sh.buffer);
+          if (sheets.length) { onCreate(blank(sh.title, { view: 'sheet', sheets, activeSheet: sheets[0].id })); made++; }
+        } else { onCreate(sheetFile(sh.title, Object.assign(newSheet(sh.title), fromCSV(sh.text)))); made++; }
+      } catch (e) { /* a broken workbook is left out */ }
+    }
+    for (const sc of z.schemas) { const r = readSql(sc.text); if (r) { onCreate(blank(sc.title, { diagrams: [dg('erd', 'Schema', r.code)] })); made++; } }
+    for (const d of z.docs) { onCreate(blank(d.title, { view: 'doc', doc: d.text })); made++; }
+    if (z.code.length) {
+      const files = z.code.map(c => ({ id: rid('cf'), path: c.path, text: c.text }));
+      const folders = [...new Set(files.flatMap(x => x.path.split('/').slice(0, -1).map((_, i, a) => a.slice(0, i + 1).join('/'))))];
+      const first = files.find(x => !/\.md$/.test(x.path)) || files[0];
+      onCreate(blank(z.name, { view: 'code', code: { files, folders, open: [first.id], active: first.id } }));
+      made++;
+    }
+    toast(`Imported ${made} file${made === 1 ? '' : 's'} from “${f.name}”.`);
   };
   const [cat, setCat] = useState('all');
   // A search shows matches in every category.
@@ -139,6 +177,7 @@ export default function Tools({ q = '', onCreate, onGenerate, busy }) {
       { k: 'auto', view: 'App', name: 'Custom app', note: 'Drag and drop pages, tables, charts and forms onto a workflow (or write the code); share a link, with sign-in if you like', act: () => onCreate({ ...flowFile('My app', [['trigger.manual'], ['core.code', { language: 'javascript', code: "return items.map(i => ({ question: i.question, answer: 'You asked: ' + (i.question || 'nothing') }));" }]]), view: 'app' }) },
       ...STARTERS.map(t => ({ k: 'auto', view: 'App', name: t.name, note: t.note, act: () => onCreate(t.make()) })),
       { k: 'auto', view: 'Workflow', name: 'Import a workflow', note: 'Open a .json workflow: Workline’s or n8n’s', act: () => flowRef.current?.click() },
+      { k: 'zip', view: 'Files', name: 'Import a .zip', note: 'Workflows, sheets, SQL, docs and code from a zip, each made into a file', act: () => zipRef.current?.click() },
     ] },
     { id: 'code', name: 'Code', k: 'code', note: 'Write, run and understand code, all in the browser.', list: [
       { k: 'code', view: 'Code', name: 'Code editor', note: 'VS Code’s editor, with files and folders', act: () => onCreate(code('Code', null)) },
@@ -180,7 +219,8 @@ export default function Tools({ q = '', onCreate, onGenerate, busy }) {
         </section>
       ))}
       {!matching.length && <div className="nofiles">No tools match “{q.trim()}”.</div>}
-      <input ref={flowRef} type="file" accept=".json,application/json" hidden onChange={e => { importWorkflow(e.target.files[0]); e.target.value = ''; }} />
+      <input ref={flowRef} type="file" accept=".json,application/json,.zip,application/zip" hidden onChange={e => { importWorkflow(e.target.files[0]); e.target.value = ''; }} />
+      <input ref={zipRef} type="file" accept=".zip,application/zip,application/x-zip-compressed" hidden aria-label="Zip file to import" onChange={e => { importZip(e.target.files[0]); e.target.value = ''; }} />
       <input ref={sqlRef} type="file" accept=".sql,.ddl,.txt,.psql,.mysql,application/sql" hidden onChange={e => openSQL(e.target.files[0])} />
       <input ref={csvRef} type="file" accept=".xlsx,.xlsm,.csv,.tsv,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden onChange={e => importCSV(e.target.files[0])} />
     </div>

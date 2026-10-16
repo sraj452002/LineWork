@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { NODES } from '../lib/flows.js';
 import { nodeVideos, nodeVideoUrl } from '../lib/nodevideos.js';
+import Loading from './Loading.jsx';
 
 /* The video guides: recorded videos of the real app (frontend/public/guides/*.mp4, with music), and a
    short video of every workflow node with an example (scripts/node-videos.mjs). */
@@ -24,7 +25,7 @@ function NodeVideos() {
       <header><div><h3>Every node, with an example</h3><p>{all.length || 'All the'} short videos: each node set up with an example, run, and its output.</p></div></header>
       {d && <video key={pick} className="vg-video" controls autoPlay playsInline src={nodeVideoUrl(pick)} aria-label={`Video: ${d.label}`} />}
       <div className="nv-find"><input type="search" placeholder="Find a node (Uppercase, Slack, IF…)" aria-label="Find a node video" value={q} onChange={e => setQ(e.target.value)} /></div>
-      {!index ? <p className="muted">Loading…</p> : (
+      {!index ? <Loading /> : (
         <div className="nv-list">
           {shown.slice(0, 300).map(([t, nd]) => (
             <button key={t} aria-pressed={pick === t} onClick={() => setPick(t)} aria-label={`Watch ${nd.label}`}>

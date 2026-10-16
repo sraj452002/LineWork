@@ -48,7 +48,7 @@ button,input,textarea{font:inherit;color:inherit}
 .brand{display:flex;align-items:center;gap:8px;font-weight:700;font-size:17px;letter-spacing:-.015em;flex:none}
 .brand svg{display:block}
 .bar{flex:none;display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--panel);border-bottom:1px solid var(--line);min-width:0}
-.busy::after{content:"";display:inline-block;width:8px;height:8px;margin-left:6px;border-radius:2px;background:var(--hi);animation:blink 1s steps(2) infinite;vertical-align:middle}
+.busy::after{content:"";display:inline-block;width:13px;height:13px;margin-left:8px;border-radius:50%;background:conic-gradient(from 90deg,transparent 0 15%,var(--hi) 75%,#E8875B);-webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 2.5px),#000 calc(100% - 2px));mask:radial-gradient(farthest-side,transparent calc(100% - 2.5px),#000 calc(100% - 2px));animation:lw-rot .8s linear infinite;vertical-align:-2px}
 @keyframes blink{50%{opacity:0}}
 @media (prefers-reduced-motion:reduce){.busy::after{animation:none}}
 
@@ -2954,4 +2954,17 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .as.compact .as-hero{padding:12px 0 24px;justify-content:flex-end}
 .as.compact .as-hero h1{font-size:28px}
 .as.compact .as-md{font-size:16px}
-.m-app-shell .as.compact{flex:1;min-height:0}
+.m-app-shell .as.compact{flex:1;min-height:0}/* The section AI's box: what you write and the send arrow on one line; the box grows as you write. */
+.assist-box{display:flex;align-items:flex-end;gap:8px;padding:8px 8px 8px 12px}
+.assist-box textarea{flex:1;min-width:0;min-height:24px;max-height:200px;padding:5px 2px;overflow-y:auto}
+.assist-box .ai-send{flex:none}
+.aichat.assist .ai-body{display:flex;flex-direction:column}
+.aichat.assist .ai-start{margin-bottom:auto}
+/* Loading (Loading.jsx): a turning ring instead of “Loading…”. */
+.lw-loading{display:flex;align-items:center;justify-content:center;width:100%;min-height:72px;margin:auto}
+.lw-loading i,.boot::after{width:30px;height:30px;border-radius:50%;background:conic-gradient(from 90deg,transparent 0 15%,color-mix(in srgb,var(--hi) 35%,transparent) 40%,var(--hi) 75%,#E8875B 100%);-webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 4px),#000 calc(100% - 3.5px));mask:radial-gradient(farthest-side,transparent calc(100% - 4px),#000 calc(100% - 3.5px));animation:lw-rot .8s linear infinite;filter:drop-shadow(0 0 6px color-mix(in srgb,var(--hi) 45%,transparent))}
+.lw-loading.inline{display:inline-flex;width:auto;min-height:0;margin:0 6px;vertical-align:middle}
+.lw-loading.inline i{width:15px;height:15px;-webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 2.5px),#000 calc(100% - 2px));mask:radial-gradient(farthest-side,transparent calc(100% - 2.5px),#000 calc(100% - 2px))}
+.boot{display:grid;place-items:center}.boot::after{content:"";display:block}
+@media (prefers-reduced-motion:reduce){.lw-loading i{animation-duration:2s}}
+.t-zip .tool-ico,.t-zip{--tc:#b45309}

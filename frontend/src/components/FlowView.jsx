@@ -239,7 +239,15 @@ export default function FlowView({ file, update, visible, saveState = 'Saved', o
   const doImport = async f => {
     if (!f) return;
     try {
-      const got = importFlow(await f.text());
+      let got;
+      // A .zip: the workflow in it (the first, when there are several).
+      if (/\.zip$/i.test(f.name)) {
+        const { readZip } = await import('../lib/zipimport.js');
+        const z = await readZip(f);
+        if (!z.workflows.length) { toast(`No workflow in “${f.name}”.`); return; }
+        got = { name: z.workflows[0].title, flow: z.workflows[0].flow, skipped: z.workflows[0].skipped };
+        if (z.workflows.length > 1) toast(`${z.workflows.length} workflows in the zip: this is “${got.name}”. Tools → Import a .zip makes a file of each.`);
+      } else got = importFlow(await f.text());
       if (!got.flow.nodes.length) { toast('That workflow has no nodes we know.'); return; }
       // An untouched new workflow (one Run by hand node) is replaced; otherwise the import goes beside it.
       const fresh = !nodes.length || (nodes.length === 1 && nodes[0].type === 'trigger.manual' && !edges.length);
@@ -372,7 +380,7 @@ ${more}`;
             <Ico d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM16.5 13v7M13 16.5h7" size={15} />{flow.app?.published ? 'Published' : 'Publish'}
           </button>
         )}
-        <input ref={importRef} type="file" accept=".json,application/json" hidden onChange={e => { doImport(e.target.files[0]); e.target.value = ''; }} />
+        <input ref={importRef} type="file" accept=".json,application/json,.zip,application/zip" hidden onChange={e => { doImport(e.target.files[0]); e.target.value = ''; }} />
         <span className="grow" />
         {onGuide && <button className="fv-tool" onClick={() => onGuide('flow')} title="How workflows work, and every node explained">
           <Ico d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17h.01" size={15} />Guide

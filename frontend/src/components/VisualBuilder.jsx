@@ -4,6 +4,7 @@ import { rid } from '../lib/utils.js';
 import { appDoc } from '../lib/apphost.js';
 import { COLS, COMMON_FIELDS, COMPONENTS, GROUPS, ROW, STEP_KINDS, THEMES, builderHtml, eventLabel, newComponent, newPage } from '../lib/appbuilder.js';
 import { useUI } from './ui.jsx';
+import Loading from './Loading.jsx';
 
 /* App view → Visual: build an app by placing components on its pages (a 12-column grid), and fill them
    with data from workflows. The canvas is the real app (lib/appbuilder.js, in "design" mode, with live
@@ -107,7 +108,7 @@ function Users({ fileId, server }) {
   const load = () => api(`/flows/${encodeURIComponent(fileId)}/app-users`).then(r => setUsers(r.users), () => setUsers([]));
   useEffect(() => { if (server) load(); }, [fileId, server]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!server) return <p className="vb-hint">Sign in to Workline to see who has an account.</p>;
-  if (!users) return <p className="vb-hint">Loading…</p>;
+  if (!users) return <Loading />;
   if (!users.length) return <p className="vb-hint">No accounts yet. People make one on the app’s sign-in screen.</p>;
   return (
     <ul className="vb-users" aria-label="People with an account">
