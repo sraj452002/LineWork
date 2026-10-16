@@ -83,7 +83,7 @@ What the backend does:
 - **Folders and the archive** saved to the account.
 - **Version history**: each stretch of editing (10 minutes) keeps a version, the last 100 per file. **Version history…** on a file's ⋯ menu restores one.
 - **Share links**: **Share…** makes a link that opens one file, read-only or editable, for anyone who has it (no account needed). Edits through an edit link are saved to the owner's account. Links can be turned off.
-- **AI with a daily allowance**: `AI_DAILY_LIMIT` requests per account per day (default 50, UTC days).
+- **AI without limits by default**: no daily allowance and no wait between questions; `AI_DAILY_LIMIT` sets one (requests per account per UTC day). When the AI service is busy (429/503) the server asks again by itself (up to 3 times), and when the picked model fails before answering, the next model answers.
 
 Settings are environment variables; [`backend/.env.example`](backend/.env.example) lists them all. The main ones:
 
@@ -98,7 +98,7 @@ Settings are environment variables; [`backend/.env.example`](backend/.env.exampl
 | `ANTHROPIC_API_KEY` | | Turns AI on. `ANTHROPIC_MODEL` picks the model. |
 | `STORE_OWNER` | | An account's email: its published workflows are open to everyone at `/run` (the end users' phone app). |
 | `NVIDIA_API_KEY` | | Also (or instead) turns on NVIDIA's models (build.nvidia.com). `NVIDIA_MODEL` picks them, comma-separated (default `deepseek-ai/deepseek-v4.1-flash,nvidia/nemotron-3.5-lightning-30b-a3b`: DeepSeek V4.1 Flash and NVIDIA Nemotron), each a choice in the AI chat, `NVIDIA_BASE_URL` another OpenAI-style endpoint. With both keys, people pick the model in the AI chat. |
-| `AI_DAILY_LIMIT` | `50` | `0` for no limit. |
+| `AI_DAILY_LIMIT` | `0` | Requests per account per day; `0` is no limit. |
 | `ALLOW_SIGNUP` | `false` | `true` lets anyone create an account. Off: only the accounts already there and `DEFAULT_USERS` (Google/GitHub can still sign in to existing ones). |
 | `RESEND_API_KEY` or `SMTP_URL`, `MAIL_FROM` | | Email: confirmation and reset links. |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | | Continue with Google. |
@@ -178,7 +178,7 @@ Workflows run on the backend (`backend/flows.js`, `flow-engine.js`, `flow-nodes.
 
 **Nemo AI** (home sidebar, or press **I**; and the **Nemo** tab of WorkLine Apps on a phone) is WorkLine's own AI, named Nemo: a chat like Claude's: past chats on the side (kept in the browser, per account), answers in Markdown that stream in (code blocks with Copy), **Copy**, **Retry** and **Edit** on messages, **Stop**, a model menu, and pictures (for Claude) and text files attached by +, drag and drop or paste.
 
-It can use **your own WorkLine tools** on the server (`backend/agent.js`, `POST /api/ai/chat`): list and **run your workflows** (with input for a published app's fields), **find any of the 650 nodes and run one** on items it gives (app nodes with your saved credentials: the only one of the right kind, or the one it's told), list your credentials (never their secrets), list and **read your files**, and **write a new doc** on your account. Each tool it uses shows in the answer as a card that opens to what went in and what came back; a new doc has an **Open the doc** button. It asks before sending or changing anything in another app. It works with Claude (`ANTHROPIC_API_KEY`, Anthropic's tool use) and NVIDIA's models (`NVIDIA_API_KEY`, OpenAI-style function calling), up to 8 tool rounds an answer, and each question counts once against `AI_DAILY_LIMIT`. The nodes it can find come from `backend/node-catalog.json`, made from the editor's list by `node scripts/node-catalog.mjs` (a test checks it's up to date).
+It can use **your own WorkLine tools** on the server (`backend/agent.js`, `POST /api/ai/chat`): list and **run your workflows** (with input for a published app's fields), **find any of the 650 nodes and run one** on items it gives (app nodes with your saved credentials: the only one of the right kind, or the one it's told), list your credentials (never their secrets), list and **read your files**, and **write a new doc** on your account. Each tool it uses shows in the answer as a card that opens to what went in and what came back; a new doc has an **Open the doc** button. It asks before sending or changing anything in another app. It works with Claude (`ANTHROPIC_API_KEY`, Anthropic's tool use) and NVIDIA's models (`NVIDIA_API_KEY`, OpenAI-style function calling), up to 8 tool rounds an answer, and each question counts once against `AI_DAILY_LIMIT` (when one is set). If the picked model fails before it says anything, the next model answers; a failure shows the AI service's own reason. The nodes it can find come from `backend/node-catalog.json`, made from the editor's list by `node scripts/node-catalog.mjs` (a test checks it's up to date).
 
 ## AI in every section
 

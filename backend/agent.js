@@ -142,7 +142,7 @@ export function createAgent({ store, flows, providers, defaultProvider, dailyLim
   // withTools false: a plain chat, for models (or endpoints) that refuse function calling.
   async function roundOpenAI(model, messages, send, signal, withTools = true, toolList = TOOLS) {
     withTools = withTools && toolList.length > 0;
-    const up = await fetch(`${nvidiaBase.replace(/\/+$/, '')}/chat/completions`, {
+    const up = await fetchRetry(`${nvidiaBase.replace(/\/+$/, '')}/chat/completions`, {
       method: 'POST', signal,
       headers: { authorization: `Bearer ${nvidiaKey}`, 'content-type': 'application/json', accept: 'text/event-stream' },
       body: JSON.stringify({ model, messages, stream: true, temperature: 0.5, top_p: 1, max_tokens: 8192, ...(withTools ? { tools: toolList.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.input_schema } })), tool_choice: 'auto' } : {}) }),
@@ -153,7 +153,7 @@ export function createAgent({ store, flows, providers, defaultProvider, dailyLim
     await readSSE(up.body, data => {
       if (data === '[DONE]') return;
       let chunk; try { chunk = JSON.parse(data); } catch (e) { return; }
-      if (chunk.error) throw new Error(String(chunk.error.message || chunk.error));
+      if (chunk.error) throw Object.assign(new Error(String(chunk.error.message || chunk.error)), { upstream: String(chunk.error.message || chunk.error).slice(0, 200) });
       const delta = chunk.choices?.[0]?.delta || {};
       if (delta.reasoning_content) send({ type: 'thinking', delta: delta.reasoning_content });
       if (delta.content) { text += delta.content; send({ type: 'text', delta: delta.content }); }
@@ -168,7 +168,7 @@ export function createAgent({ store, flows, providers, defaultProvider, dailyLim
   }
   // One round with Anthropic's Messages API.
   async function roundClaude(model, system, messages, send, signal, toolList = TOOLS) {
-    const up = await fetch(`${aiBase}/v1/messages`, {
+    const up = await fetchRetry(`${aiBase}/v1/messages`, {
       method: 'POST', signal,
       headers: { 'x-api-key': aiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
       body: JSON.stringify({ model, max_tokens: 8000, stream: true, system, messages, ...(toolList.length ? { tools: toolList } : {}) }),
@@ -183,7 +183,7 @@ export function createAgent({ store, flows, providers, defaultProvider, dailyLim
         if (ev.delta.type === 'text_delta') { b.text += ev.delta.text; send({ type: 'text', delta: ev.delta.text }); }
         else if (ev.delta.type === 'thinking_delta') send({ type: 'thinking', delta: ev.delta.thinking });
         else if (ev.delta.type === 'input_json_delta') b.json += ev.delta.partial_json;
-      } else if (ev.type === 'error') throw new Error(ev.error?.message || 'The AI service failed.');
+      } else if (ev.type === 'error') throw Object.assign(new Error(ev.error?.message || 'The AI service failed.'), { upstream: String(ev.error?.message || '').slice(0, 200) });
     });
     const content = blocks.filter(b => b && (b.type === 'text' ? b.text : b.type === 'tool_use')).map(b => (b.type === 'tool_use' ? { type: 'tool_use', id: b.id, name: b.name, input: parseArgs(b.json) } : { type: 'text', text: b.text }));
     return { content, calls: content.filter(b => b.type === 'tool_use') };
@@ -242,7 +242,7 @@ export function createAgent({ store, flows, providers, defaultProvider, dailyLim
     let text = '';
     const steps = [];
     const send = ev => { if (ev.type === 'text') text += ev.delta; else if (ev.type === 'tool') steps.push({ tool: ev.name, input: ev.input }); else if (ev.type === 'tool_done') Object.assign(steps[steps.length - 1] || {}, { ok: ev.ok }); };
-    await answer({ uid, pick: defaultProvider, system: AGENT_SYSTEM(agent, { name: '' }, new Date().toISOString().slice(0, 10), true), history: [{ role: 'user', text: String(task || '').slice(0, 100_000) || 'Do your task.' }], send, signal, toolList: toolsFor(agent), agent });
+    await withFallback(defaultProvider, () => text === '', pick => answer({ uid, pick, system: AGENT_SYSTEM(agent, { name: '' }, new Date().toISOString().slice(0, 10), true), history: [{ role: 'user', text: String(task || '').slice(0, 100_000) || 'Do your task.' }], send, signal, toolList: toolsFor(agent), agent }));
     return { text: text.trim(), steps, agent: agent.name };
   }
 
@@ -263,26 +263,68 @@ export function createAgent({ store, flows, providers, defaultProvider, dailyLim
     res.on('close', () => ctl.abort());
     res.set({ 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' });
     res.flushHeaders?.();
-    const send = ev => { if (!res.writableEnded) res.write(`data: ${JSON.stringify(ev)}\n\n`); };
+    let started = false;
+    const send = ev => { if (ev.type === 'text' || ev.type === 'tool') started = true; if (!res.writableEnded) res.write(`data: ${JSON.stringify(ev)}\n\n`); };
     const uid = req.user.id, today = new Date().toISOString().slice(0, 10);
     // Nemo, or one of the user's agents.
     const agent = b.agentId ? flows.agent.getAgent(uid, String(b.agentId)) : null;
     const system = agent ? AGENT_SYSTEM(agent, req.user, today, false) : SYSTEM(req.user, today);
     const toolList = agent ? toolsFor(agent) : [...TOOLS, CREATE_AGENT];
     try {
-      await answer({ uid, pick, system, history, images, send, signal: ctl.signal, toolList, agent });
+      // If the picked model fails before it has said anything, the next one answers (pictures only go to one that reads them).
+      await withFallback(pick, () => !started && !ctl.signal.aborted, p => answer({ uid, pick: p, system, history, images, send, signal: ctl.signal, toolList, agent }), images.length > 0);
       send({ type: 'done' });
     } catch (e) {
       if (!ctl.signal.aborted) {
-        if (e.detail) console.log('AI chat error', e.status, e.detail.slice(0, 500));
-        send({ type: 'error', message: e.status === 429 ? 'The AI is busy right now. Try again in a moment.' : e.status === 401 || e.status === 403 ? 'The AI key on the server was refused (NVIDIA_API_KEY / ANTHROPIC_API_KEY). Check it on Render.' : `The AI didn’t answer${e.status ? ` (the AI service said ${e.status})` : ''}. Try again.` });
+        console.log('AI chat error', e.status, String(e.detail || e.upstream || e.message || '').slice(0, 500));
+        send({ type: 'error', message: errorMessage(e) });
       }
     }
     res.end();
   };
+  // Runs fn with the picked model; when it fails and canRetry() says nothing was shown yet, tries the other models.
+  async function withFallback(first, canRetry, fn, needImages = false) {
+    const order = [first, ...providers.filter(p => p !== first && (!needImages || p.images))];
+    let err;
+    for (const p of order) {
+      try { return await fn(p); }
+      catch (e) {
+        err = e;
+        if (!canRetry() || e.code === 'cancelled') throw e;
+        console.log(`AI: ${p.label} failed (${e.status || e.upstream || e.message}), trying the next model`);
+      }
+    }
+    throw err;
+  }
   chat.runTask = runTask;
   return chat;
 }
+
+// What the chat shows when the AI fails: the service's own reason when there is one.
+function errorMessage(e) {
+  if (e.status === 429) return 'The AI service is busy right now. Try again in a moment.';
+  if (e.status === 401 || e.status === 403) return 'The AI key on the server was refused (NVIDIA_API_KEY / ANTHROPIC_API_KEY). Check it on Render.';
+  let why = '';
+  try { why = JSON.parse(e.detail || '{}').detail || JSON.parse(e.detail || '{}').error?.message || ''; } catch (x) { why = ''; }
+  why = String(why || e.upstream || (e.status ? '' : e.message) || '').replace(/\s+/g, ' ').slice(0, 160);
+  return `The AI didn’t answer${e.status ? ` (the AI service said ${e.status}${why ? `: ${why}` : ''})` : why ? ` (${why})` : ''}. Try again.`;
+}
+
+/* A request to the AI service, tried again (up to 3 more times, waiting 1, 2, then 4 s, or what Retry-After
+   asks, at most 10 s) when it says it's busy (429, 503, 529) or the connection fails, so a quick
+   second question doesn't fail. */
+export async function fetchRetry(url, opts, tries = 3) {
+  for (let n = 0; ; n++) {
+    let up;
+    try { up = await fetch(url, opts); }
+    catch (e) { if (opts.signal?.aborted || n >= tries) throw Object.assign(e, { upstream: `couldn’t reach the AI service: ${e.cause?.code || e.message}` }); await wait(1000 * 2 ** n, opts.signal); continue; }
+    if (![429, 503, 529].includes(up.status) || n >= tries) return up;
+    const after = Number(up.headers.get('retry-after'));
+    await up.body?.cancel().catch(() => {});
+    await wait(Math.min(10_000, after > 0 ? after * 1000 : 1000 * 2 ** n), opts.signal);
+  }
+}
+const wait = (ms, signal) => new Promise(ok => { const t = setTimeout(ok, ms); signal?.addEventListener('abort', () => { clearTimeout(t); ok(); }, { once: true }); });
 
 function parseArgs(s) { if (!s) return {}; try { const v = JSON.parse(s); return v && typeof v === 'object' ? v : {}; } catch (e) { return {}; } }
 

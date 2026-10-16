@@ -33,7 +33,7 @@ const app = createApp(store, {
   storeOwner: env.STORE_OWNER || '',
   nvidiaModel: env.NVIDIA_MODEL || NVIDIA_MODELS,
   nvidiaBase: env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1',
-  aiDailyLimit: num(env.AI_DAILY_LIMIT, 50),
+  aiDailyLimit: num(env.AI_DAILY_LIMIT, 0),
   trustProxy: env.TRUST_PROXY ? (/^\d+$/.test(env.TRUST_PROXY) ? Number(env.TRUST_PROXY) : env.TRUST_PROXY) : false,
   appUrl: env.APP_URL || '',
   allowLocal: env.ALLOW_LOCAL_MODE === 'true',
