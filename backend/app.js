@@ -241,6 +241,8 @@ export function createApp(store, opts = {}) {
   // The AI assistant: a chat that can use the account's workflows, nodes and files (agent.js).
   const agentChat = createAgent({ store, flows, providers, defaultProvider, dailyLimit: aiDailyLimit, aiKey, aiBase, nvidiaKey, nvidiaBase });
   api.post('/ai/chat', signedIn, (req, res) => (providers.length ? agentChat(req, res) : res.status(503).json({ error: 'not_configured' })));
+  // The AI Agent workflow node runs agents the same way.
+  flows.setAgentRunner(agentChat.runTask);
 
   api.post('/ai', signedIn, async (req, res) => {
     if (!providers.length) return res.status(503).json({ error: 'not_configured' });

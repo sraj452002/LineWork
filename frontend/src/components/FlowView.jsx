@@ -8,6 +8,7 @@ import {
 } from '../lib/flows.js';
 import { LOGOS } from '../lib/flowlogos.js';
 import { listFiles } from '../lib/cloud.js';
+import { listAgents } from '../lib/agents.js';
 import { loadConnections } from '../lib/dbclient.js';
 import { besides, download, exportFlow, exportRun, importFlow, templateOf } from '../lib/flowio.js';
 import { getData, setData } from '../lib/userdata.js';
@@ -714,7 +715,20 @@ function FilePick({ value, onChange, has }) {
   );
 }
 
+// One of the account's AI agents, or none (the node's own instructions are used).
+function AgentPick({ value, onChange }) {
+  const [list, setList] = useState(null);
+  useEffect(() => { listAgents().then(setList, () => setList([])); }, []);
+  return (
+    <select value={value || ''} onChange={e => onChange(e.target.value)}>
+      <option value="">{list && !list.length ? 'No agents yet: describe one below' : 'Describe one here (below)'}</option>
+      {(list || []).map(a => <option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}
+    </select>
+  );
+}
+
 function Field({ f, value, onChange }) {
+  if (f.kind === 'agent') return <label className="fv-f"><span>{f.label}</span><AgentPick value={value} onChange={onChange} /><small className="muted">Make agents in Nemo (home → Nemo AI → Agents), then pick one here.</small></label>;
   if (f.kind === 'workflow') return <label className="fv-f"><span>{f.label}</span><FilePick value={value} onChange={onChange} has="flow" /><small className="muted">{f.help || 'It runs from its trigger with these items; what its last steps give comes back.'}</small></label>;
   if (f.kind === 'file') return <label className="fv-f"><span>{f.label}</span><FilePick value={value} onChange={onChange} has={f.has} /></label>;
   if (f.kind === 'dbconn') {

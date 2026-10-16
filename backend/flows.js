@@ -101,6 +101,30 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
   const pick = (type, data) => Object.fromEntries(CRED_FIELDS[type].filter(f => data && data[f] !== undefined && data[f] !== '').map(f => [f, typeof data[f] === 'boolean' ? data[f] : String(data[f]).slice(0, 4000)]));
   const publicCred = ({ id, type, name, created, updated }) => ({ id, type, name, created, updated });
 
+  /* ---- AI agents the user makes (see agent.js): a name, instructions, what to know, what it may use ---- */
+  const AGENT_TOOLS = ['workflows', 'nodes', 'files', 'docs'];
+  const agentsOf = uid => ((m.agents ||= {})[uid] ||= {});
+  const str = (v, n) => String(v ?? '').slice(0, n).trim();
+  const saveAgent = (uid, data, id) => {
+    const mine = agentsOf(uid), old = id ? mine[id] : null;
+    if (id && !old) throw new FlowError('That agent was deleted.', 'not_found');
+    if (!old && Object.keys(mine).length >= 50) throw new FlowError('That’s 50 agents already.', 'too_many');
+    const d = data || {}, now = Date.now();
+    const a = {
+      id: old ? old.id : newToken().slice(0, 12), created: old ? old.created : now, updated: now,
+      name: str(d.name ?? old?.name, 60) || 'Untitled agent', icon: str(d.icon ?? old?.icon, 8) || '🤖',
+      description: str(d.description ?? old?.description, 200), instructions: str(d.instructions ?? old?.instructions, 8000),
+      knowledge: str(d.knowledge ?? old?.knowledge, 60000),
+      tools: (Array.isArray(d.tools) ? d.tools : old?.tools || []).filter(t => AGENT_TOOLS.includes(t)),
+      workflows: (Array.isArray(d.workflows) ? d.workflows : old?.workflows || []).map(String).filter(x => ID.test(x)).slice(0, 50),
+      starters: (Array.isArray(d.starters) ? d.starters : old?.starters || []).map(x => str(x, 120)).filter(Boolean).slice(0, 4),
+    };
+    mine[a.id] = a;
+    store.touch();
+    return a;
+  };
+  let agentRunner = null;
+
   const ctxFor = (uid, depth = 0) => ({
     uid, allowPrivate, mailer,
     // The account's own files, for the Workline nodes. A save is like the app's: versions, storage, triggers.
@@ -134,6 +158,11 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
       try { return unseal(c.data); } catch (e) { throw new FlowError(`The credential “${c.name}” can't be read (did FLOW_SECRET change?). Enter it again.`, 'credential'); }
     },
     ai: { key: ai.key, base: ai.base, model: ai.model, allow: () => store.useAi(uid, ai.dailyLimit ?? 50) },
+    // One of the account's agents (or one described in the node) doing a task: { text, steps, agent }.
+    runAgent(opts) {
+      if (!agentRunner) throw new FlowError('Agents aren’t available on this server.', 'no_agents');
+      return agentRunner({ uid, ...opts }).catch(e => { throw e instanceof FlowError ? e : new FlowError(e.message || 'The agent failed.', e.code || 'agent'); });
+    },
     // The Key-value store node's values: per account, kept between runs (at most 1,000 keys of 100 KB).
     kv: {
       get: k => (m.userdata[uid]?.kv || {})[k],
@@ -562,6 +591,22 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
       store.touch();
       res.json({ ok: true });
     });
+    api.get('/agents', signedIn, (req, res) => {
+      res.json({ agents: Object.values(agentsOf(req.user.id)).sort((a, b) => b.updated - a.updated) });
+    });
+    api.post('/agents', signedIn, (req, res) => {
+      try { res.status(201).json({ agent: saveAgent(req.user.id, req.body) }); }
+      catch (e) { res.status(e.code === 'too_many' ? 413 : 400).json({ error: e.code, message: e.message }); }
+    });
+    api.put('/agents/:id', signedIn, (req, res) => {
+      try { res.json({ agent: saveAgent(req.user.id, req.body, req.params.id) }); }
+      catch (e) { res.status(e.code === 'not_found' ? 404 : 400).json({ error: e.code, message: e.message }); }
+    });
+    api.delete('/agents/:id', signedIn, (req, res) => {
+      delete agentsOf(req.user.id)[req.params.id];
+      store.touch();
+      res.json({ ok: true });
+    });
     api.get('/credentials', signedIn, (req, res) => {
       res.json({ credentials: Object.values(credsOf(req.user.id)).map(publicCred).sort((a, b) => a.name.localeCompare(b.name)) });
     });
@@ -719,6 +764,9 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
   };
 
   // For the AI assistant (agent.js): run a flow and wait for its items, read a saved flow, list credentials.
-  const agent = { runForItems, savedFlow, creds: uid => Object.values(credsOf(uid)).map(publicCred) };
-  return { hooks, ui, pages, routes, reindex, tick, poll, agent, close: () => clearInterval(timer) };
+  const agent = {
+    runForItems, savedFlow, creds: uid => Object.values(credsOf(uid)).map(publicCred),
+    getAgent: (uid, id) => agentsOf(uid)[id] || null, saveAgent: (uid, data) => saveAgent(uid, data),
+  };
+  return { hooks, ui, pages, routes, reindex, tick, poll, agent, setAgentRunner: fn => { agentRunner = fn; }, close: () => clearInterval(timer) };
 }

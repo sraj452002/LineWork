@@ -285,6 +285,17 @@ export const NODES = {
       { k: 'length', label: 'Bytes', kind: 'number', ...only('operation', 'random') }, OUT('hash')], defaults: () => ({ operation: 'hash', algorithm: 'sha256', encoding: 'hex' }) },
 
   /* ---- AI ---- */
+  'ai.agent': { group: 'AI', label: 'AI Agent', note: 'One of your agents (or one you describe here) does a task, using tools', icon: I.ai, tone: 'violet',
+    fields: [
+      { k: 'agentId', label: 'Agent', kind: 'agent' },
+      { k: 'task', label: 'Task', kind: 'textarea', hint: 'Reply to this customer email: {{ $json.text }}' },
+      { k: 'instructions', label: 'Instructions (who it is, how it works)', kind: 'textarea', hint: 'You are a polite support agent for an online shop. Keep replies under 120 words.', when: ['agentId', ''] },
+      { k: 'use_workflows', label: 'It may run my workflows', kind: 'bool', when: ['agentId', ''] },
+      { k: 'use_nodes', label: 'It may run nodes', kind: 'bool', when: ['agentId', ''] },
+      { k: 'use_files', label: 'It may read my files', kind: 'bool', when: ['agentId', ''] },
+      { k: 'use_docs', label: 'It may write docs', kind: 'bool', when: ['agentId', ''] },
+      OUT('answer'),
+    ], defaults: () => ({ agentId: '', task: '{{ $json.text }}', output: 'answer' }) },
   'ai.claude': { group: 'AI', label: 'Claude', note: 'Writes, sums up or sorts text', logo: 'claude', icon: I.ai, tone: 'violet',
     fields: [{ k: 'prompt', label: 'Prompt', kind: 'textarea', hint: 'Summarise this: {{ $json.text }}' }, { k: 'system', label: 'Instructions', kind: 'textarea' }], defaults: () => ({ prompt: '' }) },
   'ai.summarize': { group: 'AI', label: 'Summarize', note: 'Shortens text to what matters', icon: I.text, tone: 'violet',
@@ -476,7 +487,7 @@ for (const [k, { defaults, icon, guide, ...d }] of Object.entries(MORE.nodes)) {
 /* The node library's shelves: sections, each with groups. Every app gets a group of its own (its
    trigger, its main node and its one-job actions, A–Z); the more advanced generic nodes (AI helpers, MCP, error handling…)
    have their own section. A node's `group` (what it is) stays as it was; this is only where it's shelved. */
-export const ADVANCED = new Set(['ai.summarize', 'ai.extract', 'ai.classify', 'ai.rewrite', 'ai.translate', 'ai.vision', 'ai.decide', 'ai.score', 'ai.mcp',
+export const ADVANCED = new Set(['ai.agent', 'ai.summarize', 'ai.extract', 'ai.classify', 'ai.rewrite', 'ai.translate', 'ai.vision', 'ai.decide', 'ai.score', 'ai.mcp',
   'core.respond', 'core.pivot', 'core.textsplit', 'core.kv', 'core.graphql', 'file.spreadsheet', 'app.redis', 'core.note',
   'trigger.error', 'trigger.dbrow', 'trigger.email', 'trigger.calendar']);
 export const SECTIONS = ['Start', 'Build', 'Advanced', 'Tools', 'Apps', 'Data sources'];

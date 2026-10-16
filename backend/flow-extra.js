@@ -40,6 +40,16 @@ const STYLE = {
 };
 
 export const EXTRA_NODES = {
+  // One of the account's AI agents (or one described here) does the task, for each item; its answer goes
+  // in `output`, and the tools it used in `<output>Steps`.
+  'ai.agent': { run: args => each(args, async (p, item) => {
+    const task = String(need(p.task, 'the task'));
+    const tools = ['workflows', 'nodes', 'files', 'docs'].filter(k => p[`use_${k}`] === true || p[`use_${k}`] === 'true');
+    const r = await args.ctx.runAgent({ agentId: p.agentId || '', inline: { instructions: p.instructions || '', tools }, task });
+    const j = put(item, p.output || 'answer', r.text);
+    if (r.steps.length) setPath(j, `${p.output || 'answer'}Steps`, r.steps);
+    return j;
+  }) },
   'ai.summarize': { run: args => each(args, async (p, item) => put(item, p.output || 'summary', await claude(args, {
     system: `Summarise the text the user gives ${LENGTH[p.length] || LENGTH.short}. Reply with the summary only.${p.focus ? ` Focus on: ${p.focus}.` : ''}`,
     content: textOf(p),
