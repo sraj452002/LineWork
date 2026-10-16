@@ -97,7 +97,7 @@ Settings are environment variables; [`backend/.env.example`](backend/.env.exampl
 | `DATA_DIR` | | A local folder instead of Drive (relative to `backend/`), for development. |
 | `ANTHROPIC_API_KEY` | | Turns AI on. `ANTHROPIC_MODEL` picks the model. |
 | `STORE_OWNER` | | An account's email: its published workflows are open to everyone at `/run` (the end users' phone app). |
-| `NVIDIA_API_KEY` | | Also (or instead) turns on NVIDIA's models (build.nvidia.com). `NVIDIA_MODEL` picks them, comma-separated (default `z-ai/glm-5.3-flash,nvidia/nemotron-3.5-lightning-30b-a3b`: GLM 5.3 Flash and NVIDIA Nemotron), each a choice in the AI chat, `NVIDIA_BASE_URL` another OpenAI-style endpoint. With both keys, people pick the model in the AI chat. |
+| `NVIDIA_API_KEY` | | Also (or instead) turns on NVIDIA's models (build.nvidia.com). `NVIDIA_MODEL` picks them, comma-separated (default `deepseek-ai/deepseek-v4.1-flash,nvidia/nemotron-3.5-lightning-30b-a3b`: DeepSeek V4.1 Flash and NVIDIA Nemotron), each a choice in the AI chat, `NVIDIA_BASE_URL` another OpenAI-style endpoint. With both keys, people pick the model in the AI chat. |
 | `AI_DAILY_LIMIT` | `50` | `0` for no limit. |
 | `ALLOW_SIGNUP` | `false` | `true` lets anyone create an account. Off: only the accounts already there and `DEFAULT_USERS` (Google/GitHub can still sign in to existing ones). |
 | `RESEND_API_KEY` or `SMTP_URL`, `MAIL_FROM` | | Email: confirmation and reset links. |
@@ -123,7 +123,7 @@ The backend loads `meta.json` when it starts and answers a change only after it'
 
 **For your end users (`/run`, what the Android APK opens):** set `STORE_OWNER` on the server to your account's email. Then anyone can open `<your site>/run`, or the APK, and see the workflows you published (Home → Apps), fill in the form and run them, with no account and nothing else on screen. Runs use your workflows and your credentials, so only that one account's published workflows are shown, and each visitor can start at most 30 runs per 10 minutes. The server routes are `GET /api/store`, `POST /api/store/:fileId/run`, and `GET /api/store/runs/:token` for runs longer than 20 seconds.
 
-**WorkLine Apps** is the end user's app, with two tabs and nothing else: **Workflows** (run the workflows published as apps, Home → Apps) and **AI chat** (the default model, GLM 5.3 Flash when NVIDIA is set up). Make and edit on a computer; run here.
+**WorkLine Apps** is the end user's app, with two tabs and nothing else: **Workflows** (run the workflows published as apps, Home → Apps) and **AI chat** (the default model, DeepSeek V4.1 Flash when NVIDIA is set up). Make and edit on a computer; run here.
 
 - **Install from the browser (PWA):** open `<your site>/mobile` on the phone and sign in. On Android, Chrome offers **Install** (also the ⬇ button on the page). On iPhone, tap **Share → Add to Home Screen**. It opens in its own window with its own icon, and starts offline to a saved copy. Its files are `frontend/src/components/MobileApps.jsx`, `frontend/public/mobile.webmanifest`, `frontend/public/sw.js` and `frontend/public/icons/`.
 - **Android app (APK):** `mobile/` is a Capacitor app that opens `<your site>/mobile`.
@@ -190,7 +190,7 @@ It can use **your own WorkLine tools** on the server (`backend/agent.js`, `POST 
 - **Workflow**: the nodes, the selected one, the last run and every kind of node → a workflow built from a description, or one node's settings changed (a Code node's code, an expression).
 - **App**: the page's code and its workflows → the page rewritten.
 
-It uses whichever model is picked (Claude, GLM 5.3 Flash or NVIDIA Nemotron; GLM 5.3 Flash, the fast one, is the default when NVIDIA_API_KEY is set, and pictures go to Claude) and counts toward the daily AI limit.
+It uses whichever model is picked (Claude, DeepSeek V4.1 Flash or NVIDIA Nemotron; DeepSeek V4.1 Flash, the fast one, is the default when NVIDIA_API_KEY is set, and pictures go to Claude) and counts toward the daily AI limit.
 
 ## Pages made of nodes (no code)
 
