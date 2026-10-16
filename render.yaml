@@ -29,6 +29,9 @@ services:
         sync: false
       - key: ANTHROPIC_API_KEY
         sync: false
+      # Your account's email: its published workflows are open to everyone at /run (the end users' app).
+      - key: STORE_OWNER
+        sync: false
       - key: NVIDIA_API_KEY
         sync: false
       # Encrypts workflow credentials; Render makes a random one once.

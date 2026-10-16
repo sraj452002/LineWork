@@ -1,4 +1,6 @@
+import { useEffect, useState } from 'react';
 import { CRED_TYPES } from '../lib/flows.js';
+import { nodeVideos, nodeVideoUrl } from '../lib/nodevideos.js';
 import { CRED_SETUP, NODE_GUIDE, NODE_SETUP } from '../lib/flowguide.js';
 import { LOGOS } from '../lib/flowlogos.js';
 
@@ -53,6 +55,19 @@ function Setup({ type, d }) {
   return <><h5>Set it up</h5><ol className="gn-steps">{steps.map((t, i) => <li key={i}>{t}</li>)}</ol></>;
 }
 
+// The node's video (set up with an example, run, and its output), when there is one: a button, then the video.
+function NodeVideo({ type, d }) {
+  const [secs, setSecs] = useState(0), [open, setOpen] = useState(false);
+  useEffect(() => { let on = true; nodeVideos().then(i => { if (on) setSecs(i[type] || 0); }); return () => { on = false; }; }, [type]);
+  if (!secs) return null;
+  return (
+    <div className="gn-video">
+      {open ? <video controls autoPlay playsInline src={nodeVideoUrl(type)} aria-label={`Video: ${d.label}`} />
+        : <button className="btn" onClick={() => setOpen(true)}>▶ Watch the video <small className="muted">{Math.round(secs)}s, with an example</small></button>}
+    </div>
+  );
+}
+
 export function NodeCard({ type, d, lit }) {
   const g = NODE_GUIDE[type] || {};
   const fields = d.fields || [];
@@ -63,6 +78,7 @@ export function NodeCard({ type, d, lit }) {
         <div><h3>{d.label}</h3><small>{d.note}</small></div>
       </header>
       {g.what && <p>{g.what}</p>}
+      <NodeVideo type={type} d={d} />
       <Setup type={type} d={d} />
       {(fields.length > 0 || d.credential) && <h5>Settings</h5>}
       {(fields.length > 0 || d.credential) && (

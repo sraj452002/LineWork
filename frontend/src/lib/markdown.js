@@ -14,7 +14,7 @@ export function md(src){
   const flush = () => { if(para.length){ out += `<p>${inline(para.join(' '))}</p>`; para.length = 0; } };
   while(i < L.length){
     const l = L[i];
-    if(/^```/.test(l)){ flush(); const buf = []; i++; while(i < L.length && !/^```/.test(L[i])) buf.push(L[i++]); i++; out += `<pre><code>${esc(buf.join('\n'))}</code></pre>`; continue; }
+    if(/^```/.test(l)){ flush(); const lang = (l.match(/^```\s*([\w+#.-]+)/) || [])[1] || ''; const buf = []; i++; while(i < L.length && !/^```/.test(L[i])) buf.push(L[i++]); i++; out += `<pre${lang ? ` data-lang="${esc(lang)}"` : ''}><code>${esc(buf.join('\n'))}</code></pre>`; continue; }
     let m;
     if((m = l.match(/^(#{1,4})\s+(.*)$/))){ flush(); out += `<h${m[1].length}>${inline(m[2])}</h${m[1].length}>`; i++; continue; }
     if(/^\s*(-{3,}|\*{3,})\s*$/.test(l)){ flush(); out += '<hr>'; i++; continue; }

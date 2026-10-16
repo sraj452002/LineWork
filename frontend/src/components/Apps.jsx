@@ -64,19 +64,27 @@ export default function Apps({ files, q = '', onEdit, onUpdate }) {
   );
 }
 
-export function AppRunner({ file, server, onBack, onEdit, onRemove }) {
+// runner (optional): runs the app some other way (the public store), answering {status, items | error}.
+export function AppRunner({ file, server, onBack, onEdit, onRemove, runner, backLabel = '← Apps' }) {
   const { toast } = useUI();
   const a = file.flow.app;
   const inputs = a.inputs || [];
   const [form, setForm] = useState(() => Object.fromEntries(inputs.map(f => [f.key, f.kind === 'yesno' ? false : f.kind === 'choice' ? (f.options || [])[0] || '' : ''])));
   const [run, setRun] = useState(null), [busy, setBusy] = useState(false), [history, setHistory] = useState([]);
-  const refresh = () => { if (server) listRuns(file.id).then(r => setHistory(r.filter(x => x.trigger === 'app').slice(0, 10)), () => {}); };
+  const refresh = () => { if (server && !runner) listRuns(file.id).then(r => setHistory(r.filter(x => x.trigger === 'app').slice(0, 10)), () => {}); };
   useEffect(refresh, [server, file.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const go = async e => {
     e.preventDefault();
     setBusy(true); setRun({ status: 'running', nodes: {} });
     try {
+      if (runner) {
+        const r = await runner(form);
+        setRun(r);
+        if (r.status === 'success') { const b = document.querySelector('.app-run')?.getBoundingClientRect(); if (b) confetti({ x: b.left + b.width / 2, y: b.top }); }
+        setBusy(false);
+        return;
+      }
       const id = await runApp(file.id, form);
       let r = { id, status: 'running', nodes: {} };
       for (let i = 0; i < 400 && r.status === 'running'; i++) {
@@ -89,12 +97,12 @@ export function AppRunner({ file, server, onBack, onEdit, onRemove }) {
     } catch (err) { setRun({ status: 'error', error: err.message || 'It couldn’t run.' }); }
     setBusy(false);
   };
-  const items = useMemo(() => (run && run.status === 'success' ? resultOf(file.flow, run) : []), [run, file.flow]);
+  const items = useMemo(() => (run && run.status === 'success' ? run.items || resultOf(file.flow, run) : []), [run, file.flow]);
 
   return (
     <div className="app-run-page">
       <div className="app-top">
-        <button className="btn" onClick={onBack}>← Apps</button>
+        <button className="btn" onClick={onBack}>{backLabel}</button>
         <span className="grow" />
         {onEdit && <button className="link" onClick={() => onEdit(file.id)}>Edit the workflow</button>}
         {onRemove && <button className="btn danger-text" onClick={onRemove}>Unpublish</button>}
@@ -103,12 +111,12 @@ export function AppRunner({ file, server, onBack, onEdit, onRemove }) {
         <i className="app-icon" aria-hidden="true">{a.icon || '✨'}</i>
         <div><h2>{a.name}</h2>{a.description && <p>{a.description}</p>}</div>
       </header>
-      {server === false && <p className="fv-note">Apps run on the Workline server. Sign in to your account to run this one.</p>}
+      {server === false && !runner && <p className="fv-note">Apps run on the Workline server. Sign in to your account to run this one.</p>}
       <div className="app-body">
         <form className="app-form" onSubmit={go}>
           {inputs.map(f => <Input key={f.key} f={f} value={form[f.key]} onChange={v => setForm(x => ({ ...x, [f.key]: v }))} />)}
           {!inputs.length && <p className="muted">This app needs nothing from you: just press Run.</p>}
-          <button className="btn primary app-run" disabled={busy || !server}>{busy ? <><i className="spin" />Working…</> : 'Run'}</button>
+          <button className="btn primary app-run" disabled={busy || (!server && !runner)}>{busy ? <><i className="spin" />Working…</> : 'Run'}</button>
         </form>
         <section className="app-result" aria-live="polite" aria-label="Result">
           {!run ? <p className="muted app-wait">The result shows here.</p>

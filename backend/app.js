@@ -6,6 +6,7 @@ import { createMailer } from './mail.js';
 import { DbError, handle as dbHandle } from './dbconnect.js';
 import { createFlows } from './flows.js';
 import { electronRoute } from './app-install.js';
+import { createAgent } from './agent.js';
 
 /* The Workline API: accounts, files with version history, folders, share links, live databases and the
    AI proxy with a daily allowance, all under /api. The frontend (../frontend) is hosted on its own and
@@ -39,7 +40,7 @@ export function createApp(store, opts = {}) {
   const api = express.Router();
   // Workflows (flows.js). Their webhooks are called by other services, from anywhere, so they come
   // before the checks below that changes come from this site as JSON.
-  const flows = createFlows({ store, ai: { key: aiKey, base: aiBase, model: aiModel, dailyLimit: aiDailyLimit }, mailer, allowPrivate: dbAllowPrivate, secret: opts.flowSecret || '' });
+  const flows = createFlows({ store, ai: { key: aiKey, base: aiBase, model: aiModel, dailyLimit: aiDailyLimit }, mailer, allowPrivate: dbAllowPrivate, secret: opts.flowSecret || '', storeOwner: opts.storeOwner || '' });
   api.use('/hook', flows.hooks);
   api.use('/ui', flows.ui); // published custom apps: public pages, like webhooks
   api.use('/p', flows.pages); // pages made of nodes at a name of their own (/p/<name> on the site)
@@ -236,6 +237,10 @@ export function createApp(store, opts = {}) {
     try { res.json(await dbHandle(req.body || {}, { allowPrivate: dbAllowPrivate, timeout: dbTimeout })); }
     catch (e) { res.status(e instanceof DbError ? e.status : 500).json({ error: e.code || 'db_error', message: e instanceof DbError ? e.message : 'The database request failed.' }); }
   });
+
+  // The AI assistant: a chat that can use the account's workflows, nodes and files (agent.js).
+  const agentChat = createAgent({ store, flows, providers, defaultProvider, dailyLimit: aiDailyLimit, aiKey, aiBase, nvidiaKey, nvidiaBase });
+  api.post('/ai/chat', signedIn, (req, res) => (providers.length ? agentChat(req, res) : res.status(503).json({ error: 'not_configured' })));
 
   api.post('/ai', signedIn, async (req, res) => {
     if (!providers.length) return res.status(503).json({ error: 'not_configured' });

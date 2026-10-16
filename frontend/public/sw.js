@@ -1,7 +1,7 @@
-/* WorkLine Apps' service worker (registered by /mobile): it opens offline to the last copy of the app,
+/* WorkLine Apps' service worker (registered by /mobile and /run): it opens offline to the last copy of the app,
    and keeps built assets (they're named by their content) once fetched. The API is never cached. */
-const CACHE = 'workline-apps-v1';
-const SHELL = ['/mobile', '/mobile.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png'];
+const CACHE = 'workline-apps-v2';
+const SHELL = ['/mobile', '/run', '/mobile.webmanifest', '/run.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png'];
 
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => {
@@ -12,8 +12,8 @@ self.addEventListener('fetch', e => {
   if (req.method !== 'GET' || url.origin !== location.origin || url.pathname.startsWith('/api/') || url.pathname.startsWith('/p/')) return;
   // Pages: the network first (always the newest app), the saved copy when offline.
   if (req.mode === 'navigate') {
-    e.respondWith(fetch(req).then(res => { if (url.pathname === '/mobile') { const copy = res.clone(); caches.open(CACHE).then(c => c.put('/mobile', copy)); } return res; })
-      .catch(() => caches.match('/mobile')));
+    e.respondWith(fetch(req).then(res => { if (url.pathname === '/mobile' || url.pathname === '/run') { const copy = res.clone(); caches.open(CACHE).then(c => c.put(url.pathname, copy)); } return res; })
+      .catch(() => caches.match(url.pathname === '/run' ? '/run' : '/mobile')));
     return;
   }
   // Built files never change under the same name: the cache first.

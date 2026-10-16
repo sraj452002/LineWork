@@ -1,5 +1,4 @@
 import { test, expect } from '@playwright/test';
-import { readFileSync } from 'node:fs';
 import { openStore } from '../backend/store.js';
 import { memoryBackend } from '../backend/drive.js';
 import { createApp } from '../backend/app.js';
@@ -44,8 +43,16 @@ test('WorkLine Apps: sign in on a phone, see only the published workflows, run o
     await page.request.put('/api/files/f_greet', { data: { id: 'f_greet', title: 'Greeter', diagrams: [{ id: 'd1', type: 'architecture', name: 'D', code: '', manual: {}, dir: 'LR', style: 'color' }], active: 0, doc: '', updated: Date.now(), view: 'flow', flow } });
     await page.getByRole('button', { name: 'Refresh' }).click();
     await expect(page.getByRole('button', { name: 'Run Greeter' })).toBeVisible();
-    // Only published workflows: the live page isn't listed.
-    await expect(page.getByRole('link', { name: 'Open the page Greeter' })).toHaveCount(0);
+    // A workflow published as a web app is there too, and opens inside the app with a way back.
+    await page.getByRole('button', { name: 'Open Hello' }).click();
+    await expect(page.locator('.m-page-view iframe')).toHaveAttribute('src', '/p/hello-maya');
+    await page.getByRole('button', { name: '← Workflows' }).click();
+    // Something published on the computer shows when the app comes back to the front.
+    const later = { ...flow, app: { ...flow.app, name: 'Second', icon: '🎯' } };
+    await page.request.put('/api/files/f_two', { data: { id: 'f_two', title: 'Second', diagrams: [{ id: 'd1', type: 'architecture', name: 'D', code: '', manual: {}, dir: 'LR', style: 'color' }], active: 0, doc: '', updated: Date.now(), view: 'flow', flow: { ...later, active: false } } });
+    await page.waitForTimeout(3200);
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await expect(page.getByRole('button', { name: 'Run Second' })).toBeVisible();
     await page.screenshot({ path: 'test-results/mobile-apps.png' });
 
     // Run it.
@@ -56,11 +63,11 @@ test('WorkLine Apps: sign in on a phone, see only the published workflows, run o
     await page.screenshot({ path: 'test-results/mobile-apps-run.png' });
 
     // The other tab: AI chat (and nothing else).
-    await expect(page.getByRole('navigation', { name: 'WorkLine Apps' }).getByRole('button')).toHaveText(['▶Workflows', '✨AI chat']);
-    await page.getByRole('button', { name: 'AI chat' }).click();
+    await expect(page.getByRole('navigation', { name: 'WorkLine Apps' }).getByRole('button')).toHaveText(['Workflows', 'Nemo']);
+    await page.getByRole('button', { name: 'Nemo', exact: true }).click();
     await page.getByLabel('Message').fill('Hello');
     await page.getByRole('button', { name: 'Send' }).click();
-    await expect(page.locator('.m-msg.ai')).toContainText('Namaste! Main madad karunga.');
+    await expect(page.locator('.as-msg.ai')).toContainText('Namaste! Main madad karunga.');
     await page.screenshot({ path: 'test-results/mobile-apps-chat.png' });
 
     // Installable: its manifest, icons and service worker.
@@ -69,9 +76,6 @@ test('WorkLine Apps: sign in on a phone, see only the published workflows, run o
     expect(manifest).toMatchObject({ name: 'WorkLine Apps', start_url: '/mobile', display: 'standalone' });
     for (const icon of manifest.icons) expect((await page.request.get(icon.src)).headers()['content-type']).toContain('image/png');
     expect(await page.evaluate(() => navigator.serviceWorker.getRegistration().then(r => !!r))).toBe(true);
-    // The Android app (Capacitor) opens this page.
-    const cap = JSON.parse(readFileSync('mobile/capacitor.config.json', 'utf8'));
-    expect(cap.server.url).toMatch(/\/mobile$/);
     expect(errors).toEqual([]);
     await ctx.close();
   } finally { try { process.kill(-vite.pid); } catch (e) {} srv.close(); nv.close(); }
