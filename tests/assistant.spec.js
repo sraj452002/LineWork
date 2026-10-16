@@ -99,3 +99,50 @@ test('the AI assistant chats like Claude and uses the account’s tools: nodes, 
 test('the node list the assistant searches is up to date', () => {
   execFileSync(process.execPath, ['scripts/node-catalog.mjs', '--check'], { stdio: 'pipe' });
 });
+
+// When the model won't take tools (an endpoint that answers 400 to them), Nemo answers without them; and
+// on a server from before the assistant (no /api/ai/chat), the app falls back to the plain AI.
+test('Nemo still answers when tools are refused, and on an older server', async ({ browser }) => {
+  test.setTimeout(150_000);
+  const { createServer } = await import('node:http');
+  const { spawn } = await import('node:child_process');
+  const nv = createServer((req, res) => {
+    let b = ''; req.on('data', c => { b += c; });
+    req.on('end', () => {
+      const body = JSON.parse(b);
+      if (body.tools) { res.writeHead(400, { 'content-type': 'application/json' }); return res.end('{"error":"tools not supported"}'); }
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: 'Hi, I am Nemo! How can I help you?' } }] })}\n\n`);
+      res.end('data: [DONE]\n\n');
+    });
+  }).listen(0);
+  const srv = createApp(await openStore(memoryBackend()), { requireVerified: false, nvidiaKey: 'nvapi-test', nvidiaBase: `http://localhost:${nv.address().port}/v1` }).listen(0);
+  const port = 5221;
+  const vite = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--port', String(port), '--strictPort'], { cwd: 'frontend', env: { ...process.env, LINEWORK_API: 'http://localhost:' + srv.address().port }, stdio: 'ignore', detached: true });
+  try {
+    const url = 'http://localhost:' + port;
+    for (let i = 0; i < 60; i++) { try { if ((await fetch(url)).ok) break; } catch (e) {} await new Promise(r => setTimeout(r, 500)); }
+    const ctx = await browser.newContext({ baseURL: url });
+    await ctx.addInitScript(() => localStorage.setItem('linework:ai-open', '0'));
+    const page = await ctx.newPage();
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Create an account' }).click();
+    await page.getByLabel('Email').fill('ravi@example.com');
+    await page.getByLabel('Password').fill('a long password');
+    await page.getByRole('button', { name: 'Create account' }).click();
+    await page.getByRole('button', { name: 'Nemo AI' }).click();
+    await page.getByLabel('Message').fill('Hi');
+    await page.keyboard.press('Enter');
+    await expect(page.locator('.as-msg.ai').last()).toContainText('Hi, I am Nemo!', { timeout: 20_000 });
+    await expect(page.locator('.as-err')).toHaveCount(0);
+
+    // An older server: /api/ai/chat isn't there.
+    await page.route('**/api/ai/chat', r => r.fulfill({ status: 404, contentType: 'application/json', body: '{"error":"not_found"}' }));
+    await page.getByRole('button', { name: 'New chat' }).first().click();
+    await page.getByLabel('Message').fill('Hello');
+    await page.keyboard.press('Enter');
+    await expect(page.locator('.as-msg.ai').last()).toContainText('Hi, I am Nemo!', { timeout: 20_000 });
+    await expect(page.locator('.as-err')).toHaveCount(0);
+    await ctx.close();
+  } finally { try { process.kill(-vite.pid); } catch (e) {} srv.close(); nv.close(); }
+});
