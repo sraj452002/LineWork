@@ -117,13 +117,14 @@ export function createAgent({ store, flows, providers, defaultProvider, dailyLim
 
   /* ---- the models ---- */
   // One round with an OpenAI-style API (NVIDIA): streams text and thinking, gathers the tool calls.
-  async function roundOpenAI(model, messages, send, signal) {
+  // withTools false: a plain chat, for models (or endpoints) that refuse function calling.
+  async function roundOpenAI(model, messages, send, signal, withTools = true) {
     const up = await fetch(`${nvidiaBase.replace(/\/+$/, '')}/chat/completions`, {
       method: 'POST', signal,
       headers: { authorization: `Bearer ${nvidiaKey}`, 'content-type': 'application/json', accept: 'text/event-stream' },
-      body: JSON.stringify({ model, messages, stream: true, temperature: 0.5, top_p: 1, max_tokens: 8192, tools: TOOLS.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.input_schema } })), tool_choice: 'auto' }),
+      body: JSON.stringify({ model, messages, stream: true, temperature: 0.5, top_p: 1, max_tokens: 8192, ...(withTools ? { tools: TOOLS.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.input_schema } })), tool_choice: 'auto' } : {}) }),
     });
-    if (!up.ok || !up.body) throw Object.assign(new Error(`The AI service answered ${up.status}.`), { status: up.status, detail: await up.text().catch(() => '') });
+    if (!up.ok || !up.body) throw Object.assign(new Error(`The AI service answered ${up.status}.`), { status: up.status, detail: await up.text().catch(() => ''), toolsRefused: withTools && [400, 404, 422, 500].includes(up.status) });
     let text = '';
     const calls = [];
     await readSSE(up.body, data => {
@@ -187,9 +188,18 @@ export function createAgent({ store, flows, providers, defaultProvider, dailyLim
     try {
       if (pick.nvidia) {
         const messages = [{ role: 'system', content: system }, ...history.map(m => ({ role: m.role, content: m.text }))];
+        let tools = true;
         for (let turn = 0; turn < MAX_TURNS; turn++) {
-          const r = await roundOpenAI(pick.model, messages, send, ctl.signal);
-          if (!r.calls.length) break;
+          let r;
+          try { r = await roundOpenAI(pick.model, messages, send, ctl.signal, tools); }
+          catch (e) {
+            // The model wouldn't take the tools: answer without them (once it has started, never mind).
+            if (!e.toolsRefused || turn > 0) throw e;
+            console.log('AI chat: tools refused, answering without them', e.status, String(e.detail || '').slice(0, 300));
+            tools = false;
+            r = await roundOpenAI(pick.model, [{ role: 'system', content: `${system}\n\n(Your tools are not available right now: answer from what you know, and say so if the user asks you to run something.)` }, ...messages.slice(1)], send, ctl.signal, false);
+          }
+          if (!tools || !r.calls.length) break;
           messages.push({ role: 'assistant', content: r.text || null, tool_calls: r.calls.map(c => ({ id: c.id, type: 'function', function: { name: c.name, arguments: JSON.stringify(c.input) } })) });
           for (const c of r.calls) {
             send({ type: 'tool', id: c.id, name: c.name, input: c.input });
@@ -220,7 +230,7 @@ export function createAgent({ store, flows, providers, defaultProvider, dailyLim
     } catch (e) {
       if (!ctl.signal.aborted) {
         if (e.detail) console.log('AI chat error', e.status, e.detail.slice(0, 500));
-        send({ type: 'error', message: e.status === 429 ? 'The AI is busy right now. Try again in a moment.' : 'The AI didn’t answer. Try again.' });
+        send({ type: 'error', message: e.status === 429 ? 'The AI is busy right now. Try again in a moment.' : e.status === 401 || e.status === 403 ? 'The AI key on the server was refused (NVIDIA_API_KEY / ANTHROPIC_API_KEY). Check it on Render.' : `The AI didn’t answer${e.status ? ` (the AI service said ${e.status})` : ''}. Try again.` });
       }
     }
     res.end();

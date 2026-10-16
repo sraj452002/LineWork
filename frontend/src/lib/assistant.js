@@ -34,6 +34,8 @@ export async function ask(msgs, { images, signal, onEvent }) {
       body: JSON.stringify({ provider: aiProvider()?.id, messages: msgs.map(m => ({ role: m.role, text: textOf(m) })), ...(images && images.length ? { images: images.map(({ media_type, data }) => ({ media_type, data })) } : {}) }),
     });
   } catch (e) { throw { code: e && e.name === 'AbortError' ? 'cancelled' : 'unavailable' }; }
+  // A server from before the assistant (no /api/ai/chat yet): the plain AI, without tools.
+  if (res.status === 404) return askPlain(msgs, { signal, onEvent });
   if (res.status === 401) throw { code: 'signed_out' };
   if (res.status === 429) throw { code: 'daily_limit' };
   if (res.status === 503) throw { code: 'not_configured' };
@@ -52,6 +54,36 @@ export async function ask(msgs, { images, signal, onEvent }) {
         if (!line.startsWith('data:')) continue;
         let ev; try { ev = JSON.parse(line.slice(5)); } catch (e) { continue; }
         onEvent(ev);
+      }
+    }
+  } catch (e) { throw { code: signal && signal.aborted ? 'cancelled' : 'unavailable' }; }
+}
+
+// The plain AI (POST /api/ai): one prompt with the conversation, its answer streamed in Anthropic's events.
+async function askPlain(msgs, { signal, onEvent }) {
+  const prompt = `You are Nemo, the AI built into WorkLine. Answer warmly, clearly and briefly, in the language the user writes in, using Markdown when it helps. When the user greets you, start like: “Hi, I am Nemo! How can I help you?”.\n\n${msgs.slice(-12).map(m => `${m.role === 'user' ? 'User' : 'Nemo'}: ${textOf(m)}`).join('\n\n')}\n\nNemo:`;
+  let res;
+  try { res = await fetch('/api/ai', { method: 'POST', signal, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ prompt, provider: aiProvider()?.id }) }); }
+  catch (e) { throw { code: e && e.name === 'AbortError' ? 'cancelled' : 'unavailable' }; }
+  if (res.status === 401) throw { code: 'signed_out' };
+  if (res.status === 429) throw { code: 'daily_limit' };
+  if (res.status === 503) throw { code: 'not_configured' };
+  if (!res.ok || !res.body) throw { code: 'unavailable' };
+  const reader = res.body.getReader(), dec = new TextDecoder();
+  let buf = '';
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let i;
+      while ((i = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+        if (!line.startsWith('data:')) continue;
+        let ev; try { ev = JSON.parse(line.slice(5)); } catch (e) { continue; }
+        if (ev.type === 'content_block_delta' && ev.delta?.type === 'text_delta') onEvent({ type: 'text', delta: ev.delta.text });
+        else if (ev.type === 'content_block_delta' && ev.delta?.type === 'thinking_delta') onEvent({ type: 'thinking', delta: ev.delta.thinking });
+        else if (ev.type === 'error') onEvent({ type: 'error', message: 'The AI didn’t answer. Try again.' });
       }
     }
   } catch (e) { throw { code: signal && signal.aborted ? 'cancelled' : 'unavailable' }; }
