@@ -146,3 +146,50 @@ test('Nemo still answers when tools are refused, and on an older server', async 
     await ctx.close();
   } finally { try { process.kill(-vite.pid); } catch (e) {} srv.close(); nv.close(); }
 });
+
+// No daily limit by default; a busy AI service (429) is asked again by itself; and when the picked model
+// fails before saying anything, the next model answers, and a failure says the service's own reason.
+test('no daily limit, busy answers are retried, and another model answers when one fails', async () => {
+  test.setTimeout(60_000);
+  const { createServer } = await import('node:http');
+  const seen = [];
+  let busy = 1;
+  const nv = createServer((req, res) => {
+    let b = ''; req.on('data', c => { b += c; });
+    req.on('end', () => {
+      const body = JSON.parse(b);
+      seen.push(body.model);
+      if (busy-- > 0) { res.writeHead(429, { 'retry-after': '0' }); return res.end('{"detail":"Too many requests"}'); }
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      if (/deepseek/.test(body.model)) { res.write(`data: ${JSON.stringify({ error: { message: 'Function not found for account' } })}\n\n`); return res.end(); }
+      res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: 'Hi, I am Nemo!' } }] })}\n\n`);
+      res.end('data: [DONE]\n\n');
+    });
+  }).listen(0);
+  const srv = createApp(await openStore(memoryBackend()), { requireVerified: false, nvidiaKey: 'nvapi-test', nvidiaModel: 'deepseek-ai/deepseek-v4.1-flash,nvidia/nemotron-3.5-lightning-30b-a3b', nvidiaBase: `http://localhost:${nv.address().port}/v1` }).listen(0);
+  try {
+    const base = `http://localhost:${srv.address().port}/api`;
+    const up = await fetch(`${base}/auth/signup`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'mo@example.com', password: 'a long password' }) });
+    const cookie = up.headers.get('set-cookie').split(';')[0];
+    const ask = () => fetch(`${base}/ai/chat`, { method: 'POST', headers: { 'content-type': 'application/json', cookie }, body: JSON.stringify({ messages: [{ role: 'user', text: 'Hi' }] }) }).then(r => r.text());
+    const status = await (await fetch(`${base}/ai/status`, { headers: { cookie } })).json();
+    expect(status).toMatchObject({ enabled: true, limit: 0, default: 'nvidia:deepseek-ai/deepseek-v4.1-flash' });
+    const got = await ask();
+    expect(got).toContain('Hi, I am Nemo!');
+    expect(got).not.toContain('"type":"error"');
+    // The 429, then DeepSeek's failure, then Nemotron.
+    expect(seen).toEqual(['deepseek-ai/deepseek-v4.1-flash', 'deepseek-ai/deepseek-v4.1-flash', 'nvidia/nemotron-3.5-lightning-30b-a3b']);
+    // Many questions in a row: none is refused.
+    for (let i = 0; i < 60; i++) expect(await ask()).toContain('Hi, I am Nemo!');
+
+    // Only one model, and it fails: the chat says why.
+    const one = createApp(await openStore(memoryBackend()), { requireVerified: false, nvidiaKey: 'nvapi-test', nvidiaModel: 'deepseek-ai/deepseek-v4.1-flash', nvidiaBase: `http://localhost:${nv.address().port}/v1` }).listen(0);
+    try {
+      const b2 = `http://localhost:${one.address().port}/api`;
+      const u2 = await fetch(`${b2}/auth/signup`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'mo@example.com', password: 'a long password' }) });
+      const c2 = u2.headers.get('set-cookie').split(';')[0];
+      const t = await fetch(`${b2}/ai/chat`, { method: 'POST', headers: { 'content-type': 'application/json', cookie: c2 }, body: JSON.stringify({ messages: [{ role: 'user', text: 'Hi' }] }) }).then(r => r.text());
+      expect(t).toContain('The AI didn’t answer (Function not found for account)');
+    } finally { one.close(); }
+  } finally { srv.close(); nv.close(); }
+});

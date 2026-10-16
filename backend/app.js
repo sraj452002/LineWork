@@ -6,7 +6,7 @@ import { createMailer } from './mail.js';
 import { DbError, handle as dbHandle } from './dbconnect.js';
 import { createFlows } from './flows.js';
 import { electronRoute } from './app-install.js';
-import { createAgent } from './agent.js';
+import { createAgent, fetchRetry } from './agent.js';
 
 /* The Workline API: accounts, files with version history, folders, share links, live databases and the
    AI proxy with a daily allowance, all under /api. The frontend (../frontend) is hosted on its own and
@@ -25,7 +25,7 @@ export function createApp(store, opts = {}) {
   const {
     allowSignup = true, aiKey = '', aiModel = 'claude-sonnet-5-5', aiBase = 'https://api.anthropic.com',
     nvidiaKey = '', nvidiaModel = NVIDIA_MODELS, nvidiaBase = 'https://integrate.api.nvidia.com/v1',
-    aiDailyLimit = 50, trustProxy = false,
+    aiDailyLimit = 0, trustProxy = false,
     mailer = createMailer(), oauth = {}, appUrl = '', allowLocal = false, dbAllowPrivate = false, dbTimeout = 30_000,
   } = opts;
   // New accounts confirm their email when the server can send one (unless turned off).
@@ -269,7 +269,7 @@ export function createApp(store, opts = {}) {
     if (provider.nvidia) return nvidiaStream(provider.model, prompt, res, ctl);
     let up;
     try {
-      up = await fetch(`${aiBase}/v1/messages`, {
+      up = await fetchRetry(`${aiBase}/v1/messages`, {
         method: 'POST', signal: ctl.signal,
         headers: { 'x-api-key': aiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
         body: JSON.stringify({ model: aiModel, max_tokens: 8000, stream: true, messages: [{ role: 'user', content }] }),
@@ -291,7 +291,7 @@ export function createApp(store, opts = {}) {
   async function nvidiaStream(model, prompt, res, ctl) {
     let up;
     try {
-      up = await fetch(`${nvidiaBase.replace(/\/+$/, '')}/chat/completions`, {
+      up = await fetchRetry(`${nvidiaBase.replace(/\/+$/, '')}/chat/completions`, {
         method: 'POST', signal: ctl.signal,
         headers: { authorization: `Bearer ${nvidiaKey}`, 'content-type': 'application/json', accept: 'text/event-stream' },
         body: JSON.stringify({
