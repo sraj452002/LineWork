@@ -224,7 +224,7 @@ export default function Assistant({ user, compact = false, onOpenFile }) {
         {!msgs.length ? (
           <div className="as-hero">
             <h1><span className="as-star" aria-hidden="true"><Ico d={IC.ai} /></span>{greet()}{first ? `, ${first}` : ''}</h1>
-            <p className="as-intro">I’m <b>Nemo</b>, your WorkLine AI. Ask me anything, or have me run your workflows and nodes.</p>
+            <p className="as-intro">Hi, I am <b>Nemo</b>! How can I help you?</p>
             {composer}
             <div className="as-chips">{SUGGEST.map(([label, q]) => <button key={label} onClick={() => send(q)}>{label}</button>)}</div>
             <p className="as-fine">It can run your workflows and nodes, read your files and write docs. It asks before sending or changing anything in other apps.</p>
