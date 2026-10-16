@@ -62,7 +62,9 @@ test('the AI assistant chats like Claude and uses the account’s tools: nodes, 
     await expect(card).toContainText('Ran the node text.upper');
     await card.getByRole('button', { name: /Ran the node/ }).click();
     await expect(card).toContainText('HELLO FROM WORKLINE');
-    await expect(answer.locator('pre .as-copy')).toHaveText('Copy');
+    await expect(answer.locator('.as-codehead')).toContainText('json');
+    await expect(answer.locator('.as-code .as-copy')).toHaveText('Copy');
+    await expect(answer.getByRole('button', { name: 'Good answer' })).toBeVisible();
     // The model was given the tools, and the tool's real result.
     expect(seen[0].messages[0].content).toContain('You are Nemo');
     expect(seen[0].messages[0].content).toContain('Hi, I am Nemo! How can I help you?');
@@ -88,6 +90,7 @@ test('the AI assistant chats like Claude and uses the account’s tools: nodes, 
     await page.getByRole('button', { name: 'Nemo AI' }).click();
     await page.locator('.as-pick', { hasText: 'uppercase' }).click();
     await expect(page.locator('.as-msg.ai').last()).toContainText('All set.');
+    await page.screenshot({ path: 'test-results/assistant-answer.png' });
     expect(errors).toEqual([]);
     await ctx.close();
   } finally { try { process.kill(-vite.pid); } catch (e) {} srv.close(); nv.close(); }

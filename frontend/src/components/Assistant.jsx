@@ -26,11 +26,14 @@ function Markdown({ text, live }) {
   useEffect(() => {
     if (live || !ref.current) return;
     ref.current.querySelectorAll('pre').forEach(pre => {
-      if (pre.querySelector('.as-copy')) return;
-      const b = document.createElement('button');
+      if (pre.parentElement.classList.contains('as-code')) return;
+      const box = document.createElement('div'), head = document.createElement('div'), b = document.createElement('button');
+      box.className = 'as-code'; head.className = 'as-codehead';
+      head.textContent = pre.dataset.lang || 'code';
       b.className = 'as-copy'; b.type = 'button'; b.textContent = 'Copy';
-      b.onclick = () => { copy(pre.innerText.replace(/\nCopy$|^Copy\n?/, '')); b.textContent = 'Copied'; setTimeout(() => { b.textContent = 'Copy'; }, 1400); };
-      pre.prepend(b);
+      b.onclick = () => { copy(pre.innerText); b.textContent = 'Copied'; setTimeout(() => { b.textContent = 'Copy'; }, 1400); };
+      head.append(b);
+      pre.replaceWith(box); box.append(head, pre);
     });
   }, [text, live]);
   return <div ref={ref} className="as-md" dangerouslySetInnerHTML={{ __html: md(text) }} />;
@@ -61,32 +64,36 @@ function Thinking({ text, live }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="as-think">
-      <button onClick={() => setOpen(o => !o)} aria-expanded={open}>{live ? 'Thinking…' : 'Thought it through'} <Ico d={IC.chev} className={'as-chev' + (open ? ' on' : '')} /></button>
+      <button onClick={() => setOpen(o => !o)} aria-expanded={open}>{live ? 'Thinking…' : 'Thought process'} <Ico d={IC.chev} className={'as-chev' + (open ? ' on' : '')} /></button>
       {open && <p>{text}</p>}
     </div>
   );
 }
 
-function Answer({ m, live, last, onRetry, onOpenFile }) {
+const THUMB = 'M7 11v9H4v-9zM7 11l4-7a2 2 0 0 1 2 2v4h5.5a2 2 0 0 1 2 2.3l-1.2 6A2 2 0 0 1 17.3 20H7';
+const Thumb = ({ down }) => <svg viewBox="0 0 24 24" style={down ? { transform: 'rotate(180deg)' } : undefined} aria-hidden="true"><path d={THUMB} /></svg>;
+// Nemo's mark: under the newest answer, turning while it writes.
+const Mark = ({ live }) => <span className={'as-mark' + (live ? ' live' : '')} aria-hidden="true"><Ico d={IC.ai} /></span>;
+
+function Answer({ m, live, last, onRetry, onRate, onOpenFile }) {
   const [copied, setCopied] = useState(false);
   const parts = m.parts || [];
   const text = parts.filter(p => p.type === 'text').map(p => p.text).join('');
   return (
     <div className="as-msg ai">
-      <span className="as-av" aria-hidden="true"><Ico d={IC.ai} /></span>
-      <div className="as-body">
-        {parts.map((p, i) => (p.type === 'thinking' ? <Thinking key={i} text={p.text} live={live && i === parts.length - 1} />
-          : p.type === 'tool' ? <ToolCard key={p.id || i} p={p} onOpenFile={onOpenFile} />
-            : <Markdown key={i} text={p.text} live={live} />))}
-        {live && !text && !parts.some(p => p.type === 'tool' && !p.done) && <span className="as-dots" aria-label="Thinking"><i /><i /><i /></span>}
-        {m.error && <p className="as-err">{m.error}</p>}
-        {!live && (
-          <div className="as-acts">
-            {text && <button aria-label="Copy the answer" title="Copy" onClick={() => { copy(text); setCopied(true); setTimeout(() => setCopied(false), 1400); }}><Ico d={IC.copy} />{copied ? 'Copied' : ''}</button>}
-            {last && <button aria-label="Retry" title="Retry" onClick={onRetry}><Ico d={IC.undo} /></button>}
-          </div>
-        )}
-      </div>
+      {parts.map((p, i) => (p.type === 'thinking' ? <Thinking key={i} text={p.text} live={live && i === parts.length - 1} />
+        : p.type === 'tool' ? <ToolCard key={p.id || i} p={p} onOpenFile={onOpenFile} />
+          : <Markdown key={i} text={p.text} live={live} />))}
+      {m.error && <p className="as-err">{m.error}</p>}
+      {!live && (
+        <div className="as-acts">
+          {text && <button aria-label="Copy the answer" title={copied ? 'Copied' : 'Copy'} onClick={() => { copy(text); setCopied(true); setTimeout(() => setCopied(false), 1400); }}><Ico d={IC.copy} /></button>}
+          <button aria-label="Good answer" title="Good answer" aria-pressed={m.rating === 'up'} onClick={() => onRate(m.rating === 'up' ? null : 'up')}><Thumb /></button>
+          <button aria-label="Bad answer" title="Bad answer" aria-pressed={m.rating === 'down'} onClick={() => onRate(m.rating === 'down' ? null : 'down')}><Thumb down /></button>
+          {last && <button className="as-retry" aria-label="Retry" title="Retry" onClick={onRetry}><Ico d={IC.undo} /><span>Retry</span></button>}
+        </div>
+      )}
+      {last && <Mark live={live} />}
     </div>
   );
 }
@@ -245,7 +252,8 @@ export default function Assistant({ user, compact = false, onOpenFile }) {
                     {k === lastUser && <button aria-label="Edit the message" title="Edit" onClick={() => editMsg(k)}><Ico d={IC.text} /></button>}
                   </div>}
                 </div>
-              ) : <Answer key={m.id} m={m} live={busy && k === msgs.length - 1} last={k === msgs.length - 1} onRetry={retry} onOpenFile={onOpenFile} />))}
+              ) : <Answer key={m.id} m={m} live={busy && k === msgs.length - 1} last={k === msgs.length - 1} onRetry={retry} onOpenFile={onOpenFile}
+                onRate={r => edit(chat.id, c => ({ ...c, msgs: c.msgs.map(x => (x.id === m.id ? { ...x, rating: r } : x)) }))} />))}
             </div>
           </div>
           <div className="as-foot">{composer}<p className="as-fine">Nemo can make mistakes. Check what matters.</p></div>
