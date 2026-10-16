@@ -8,6 +8,7 @@ import { setSheets } from '../lib/sheet.js';
 import WordDoc from './WordDoc.jsx';
 import Canvas from './Canvas.jsx';
 import { ThemeButton, useUI } from './ui.jsx';
+import Loading from './Loading.jsx';
 
 // The code editor (Monaco) is large, so it loads the first time the Code view opens.
 const CodeWorkspace = lazy(() => import('./CodeWorkspace.jsx'));
@@ -222,7 +223,7 @@ export default function Editor({ file, files, update, saveState, onBack, onRenam
         </div>
         {view === 'sheet' && (
           <div className="sheetpane">
-            <Suspense fallback={<div className="cw-loading">Loading…</div>}>
+            <Suspense fallback={<Loading />}>
               <SheetView file={file} update={update} visible onAddToCanvas={sheetToCanvas} assist={assist} />
             </Suspense>
             {assistPanel}
@@ -230,7 +231,7 @@ export default function Editor({ file, files, update, saveState, onBack, onRenam
         )}
         {view === 'db' && (
           <div className="dbpane">
-            <Suspense fallback={<div className="cw-loading">Loading…</div>}>
+            <Suspense fallback={<Loading />}>
               <DatabaseView file={file} update={update} visible onDiagram={drawLiveSchema} assist={assist} />
             </Suspense>
             {assistPanel}
@@ -238,7 +239,7 @@ export default function Editor({ file, files, update, saveState, onBack, onRenam
         )}
         {view === 'flow' && (
           <div className="flowpane">
-            <Suspense fallback={<div className="cw-loading">Loading…</div>}>
+            <Suspense fallback={<Loading />}>
               <FlowView file={file} update={update} visible saveState={saveState} onGuide={onGuide} assist={assist} />
             </Suspense>
             {assistPanel}
@@ -246,7 +247,7 @@ export default function Editor({ file, files, update, saveState, onBack, onRenam
         )}
         {view === 'app' && (
           <div className="apppane">
-            <Suspense fallback={<div className="cw-loading">Loading…</div>}>
+            <Suspense fallback={<Loading />}>
               <AppBuilder file={file} update={update} files={files} onGuide={onGuide} assist={assist} />
             </Suspense>
             {assistPanel}

@@ -269,6 +269,8 @@ Templates that need an account of yours (Slack, email, a database connection, a 
 
 **Tools** in the home page's sidebar lists every tool, grouped (Diagrams, Docs & data, Code), and each one starts a new file open in that tool: the Code view can open straight into the Terminal, the Python prompt or the Visualize pane. See `frontend/src/components/Tools.jsx`.
 
+**Import a .zip** (Tools, or a .zip given to *Import a workflow* or a workflow's **Import**) reads the zip in the browser (`frontend/src/lib/zipimport.js`, JSZip), says what's in it, and makes a file of each: Workline and n8n workflows (`.json`), sheets (`.csv`, `.tsv`, `.xlsx`), database schemas (`.sql` with CREATE TABLE), docs (`.md`, `.txt`), and one code project of the source files with their folders. A folder every file shares is dropped from the paths; pictures and other files stay out (it says how many). Up to 100 MB and 500 files.
+
 ## Live databases
 
 The **Database** view connects to PostgreSQL, MySQL / MariaDB, SQL Server and MongoDB, and opens SQLite files in the browser (sql.js). It shows the live schema (and draws it on the canvas, refreshable), browses and edits rows by primary key, and runs queries, with an optional read-only mode per connection.

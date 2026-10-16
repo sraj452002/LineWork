@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { IC, Ico } from './Toolbar.jsx';
 import { useUI } from './ui.jsx';
 import { NO_AI, aiProvider, aiProviders, copyFor, onAIThinking, sampleP, setAIProvider } from '../lib/ai.js';
 import { askAssist } from '../lib/assist.js';
+import Loading from './Loading.jsx';
 
 /* The AI panel beside a section (Sheet, Database, Code, Workflow, App). `source.current` is the section's
    description (lib/assist.js), refreshed by the section on every render, so the AI always sees what's on
@@ -24,7 +25,10 @@ export default function AssistPanel({ source, section, onClose }) {
 
   useEffect(() => { sampleP.then(s => { if (!s) setOff(NO_AI); setModels(aiProviders); setModel(aiProvider()?.id || null); }); }, []);
   useEffect(() => { setThinking(''); if (!busy) return undefined; return onAIThinking(setThinking); }, [busy]);
-  useEffect(() => { if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight; }, [msgs.length, busy, thinking]);
+  // A conversation follows its newest message; the first screen starts at the top.
+  useEffect(() => { const el = logRef.current; if (el) el.scrollTop = msgs.length ? el.scrollHeight : 0; }, [msgs.length, busy, thinking]);
+  // The box grows with what's typed, up to a point.
+  useLayoutEffect(() => { const el = inputRef.current; if (el) { el.style.height = 'auto'; el.style.height = `${Math.min(el.scrollHeight, 200)}px`; } }, [text]);
   useEffect(() => { if (ready) inputRef.current?.focus(); }, [ready]);
 
   const send = async request => {
@@ -70,7 +74,7 @@ export default function AssistPanel({ source, section, onClose }) {
       <div className="ai-body" ref={logRef}>
         {!msgs.length ? (
           <div className="ai-start">
-            <p className="assist-intro">{cfg.intro}</p>
+            {ready ? <p className="assist-intro">{cfg.intro}</p> : <Loading />}
             <div className="assist-chips">
               {(cfg.chips || []).map(ch => <button key={ch.label} className="ai-card" disabled={!ready} onClick={() => (ch.fill ? (setText(ch.prompt), inputRef.current?.focus()) : send(ch.prompt))}><Ico d={IC.ai} /><span>{ch.label}</span></button>)}
             </div>
@@ -95,17 +99,14 @@ export default function AssistPanel({ source, section, onClose }) {
       </div>
       <div className="ai-foot">
         {off && <p className="ai-off">{off}</p>}
-        <div className="ai-box">
-          <textarea ref={inputRef} rows={3} value={text} disabled={!ready} aria-label={`Ask AI about the ${cfg.section}`} placeholder={cfg.placeholder || 'Ask, or describe what to make or change.'}
+        <div className="ai-box assist-box">
+          <textarea ref={inputRef} rows={1} value={text} disabled={!ready} aria-label={`Ask AI about the ${cfg.section}`} placeholder={cfg.placeholder || 'Ask, or describe what to make or change.'}
             onChange={e => setText(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(text); } }} />
-          <div className="ai-row">
-            <span className="grow" />
-            <button className={'ai-send' + (busy ? ' stop' : '')} aria-label={busy ? 'Stop' : 'Send'} disabled={!busy && (!text.trim() || !ready)}
-              onClick={() => (busy ? ctl.current?.abort() : send(text))}>
-              {busy ? <i className="ai-stopsq" /> : <Ico d={IC.send} />}
-            </button>
-          </div>
+          <button className={'ai-send' + (busy ? ' stop' : '')} aria-label={busy ? 'Stop' : 'Send'} disabled={!busy && (!text.trim() || !ready)}
+            onClick={() => (busy ? ctl.current?.abort() : send(text))}>
+            {busy ? <i className="ai-stopsq" /> : <Ico d={IC.send} />}
+          </button>
         </div>
       </div>
     </aside>

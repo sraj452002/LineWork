@@ -5,6 +5,7 @@ import { useUI } from './ui.jsx';
 import RunPanel from './RunPanel.jsx';
 import { SAMPLES } from '../lib/samples.js';
 import { dg } from '../lib/engines.js';
+import Loading from './Loading.jsx';
 
 const Visualizer = lazy(() => import('./Visualizer.jsx'));
 
@@ -619,7 +620,7 @@ ${text.slice(0, 40000)}` : 'No file is open.'}`;
           )}
         </section>
         {viz && files.length > 0 && (
-          <Suspense fallback={<aside className="cw-viz"><p className="viz-empty">Loading…</p></aside>}>
+          <Suspense fallback={<aside className="cw-viz"><Loading /></aside>}>
             <Visualizer fileId={file.id} files={files} folders={folders} activeFile={activeFile} cursorLine={pos.ln}
               onHighlight={onHighlight} onJump={onJump} onOpenCanvas={onOpenCanvas} onClose={() => setViz(false)} />
           </Suspense>

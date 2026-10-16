@@ -4,6 +4,7 @@ import { clone, rid } from '../lib/utils.js';
 import { imagesOnServer } from '../lib/images.js';
 import { useUI } from './ui.jsx';
 import Editor from './Editor.jsx';
+import Loading from './Loading.jsx';
 
 /* What the Workline API (backend/) adds: share links, version history, the page a share link opens,
    and account settings (name, password, two-step verification, Google/GitHub). */
@@ -116,7 +117,7 @@ export function HistoryDialog({ file, onRestore, onClose }) {
     <Modal title="Version history" onClose={onClose} wide>
       <p>A version is kept for each stretch of editing (the last 100). Restoring one keeps the current version in this list too.</p>
       {err && <p className="err" role="alert">{err}</p>}
-      {!list && !err && <p className="srv-empty">Loading…</p>}
+      {!list && !err && <Loading />}
       {list && !list.length && <p className="srv-empty">No versions yet. They appear once the file is saved to your account.</p>}
       {list && list.length > 0 && (
         <ol className="srv-list" aria-label="Versions">
@@ -245,7 +246,7 @@ export function AccountDialog({ onUser, onClose }) {
   return (
     <Modal title="Account & security" onClose={onClose} wide>
       {err && <p className="err" role="alert">{err}</p>}
-      {!me ? <p className="srv-empty">{err ? '' : 'Loading…'}</p> : (<div className="acct">
+      {!me ? (err ? <p className="srv-empty" /> : <Loading />) : (<div className="acct">
         <section aria-labelledby="acct-profile">
           <h4 id="acct-profile">Profile</h4>
           <p className="acct-mail">{me.email}</p>
