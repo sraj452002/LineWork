@@ -4,6 +4,8 @@ import { md } from '../lib/markdown.js';
 import { ago } from '../lib/utils.js';
 import { aiProvider, aiProviders, prepImage, sampleP, setAIProvider } from '../lib/ai.js';
 import { ask, errorText, loadChats, newChatId, saveChats, titleOf, toolLabel } from '../lib/assistant.js';
+import { AGENT_TOOLS, deleteAgent, listAgents, saveAgent } from '../lib/agents.js';
+import { listFiles } from '../lib/cloud.js';
 
 /* The AI assistant, like a chat with Claude: past chats on the side, answers in Markdown that stream in,
    copy / retry / edit, pictures and text files attached, and the account's own tools (workflows, nodes,
@@ -15,6 +17,7 @@ const SUGGEST = [
   ['Run a workflow', 'Show me my workflows, then help me run one.'],
   ['Make text uppercase', 'Use the Uppercase node on “hello from workline” and show me what it gives.'],
   ['Write a doc', 'Write a one-page launch plan for a small online shop and save it as a doc.'],
+  ['Make an agent', 'Make me an agent that answers customer emails for my bakery, politely and briefly.'],
 ];
 const TEXT_FILES = '.txt,.md,.csv,.json,.sql,.yaml,.yml,.xml,.js,.ts,.py,.html,.css,.log';
 const greet = () => { const h = new Date().getHours(); return h < 5 ? 'Up late' : h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'; };
@@ -39,9 +42,10 @@ function Markdown({ text, live }) {
   return <div ref={ref} className="as-md" dangerouslySetInnerHTML={{ __html: md(text) }} />;
 }
 
-function ToolCard({ p, onOpenFile }) {
+function ToolCard({ p, onOpenFile, onAgent }) {
   const [open, setOpen] = useState(false);
   const made = p.name === 'create_doc' && p.ok && /"id":"([\w-]+)"/.exec(p.result || '');
+  const agentMade = p.name === 'create_agent' && p.ok && /"id":"([\w-]+)"/.exec(p.result || '');
   return (
     <div className={'as-tool' + (p.done ? (p.ok ? ' ok' : ' bad') : ' busy')}>
       <button className="as-tool-head" aria-expanded={open} onClick={() => setOpen(o => !o)}>
@@ -49,6 +53,7 @@ function ToolCard({ p, onOpenFile }) {
         <span>{toolLabel(p)}</span>
         <Ico d={IC.chev} className={'as-chev' + (open ? ' on' : '')} />
       </button>
+      {agentMade && onAgent && <button className="btn as-open" onClick={() => onAgent(agentMade[1])}>Chat with it</button>}
       {made && onOpenFile && <button className="btn as-open" onClick={() => { dispatchEvent(new Event('workline:pull')); setTimeout(() => onOpenFile(made[1]), 400); }}>Open the doc</button>}
       {open && (
         <div className="as-tool-body">
@@ -75,14 +80,14 @@ const Thumb = ({ down }) => <svg viewBox="0 0 24 24" style={down ? { transform: 
 // Nemo's mark: under the newest answer, turning while it writes.
 const Mark = ({ live }) => <span className={'as-mark' + (live ? ' live' : '')} aria-hidden="true"><Ico d={IC.ai} /></span>;
 
-function Answer({ m, live, last, onRetry, onRate, onOpenFile }) {
+function Answer({ m, live, last, onRetry, onRate, onOpenFile, onAgent }) {
   const [copied, setCopied] = useState(false);
   const parts = m.parts || [];
   const text = parts.filter(p => p.type === 'text').map(p => p.text).join('');
   return (
     <div className="as-msg ai">
       {parts.map((p, i) => (p.type === 'thinking' ? <Thinking key={i} text={p.text} live={live && i === parts.length - 1} />
-        : p.type === 'tool' ? <ToolCard key={p.id || i} p={p} onOpenFile={onOpenFile} />
+        : p.type === 'tool' ? <ToolCard key={p.id || i} p={p} onOpenFile={onOpenFile} onAgent={onAgent} />
           : <Markdown key={i} text={p.text} live={live} />))}
       {m.error && <p className="as-err">{m.error}</p>}
       {!live && (
@@ -94,6 +99,60 @@ function Answer({ m, live, last, onRetry, onRate, onOpenFile }) {
         </div>
       )}
       {last && <Mark live={live} />}
+    </div>
+  );
+}
+
+// Making or changing an agent: who it is, how it works, what it knows, what it may use.
+function AgentEditor({ agent, onSave, onDelete, onClose }) {
+  const [a, setA] = useState(() => ({ icon: '🤖', name: '', description: '', instructions: '', knowledge: '', tools: [], workflows: [], ...agent, starters: [...(agent.starters || []), '', '', '', ''].slice(0, 4) }));
+  const [flows, setFlows] = useState([]), [busy, setBusy] = useState(false), [err, setErr] = useState('');
+  const fileRef = useRef(null);
+  useEffect(() => { listFiles().then(fs => setFlows(fs.filter(f => !f.archived && f.flow && (f.flow.nodes || []).length)), () => {}); }, []);
+  const set = (k, v) => setA(x => ({ ...x, [k]: v }));
+  const toggle = (k, v) => setA(x => ({ ...x, [k]: x[k].includes(v) ? x[k].filter(y => y !== v) : [...x[k], v] }));
+  const addFiles = async list => { for (const f of list) { if (f.size > 300_000) continue; const t = await f.text().catch(() => ''); if (t) setA(x => ({ ...x, knowledge: `${x.knowledge ? `${x.knowledge}\n\n` : ''}# ${f.name}\n${t}`.slice(0, 60000) })); } };
+  const save = async () => {
+    if (!a.name.trim()) { setErr('Give it a name.'); return; }
+    setBusy(true); setErr('');
+    try { onSave(await saveAgent({ ...a, starters: a.starters.filter(x => x.trim()) })); } catch (e) { setErr(e.message || 'It couldn’t be saved.'); setBusy(false); }
+  };
+  return (
+    <div className="modal as-modal" onPointerDown={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <form className="mbox as-agent" role="dialog" aria-modal="true" aria-label={agent.id ? `Edit ${agent.name}` : 'New agent'} onSubmit={e => { e.preventDefault(); save(); }}>
+        <header><h2>{agent.id ? 'Edit agent' : 'New agent'}</h2><button type="button" className="as-ib" aria-label="Close" onClick={onClose}><Ico d={IC.close} /></button></header>
+        <div className="as-agent-body">
+          <div className="as-agent-row">
+            <label className="as-f as-icon">Icon<input value={a.icon} maxLength={4} aria-label="Icon" onChange={e => set('icon', e.target.value)} /></label>
+            <label className="as-f grow">Name<input value={a.name} aria-label="Agent name" placeholder="Support agent" onChange={e => set('name', e.target.value)} autoFocus /></label>
+          </div>
+          <label className="as-f">What it does<input value={a.description} aria-label="What it does" placeholder="Answers customer emails, politely and briefly" onChange={e => set('description', e.target.value)} /></label>
+          <label className="as-f">Instructions<textarea rows={6} value={a.instructions} aria-label="Instructions" placeholder={'You are the support agent for Asha’s Bakery.\nAnswer in under 120 words, warmly, in the customer’s language.\nIf an order is late, apologise and promise a reply within a day.'} onChange={e => set('instructions', e.target.value)} /></label>
+          <label className="as-f">Knowledge <small>prices, FAQs, policies… (or add text files)</small><textarea rows={4} value={a.knowledge} aria-label="Knowledge" onChange={e => set('knowledge', e.target.value)} /></label>
+          <button type="button" className="btn as-addfile" onClick={() => fileRef.current?.click()}><Ico d={IC.plus} />Add a text file</button>
+          <input ref={fileRef} type="file" multiple hidden accept=".txt,.md,.csv,.json" onChange={e => { addFiles([...e.target.files]); e.target.value = ''; }} />
+          <fieldset className="as-tools"><legend>It may</legend>
+            {AGENT_TOOLS.map(([k, label, note]) => (
+              <label key={k}><input type="checkbox" checked={a.tools.includes(k)} onChange={() => toggle('tools', k)} /><span><b>{label}</b><small>{note}</small></span></label>
+            ))}
+          </fieldset>
+          {a.tools.includes('workflows') && flows.length > 0 && (
+            <fieldset className="as-tools"><legend>Only these workflows <small>(none ticked: all)</small></legend>
+              {flows.map(f => <label key={f.id}><input type="checkbox" checked={a.workflows.includes(f.id)} onChange={() => toggle('workflows', f.id)} /><span><b>{f.title || 'Untitled'}</b></span></label>)}
+            </fieldset>
+          )}
+          <div className="as-f">Example requests <small>shown to start a chat</small>
+            {a.starters.map((x, i) => <input key={i} value={x} aria-label={`Example request ${i + 1}`} onChange={e => setA(y => ({ ...y, starters: y.starters.map((z, j) => (j === i ? e.target.value : z)) }))} />)}
+          </div>
+          {err && <p className="as-err">{err}</p>}
+        </div>
+        <footer>
+          {agent.id && <button type="button" className="btn danger-text" onClick={() => onDelete(agent)}>Delete</button>}
+          <span className="grow" />
+          <button type="button" className="btn" onClick={onClose}>Cancel</button>
+          <button className="btn primary" disabled={busy}>{agent.id ? 'Save' : 'Create agent'}</button>
+        </footer>
+      </form>
     </div>
   );
 }
@@ -110,6 +169,11 @@ export default function Assistant({ user, compact = false, onOpenFile }) {
   const stop = useRef(null), logRef = useRef(null), boxRef = useRef(null), fileRef = useRef(null);
   const chat = chats.find(c => c.id === id) || null;
   const msgs = chat ? chat.msgs : [];
+  // Agents: the account's own AI helpers. A new chat can be with one of them instead of Nemo.
+  const [agents, setAgents] = useState([]), [agentId, setAgentId] = useState(null), [editing, setEditing] = useState(null);
+  const loadAgents = () => listAgents().then(setAgents, () => {});
+  useEffect(() => { loadAgents(); }, []);
+  const agent = agents.find(x => x.id === (chat ? chat.agentId : agentId)) || null;
 
   useEffect(() => { sampleP.then(() => { setModels(aiProviders); setModel(aiProvider()?.id || ''); }); }, []);
   useEffect(() => { if (!busy) saveChats(uid, chats); }, [chats, busy, uid]);
@@ -135,7 +199,7 @@ export default function Assistant({ user, compact = false, onOpenFile }) {
       else if (ev.type === 'error') return { ...m, parts, error: ev.message };
       return { ...m, parts };
     });
-    try { await ask(history, { images, signal: ctl.signal, onEvent: add }); }
+    try { await ask(history, { images, agentId: chats.find(c => c.id === cid)?.agentId || agentId || undefined, signal: ctl.signal, onEvent: add }); }
     catch (e) { if (e.code !== 'cancelled') editLast(cid, m => ({ ...m, error: errorText(e) })); }
     editLast(cid, m => ({ ...m, parts: (m.parts || []).map(p => (p.type === 'tool' && !p.done ? { ...p, done: true, ok: false, result: 'Stopped.' } : p)) }));
     setBusy(false); stop.current = null;
@@ -148,7 +212,7 @@ export default function Assistant({ user, compact = false, onOpenFile }) {
     const full = [t || (pics.length ? 'What’s in this picture?' : 'Read the attached file.'), ...docs.map(f => `\n\nAttached file “${f.name}”:\n\`\`\`\n${f.text}\n\`\`\``)].join('');
     const um = { id: newChatId(), role: 'user', text: full, shown: t, files: files.map(f => f.name), ...(pics.length ? { images: pics.map(p => p.preview) } : {}) };
     let cid = id;
-    if (!chat) { cid = newChatId(); setChats(cs => [{ id: cid, title: titleOf(t || files[0].name), at: Date.now(), msgs: [um] }, ...cs]); setId(cid); }
+    if (!chat) { cid = newChatId(); setChats(cs => [{ id: cid, title: titleOf(t || files[0].name), at: Date.now(), msgs: [um], ...(agentId ? { agentId } : {}) }, ...cs]); setId(cid); }
     else edit(cid, c => ({ ...c, at: Date.now(), msgs: [...c.msgs, um] }));
     setText(''); setFiles([]);
     await answer(cid, [...msgs, um], pics);
@@ -167,7 +231,9 @@ export default function Assistant({ user, compact = false, onOpenFile }) {
     boxRef.current?.focus();
   };
   const remove = cid => { setChats(cs => cs.filter(c => c.id !== cid)); if (cid === id) setId(null); };
-  const fresh = () => { if (busy) stop.current?.abort(); setId(null); setText(''); setFiles([]); if (compact) setSide(false); setTimeout(() => boxRef.current?.focus(), 0); };
+  const fresh = (withAgent = null) => { if (busy) stop.current?.abort(); setId(null); setAgentId(withAgent); setText(''); setFiles([]); if (compact) setSide(false); setTimeout(() => boxRef.current?.focus(), 0); };
+  const chatWith = aid => loadAgents().then(() => fresh(aid));
+  const removeAgent = async a => { await deleteAgent(a.id).catch(() => {}); setEditing(null); if (agentId === a.id) setAgentId(null); loadAgents(); };
   const attach = list => {
     for (const f of list) {
       if (/^image\//.test(f.type)) prepImage(f).then(image => setFiles(x => [...x, { name: f.name, image }]), () => {});
@@ -210,12 +276,22 @@ export default function Assistant({ user, compact = false, onOpenFile }) {
     <div className={'as' + (compact ? ' compact' : '') + (side ? ' side-open' : '')}>
       {side && (
         <aside className="as-side" aria-label="Chats">
-          <button className="as-new" onClick={fresh}><Ico d={IC.plus} />New chat</button>
+          <button className="as-new" onClick={() => fresh()}><Ico d={IC.plus} />New chat</button>
+          <h2>Agents</h2>
+          <nav className="as-agents" aria-label="Agents">
+            {agents.map(x => (
+              <div key={x.id} className="as-item" aria-current={!chat && agentId === x.id ? 'true' : undefined}>
+                <button className="as-pick as-agentpick" onClick={() => fresh(x.id)} aria-label={`Chat with ${x.name}`}><i aria-hidden="true">{x.icon}</i><span>{x.name}</span></button>
+                <button className="as-del" aria-label={`Edit ${x.name}`} title="Edit" onClick={() => setEditing(x)}>✎</button>
+              </div>
+            ))}
+            <button className="as-addagent" onClick={() => setEditing({})}><Ico d={IC.plus} />New agent</button>
+          </nav>
           <h2>Recents</h2>
           <nav className="as-list">
             {chats.length ? chats.map(c => (
               <div key={c.id} className="as-item" aria-current={c.id === id ? 'true' : undefined}>
-                <button className="as-pick" onClick={() => { setId(c.id); if (compact) setSide(false); }}><span>{c.title}</span><small>{ago(c.at)}</small></button>
+                <button className="as-pick" onClick={() => { setId(c.id); if (compact) setSide(false); }}><span>{c.agentId ? `${agents.find(x => x.id === c.agentId)?.icon || '🤖'} ` : ''}{c.title}</span><small>{ago(c.at)}</small></button>
                 <button className="as-del" aria-label={`Delete chat ${c.title}`} title="Delete" onClick={() => remove(c.id)}>×</button>
               </div>
             )) : <p className="as-none">Your chats show here.</p>}
@@ -225,16 +301,23 @@ export default function Assistant({ user, compact = false, onOpenFile }) {
       <section className="as-main" aria-label="Nemo, the AI assistant">
         <header className="as-top">
           <button className="as-ib" aria-label={side ? 'Hide chats' : 'Show chats'} title="Chats" onClick={() => setSide(s => !s)}><Ico d={IC.clock} /></button>
-          <b className="as-title">{chat ? chat.title : ''}</b>
-          {chat && <button className="as-ib" aria-label="New chat" title="New chat" onClick={fresh}><Ico d={IC.plus} /></button>}
+          <b className="as-title">{chat ? `${agent ? `${agent.icon} ${agent.name} · ` : ''}${chat.title}` : agent ? `${agent.icon} ${agent.name}` : ''}</b>
+          {(chat || agent) && <button className="as-ib" aria-label="New chat" title="New chat" onClick={() => fresh()}><Ico d={IC.plus} /></button>}
         </header>
         {!msgs.length ? (
           <div className="as-hero">
-            <h1><span className="as-star" aria-hidden="true"><Ico d={IC.ai} /></span>{greet()}{first ? `, ${first}` : ''}</h1>
-            <p className="as-intro">Hi, I am <b>Nemo</b>! How can I help you?</p>
-            {composer}
-            <div className="as-chips">{SUGGEST.map(([label, q]) => <button key={label} onClick={() => send(q)}>{label}</button>)}</div>
-            <p className="as-fine">It can run your workflows and nodes, read your files and write docs. It asks before sending or changing anything in other apps.</p>
+            {agent ? (<>
+              <h1><span className="as-agenticon" aria-hidden="true">{agent.icon}</span>{agent.name}</h1>
+              <p className="as-intro">{agent.description || 'Your agent.'} <button className="link" onClick={() => setEditing(agent)}>Edit</button></p>
+              {composer}
+              {agent.starters?.length > 0 && <div className="as-chips">{agent.starters.map(q => <button key={q} onClick={() => send(q)}>{q}</button>)}</div>}
+            </>) : (<>
+              <h1><span className="as-star" aria-hidden="true"><Ico d={IC.ai} /></span>{greet()}{first ? `, ${first}` : ''}</h1>
+              <p className="as-intro">Hi, I am <b>Nemo</b>! How can I help you?</p>
+              {composer}
+              <div className="as-chips">{SUGGEST.map(([label, q]) => <button key={label} onClick={() => send(q)}>{label}</button>)}</div>
+              <p className="as-fine">It can run your workflows and nodes, read your files, write docs and make agents for you. It asks before sending or changing anything in other apps.</p>
+            </>)}
           </div>
         ) : (<>
           <div className="as-log" ref={logRef} aria-live="polite">
@@ -252,13 +335,15 @@ export default function Assistant({ user, compact = false, onOpenFile }) {
                     {k === lastUser && <button aria-label="Edit the message" title="Edit" onClick={() => editMsg(k)}><Ico d={IC.text} /></button>}
                   </div>}
                 </div>
-              ) : <Answer key={m.id} m={m} live={busy && k === msgs.length - 1} last={k === msgs.length - 1} onRetry={retry} onOpenFile={onOpenFile}
+              ) : <Answer key={m.id} m={m} live={busy && k === msgs.length - 1} last={k === msgs.length - 1} onRetry={retry} onOpenFile={onOpenFile} onAgent={chatWith}
                 onRate={r => edit(chat.id, c => ({ ...c, msgs: c.msgs.map(x => (x.id === m.id ? { ...x, rating: r } : x)) }))} />))}
             </div>
           </div>
           <div className="as-foot">{composer}<p className="as-fine">Nemo can make mistakes. Check what matters.</p></div>
         </>)}
       </section>
+      {editing && <AgentEditor agent={editing} onClose={() => setEditing(null)} onDelete={removeAgent}
+        onSave={a => { const wasNew = !editing.id; setEditing(null); loadAgents().then(() => { if (wasNew) fresh(a.id); }); }} />}
     </div>
   );
 }

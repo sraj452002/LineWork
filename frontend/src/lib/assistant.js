@@ -26,16 +26,17 @@ const textOf = m => {
 
 /* Asks for the next answer. onEvent gets each event: {type:'text'|'thinking', delta}, {type:'tool', id,
    name, input}, {type:'tool_done', id, ok, result}, {type:'error', message}. Resolves when it's done. */
-export async function ask(msgs, { images, signal, onEvent }) {
+export async function ask(msgs, { images, agentId, signal, onEvent }) {
   let res;
   try {
     res = await fetch('/api/ai/chat', {
       method: 'POST', signal, headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ provider: aiProvider()?.id, messages: msgs.map(m => ({ role: m.role, text: textOf(m) })), ...(images && images.length ? { images: images.map(({ media_type, data }) => ({ media_type, data })) } : {}) }),
+      body: JSON.stringify({ provider: aiProvider()?.id, ...(agentId ? { agentId } : {}), messages: msgs.map(m => ({ role: m.role, text: textOf(m) })), ...(images && images.length ? { images: images.map(({ media_type, data }) => ({ media_type, data })) } : {}) }),
     });
   } catch (e) { throw { code: e && e.name === 'AbortError' ? 'cancelled' : 'unavailable' }; }
   // A server from before the assistant (no /api/ai/chat yet): the plain AI, without tools.
-  if (res.status === 404) return askPlain(msgs, { signal, onEvent });
+  if (res.status === 404 && !agentId) return askPlain(msgs, { signal, onEvent });
+  if (res.status === 404) throw { code: 'no_agent' };
   if (res.status === 401) throw { code: 'signed_out' };
   if (res.status === 429) throw { code: 'daily_limit' };
   if (res.status === 503) throw { code: 'not_configured' };
@@ -93,6 +94,7 @@ export const errorText = e => ({
   signed_out: 'Your session ended. Sign in again to use AI.',
   daily_limit: 'Today’s AI requests are used up. They reset at midnight UTC.',
   not_configured: 'AI isn’t set up on this server yet (NVIDIA_API_KEY or ANTHROPIC_API_KEY on the backend).',
+  no_agent: 'That agent was deleted. Start a new chat.',
   image_unsupported: 'This model doesn’t read pictures. Pick Claude in the model menu, or send text.',
 })[e && e.code] || (e && e.message) || 'The AI didn’t answer. Try again.';
 
@@ -108,6 +110,7 @@ export function toolLabel(p) {
     case 'list_files': return i.query ? `Looked for files about “${i.query}”` : 'Looked at your files';
     case 'read_file': return 'Read a file';
     case 'create_doc': return `Wrote the doc “${i.title || 'Untitled'}”`;
+    case 'create_agent': return `Made the agent “${i.name || 'Untitled'}”`;
     default: return p.name;
   }
 }

@@ -2968,3 +2968,27 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .boot{display:grid;place-items:center}.boot::after{content:"";display:block}
 @media (prefers-reduced-motion:reduce){.lw-loading i{animation-duration:2s}}
 .t-zip .tool-ico,.t-zip{--tc:#b45309}
+/* Agents in Nemo: the list in the side bar, and making one. */
+.as-agents{display:flex;flex-direction:column;gap:1px}
+.as-agentpick{flex-direction:row!important;align-items:center!important;gap:8px}
+.as-agentpick i{font-style:normal;font-size:16px;width:22px;text-align:center}
+.as-addagent{display:flex;align-items:center;gap:8px;padding:7px 10px;border:0;border-radius:8px;background:none;color:var(--c-ink2);font:inherit;font-size:13.5px;cursor:pointer;text-align:left}
+.as-addagent:hover{background:var(--c-hover);color:var(--c-ink)}
+.as-agenticon{display:grid;place-items:center;width:52px;height:52px;border-radius:16px;background:var(--c-bubble);font-size:30px;font-family:system-ui}
+.as-modal{z-index:60}
+.as-agent{width:min(620px,calc(100vw - 32px));max-height:min(88vh,860px);display:flex;flex-direction:column;padding:0;overflow:hidden}
+.as-agent header,.as-agent footer{display:flex;align-items:center;gap:8px;padding:14px 18px;border-bottom:1px solid var(--line)}
+.as-agent footer{border-bottom:0;border-top:1px solid var(--line)}
+.as-agent header h2{flex:1;margin:0;font-size:17px}
+.as-agent-body{overflow:auto;padding:16px 18px;display:flex;flex-direction:column;gap:12px}
+.as-agent-row{display:flex;gap:10px}
+.as-f{display:flex;flex-direction:column;gap:5px;font-size:13px;font-weight:600;color:var(--ink)}
+.as-f small,.as-tools legend small{font-weight:400;color:var(--ink2)}
+.as-f input,.as-f textarea{font:inherit;font-weight:400;font-size:14px;padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:var(--surface);color:var(--ink);resize:vertical}
+.as-f.grow{flex:1}.as-icon input{width:64px;text-align:center;font-size:20px;padding:4px}
+.as-addfile{align-self:flex-start;display:inline-flex;align-items:center;gap:6px}.as-addfile svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2}
+.as-tools{border:1px solid var(--line);border-radius:10px;padding:8px 12px 10px;margin:0;display:flex;flex-direction:column;gap:6px}
+.as-tools legend{font-size:13px;font-weight:600;padding:0 4px}
+.as-tools label{display:flex;align-items:flex-start;gap:9px;font-size:13.5px;cursor:pointer}
+.as-tools label span{display:flex;flex-direction:column}.as-tools label small{color:var(--ink2);font-size:12.5px}
+.as-tools input{margin-top:3px}
