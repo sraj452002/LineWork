@@ -658,7 +658,7 @@ function NodePanel({ node, flow, change, creds, tab, setTab, result, active, onC
           {d.hook && (
             <div className="fv-f"><span>{d.hook}</span>
               <div className="fv-row"><input readOnly value={hookUrl} onFocus={e => e.target.select()} /><button type="button" className="btn" onClick={() => { navigator.clipboard?.writeText(hookUrl); }}>Copy</button>
-                {(node.type === 'trigger.form' || node.type === 'trigger.page') && <a className="btn" href={hookUrl} target="_blank" rel="noreferrer">Open</a>}</div>
+                {(node.type === 'trigger.form' || node.type === 'trigger.page' || node.type === 'trigger.chat') && <a className="btn" href={hookUrl} target="_blank" rel="noreferrer">Open</a>}</div>
               {node.type === 'trigger.page' && onPreview && <button type="button" className="btn fv-preview" onClick={onPreview}>Preview page</button>}
               <small className={active ? 'ok' : 'muted'}>{active ? 'Listening. ' : 'Turn the workflow Active (and let it save) to listen. '}{d.hookHelp}</small>
             </div>
