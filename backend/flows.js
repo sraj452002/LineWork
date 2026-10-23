@@ -73,6 +73,9 @@ export const CRED_FIELDS = {
   imap: ['host', 'port', 'user', 'password', 'secure'],
   redis: ['url'],
   coderunner: ['service', 'url', 'apiKey'],
+  razorpay: ['keyId', 'keySecret'],
+  woocommerce: ['url', 'consumerKey', 'consumerSecret'],
+  youtube: ['apiKey'],
 };
 const KEEP_RUNS = 20, SAMPLE = 20, MAX_DETAIL = 1_000_000, RUNNING_PER_USER = 5;
 const UNIT = { minutes: 60_000, hours: 3_600_000, days: 86_400_000 };

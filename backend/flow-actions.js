@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { FlowError } from './flow-engine.js';
 import { googleToken } from './flow-apps.js';
-import { api, cred, each, failIfBad, need, obj } from './flow-util.js';
+import { api, cred, each, failIfBad, need, obj, request } from './flow-util.js';
 
 /* One-job nodes for other apps (“GitHub: Comment on an issue”, “Stripe: Refund a payment”…), each
    using the same credentials as that app's main node, and free public data that needs no key
@@ -46,6 +46,12 @@ const SVC = {
   supabase: { name: 'Supabase', group: 'Storage & feeds', logo: 'supabase', tone: 'green', cred: 'supabase' },
   openai: { name: 'OpenAI', group: 'AI', icon: 'ai', tone: 'violet', cred: 'openai' },
   bitly: { name: 'Bitly', group: 'Data', logo: 'bitly', tone: 'orange', cred: 'bitly' },
+  razorpay: { name: 'Razorpay', group: 'Sales & payments', icon: 'pay', tone: 'blue', cred: 'razorpay' },
+  woocommerce: { name: 'WooCommerce', group: 'Sales & payments', icon: 'pay', tone: 'violet', cred: 'woocommerce' },
+  gdrive: { name: 'Google Drive', group: 'Storage & feeds', icon: 'copy', tone: 'blue', cred: 'google' },
+  youtube: { name: 'YouTube', group: 'Storage & feeds', icon: 'play', tone: 'pink', cred: 'youtube' },
+  reddit: { name: 'Reddit', group: 'Storage & feeds', icon: 'chat', tone: 'orange' },
+  discordbot: { name: 'Discord', group: 'Communication', logo: 'discord', tone: 'indigo' },
   pub: { name: '', group: 'Public data', icon: 'globe', tone: 'teal' },
 };
 export const ACTION_GROUPS = ['Public data'];
@@ -425,3 +431,110 @@ A('pub', 'apod', 'NASA picture of the day', 'NASA’s Astronomy Picture of the D
 A('pub', 'joke', 'A joke', 'A random clean joke (setup and punchline)', [], a => get(a, 'https://official-joke-api.appspot.com/random_joke', 'Joke API').then(b => ({ setup: b.setup, punchline: b.punchline, type: b.type })), { icon: 'chat' });
 A('pub', 'advice', 'A piece of advice', 'A random short piece of advice', [], a => get(a, 'https://api.adviceslip.com/advice', 'Advice Slip').then(b => (typeof b === 'string' ? JSON.parse(b) : b)).then(b => ({ advice: b.slip?.advice, id: b.slip?.id })), { icon: 'chat' });
 A('pub', 'universities', 'Find universities', 'Lists universities in a country, or by name', [F('country', 'Country', 'India'), F('name', 'Name has', '')], (a, c, p) => get(a, `http://universities.hipolabs.com/search?country=${q(p.country || '')}${p.name ? `&name=${q(p.name)}` : ''}`, 'Universities').then(l => l.slice(0, 200).map(u => ({ name: u.name, country: u.country, state: u['state-province'], website: u.web_pages?.[0], domain: u.domains?.[0] }))), { list: true, icon: 'text' });
+
+/* ================= Razorpay ================= */
+// Key id and secret (Dashboard → Account & Settings → API keys); amounts are written in rupees, sent in paise.
+const rz = async (args, c, path, body, method) => failIfBad(await api(args, `https://api.razorpay.com/v1${path}`, { method: method || (body ? 'POST' : 'GET'), basic: `${need(c.keyId, 'the key id')}:${need(c.keySecret, 'the key secret')}`, ...(body ? { body } : {}) }), 'Razorpay');
+const paise = v => Number(cents(v));
+const RZ_AMOUNT = F('amount', 'Amount (₹)', '499');
+A('razorpay', 'paymentLink', 'Create a payment link', 'Makes a link to pay an amount, sent to the customer by SMS or email if you like', [RZ_AMOUNT, F('description', 'For', 'Order #{{ $json.id }}'), F('name', 'Customer name', '{{ $json.name }}'), F('email', 'Customer email', '{{ $json.email }}'), F('contact', 'Customer phone', '+919999999999'), SEL('notify', 'Send it to them', [['', 'No'], ['sms', 'By SMS'], ['email', 'By email'], ['both', 'By SMS and email']], '')],
+  (a, c, p) => rz(a, c, '/payment_links', { amount: paise(need(p.amount, 'the amount')), currency: 'INR', description: p.description || undefined, customer: { name: p.name || undefined, email: p.email || undefined, contact: p.contact || undefined }, notify: { sms: p.notify === 'sms' || p.notify === 'both', email: p.notify === 'email' || p.notify === 'both' } })
+    .then(b => ({ id: b.id, url: b.short_url, amount: b.amount / 100, status: b.status })), { ex: 'Amount 499 · For “Order #1001” · Send it By SMS → { id, url: "https://rzp.io/i/…", amount: 499, status: "created" }' });
+A('razorpay', 'order', 'Create an order', 'Makes an order to take a payment against (for checkout on your site)', [RZ_AMOUNT, F('receipt', 'Receipt', 'order_{{ $json.id }}'), TA('notes', 'Notes (JSON, optional)', '{"plan": "pro"}')],
+  (a, c, p) => rz(a, c, '/orders', { amount: paise(need(p.amount, 'the amount')), currency: 'INR', receipt: p.receipt || undefined, notes: p.notes ? obj(p.notes, 'Notes') : undefined }).then(b => ({ id: b.id, amount: b.amount / 100, currency: b.currency, receipt: b.receipt, status: b.status })));
+A('razorpay', 'payment', 'Get a payment', 'Reads one payment: amount, status, method and who paid', [F('paymentId', 'Payment id', '{{ $json.id }}')],
+  (a, c, p) => rz(a, c, `/payments/${q(need(p.paymentId, 'the payment id'))}`).then(x => ({ id: x.id, amount: x.amount / 100, currency: x.currency, status: x.status, method: x.method, email: x.email, contact: x.contact, orderId: x.order_id, captured: x.captured, createdAt: new Date(x.created_at * 1000).toISOString() })));
+A('razorpay', 'payments', 'List payments', 'Lists the latest payments', [LIMIT],
+  (a, c, p) => rz(a, c, `/payments?count=${lim(p)}`).then(b => (b.items || []).map(x => ({ id: x.id, amount: x.amount / 100, currency: x.currency, status: x.status, method: x.method, email: x.email, contact: x.contact, createdAt: new Date(x.created_at * 1000).toISOString() }))), { list: true });
+A('razorpay', 'refund', 'Refund a payment', 'Gives money back: all of it, or an amount', [F('paymentId', 'Payment id', '{{ $json.id }}'), F('amount', 'Amount (₹, blank: all)', '')],
+  (a, c, p) => rz(a, c, `/payments/${q(need(p.paymentId, 'the payment id'))}/refund`, p.amount ? { amount: paise(p.amount) } : {}).then(b => ({ id: b.id, paymentId: b.payment_id, amount: b.amount / 100, status: b.status })));
+
+/* ================= WooCommerce ================= */
+// The store's address and a REST API key (WooCommerce → Settings → Advanced → REST API), over https.
+const wc = async (args, c, path, body, method) => {
+  const site = strip(need(c.url, 'the store address')).replace(/^(?!https?:\/\/)/, 'https://');
+  return failIfBad(await api(args, `${site}/wp-json/wc/v3${path}`, { method: method || (body ? 'POST' : 'GET'), basic: `${need(c.consumerKey, 'the consumer key')}:${need(c.consumerSecret, 'the consumer secret')}`, ...(body ? { body } : {}) }), 'WooCommerce');
+};
+const wcOrder = o => ({ id: o.id, number: o.number, status: o.status, total: o.total, currency: o.currency, name: [o.billing?.first_name, o.billing?.last_name].filter(Boolean).join(' '), email: o.billing?.email, phone: o.billing?.phone, items: (o.line_items || []).map(i => ({ name: i.name, quantity: i.quantity, total: i.total })), createdAt: o.date_created });
+const WC_STATUS = [['any', 'Any'], ['pending', 'Pending payment'], ['processing', 'Processing'], ['on-hold', 'On hold'], ['completed', 'Completed'], ['cancelled', 'Cancelled'], ['refunded', 'Refunded']];
+A('woocommerce', 'orders', 'List orders', 'Lists the latest orders, of a status if you choose', [SEL('status', 'Status', WC_STATUS, 'any'), LIMIT],
+  (a, c, p) => wc(a, c, `/orders?per_page=${lim(p)}${p.status && p.status !== 'any' ? `&status=${q(p.status)}` : ''}`).then(l => l.map(wcOrder)), { list: true });
+A('woocommerce', 'order', 'Get an order', 'Reads one order: who, what and how much', [F('orderId', 'Order id', '{{ $json.id }}')], (a, c, p) => wc(a, c, `/orders/${q(need(p.orderId, 'the order id'))}`).then(wcOrder));
+A('woocommerce', 'updateOrder', 'Update an order', 'Changes an order’s status, and adds a note (sent to the customer if you like)', [F('orderId', 'Order id', '{{ $json.id }}'), SEL('status', 'New status', [['', 'Keep it'], ...WC_STATUS.slice(1)], ''), TA('note', 'Note (optional)', 'Your order has shipped!'), SEL('toCustomer', 'Note goes to', [['false', 'Only the shop'], ['true', 'The customer too']])],
+  async (a, c, p) => {
+    const id = need(p.orderId, 'the order id');
+    const o = p.status ? await wc(a, c, `/orders/${q(id)}`, { status: p.status }, 'PUT') : await wc(a, c, `/orders/${q(id)}`);
+    if (p.note) await wc(a, c, `/orders/${q(id)}/notes`, { note: p.note, customer_note: p.toCustomer === 'true' });
+    return { ...wcOrder(o), noted: !!p.note };
+  });
+A('woocommerce', 'products', 'List products', 'Lists or searches the store’s products', [F('search', 'Search (optional)', 'shirt'), LIMIT],
+  (a, c, p) => wc(a, c, `/products?per_page=${lim(p)}${p.search ? `&search=${q(p.search)}` : ''}`).then(l => l.map(x => ({ id: x.id, name: x.name, sku: x.sku, price: x.price, regularPrice: x.regular_price, salePrice: x.sale_price, stock: x.stock_quantity, inStock: x.stock_status === 'instock', url: x.permalink }))), { list: true });
+A('woocommerce', 'updateProduct', 'Update a product', 'Sets a product’s price, sale price or stock', [F('productId', 'Product id', '{{ $json.id }}'), F('price', 'Price (blank: keep)', '999'), F('salePrice', 'Sale price (blank: keep)', ''), F('stock', 'Stock (blank: keep)', '25')],
+  (a, c, p) => wc(a, c, `/products/${q(need(p.productId, 'the product id'))}`, { ...(p.price !== '' && p.price != null ? { regular_price: String(p.price) } : {}), ...(p.salePrice !== '' && p.salePrice != null ? { sale_price: String(p.salePrice) } : {}), ...(p.stock !== '' && p.stock != null ? { manage_stock: true, stock_quantity: Number(p.stock) } : {}) }, 'PUT')
+    .then(x => ({ id: x.id, name: x.name, price: x.price, regularPrice: x.regular_price, salePrice: x.sale_price, stock: x.stock_quantity })));
+
+/* ================= Google Drive (a service account; share the folder with its email) ================= */
+const gd = async (args, c, path, init = {}, scope = 'https://www.googleapis.com/auth/drive') => { const token = await googleToken(args, c, scope); const r = await api(args, `https://www.googleapis.com${path}`, { ...init, bearer: token }); return r.status === 204 ? { ok: true } : failIfBad(r, 'Google Drive'); };
+const driveId = v => String(v || '').replace(/^.*\/(folders|d)\//, '').replace(/[/?#].*$/, '').trim();
+const FOLDER = F('folderId', 'Folder (id or link)', 'https://drive.google.com/drive/folders/1AbC…');
+const FILEID = F('fileId', 'File (id or link)', '{{ $json.id }}');
+const ALLD = 'supportsAllDrives=true';
+const gdFile = f => ({ id: f.id, name: f.name, mimeType: f.mimeType, size: f.size ? Number(f.size) : null, link: f.webViewLink || null, modifiedTime: f.modifiedTime || null });
+A('gdrive', 'list', 'List a folder', 'Lists the files in a Drive folder, newest first', [FOLDER, F('search', 'Name has (optional)', 'invoice'), LIMIT],
+  (a, c, p) => { const qq = `'${driveId(need(p.folderId, 'the folder'))}' in parents and trashed = false${p.search ? ` and name contains '${String(p.search).replace(/'/g, "\\'")}'` : ''}`; return gd(a, c, `/drive/v3/files?q=${q(qq)}&orderBy=modifiedTime desc&pageSize=${lim(p, 20, 1000)}&${ALLD}&includeItemsFromAllDrives=true&fields=${q('files(id,name,mimeType,size,webViewLink,modifiedTime)')}`).then(b => (b.files || []).map(gdFile)); }, { list: true });
+A('gdrive', 'upload', 'Save a text file', 'Saves text (CSV, JSON, Markdown…) as a file in a Drive folder; a Google Doc or Sheet if you choose', [FOLDER, F('name', 'File name', 'report-{{ $now.slice(0, 10) }}.csv'), TA('content', 'Content', '{{ $json.csv }}'), SEL('as', 'Save as', [['', 'The file as it is'], ['doc', 'A Google Doc'], ['sheet', 'A Google Sheet (from CSV)']], '')],
+  async (a, c, p) => {
+    const name = String(need(p.name, 'the file name')), type = /\.csv$/i.test(name) ? 'text/csv' : /\.json$/i.test(name) ? 'application/json' : /\.html?$/i.test(name) ? 'text/html' : /\.md$/i.test(name) ? 'text/markdown' : 'text/plain';
+    const meta = { name: p.as ? name.replace(/\.\w+$/, '') : name, parents: [driveId(need(p.folderId, 'the folder'))], ...(p.as === 'doc' ? { mimeType: 'application/vnd.google-apps.document' } : p.as === 'sheet' ? { mimeType: 'application/vnd.google-apps.spreadsheet' } : {}) };
+    const boundary = `wl${Date.now().toString(36)}`, content = typeof p.content === 'string' ? p.content : JSON.stringify(p.content ?? '', null, 2);
+    const body = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${boundary}\r\nContent-Type: ${p.as === 'sheet' ? 'text/csv' : type}; charset=UTF-8\r\n\r\n${content}\r\n--${boundary}--`;
+    const token = await googleToken(a, c, 'https://www.googleapis.com/auth/drive');
+    const r = await request(`https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&${ALLD}&fields=${q('id,name,mimeType,size,webViewLink,modifiedTime')}`, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': `multipart/related; boundary=${boundary}` }, body }, { allowPrivate: a.ctx.allowPrivate });
+    return gdFile(failIfBad(r, 'Google Drive'));
+  });
+A('gdrive', 'read', 'Read a file', 'Reads a file’s text: a Google Doc as text, a Sheet as CSV, or a text file as it is', [FILEID],
+  async (a, c, p) => {
+    const id = driveId(need(p.fileId, 'the file')), f = await gd(a, c, `/drive/v3/files/${q(id)}?${ALLD}&fields=${q('id,name,mimeType,size,webViewLink,modifiedTime')}`);
+    const exp = { 'application/vnd.google-apps.document': 'text/plain', 'application/vnd.google-apps.spreadsheet': 'text/csv', 'application/vnd.google-apps.presentation': 'text/plain' }[f.mimeType];
+    if (!exp && !/^(text\/|application\/(json|xml|csv))/.test(f.mimeType)) throw new FlowError(`“${f.name}” is a ${f.mimeType} file, not text.`, 'bad_param');
+    const token = await googleToken(a, c, 'https://www.googleapis.com/auth/drive');
+    const r = await request(`https://www.googleapis.com/drive/v3/files/${q(id)}${exp ? `/export?mimeType=${q(exp)}` : `?alt=media&${ALLD}`}`, { headers: { authorization: `Bearer ${token}` } }, { allowPrivate: a.ctx.allowPrivate });
+    const text = failIfBad(r, 'Google Drive');
+    return { ...gdFile(f), text: (typeof text === 'string' ? text : JSON.stringify(text)).slice(0, 2_000_000) };
+  });
+A('gdrive', 'share', 'Share a file', 'Gives someone access to a file or folder (they get an email)', [FILEID, F('email', 'Their email', '{{ $json.email }}'), SEL('role', 'They can', [['reader', 'View'], ['commenter', 'Comment'], ['writer', 'Edit']])],
+  (a, c, p) => gd(a, c, `/drive/v3/files/${q(driveId(need(p.fileId, 'the file')))}/permissions?${ALLD}`, { method: 'POST', body: { type: 'user', role: p.role || 'reader', emailAddress: need(p.email, 'the email') } }).then(b => ({ fileId: driveId(p.fileId), email: p.email, role: b.role, permissionId: b.id })));
+A('gdrive', 'folder', 'Make a folder', 'Makes a folder inside another', [F('parentId', 'Inside (folder id or link)', 'https://drive.google.com/drive/folders/1AbC…'), F('name', 'Name', 'Invoices {{ $now.slice(0, 7) }}')],
+  (a, c, p) => gd(a, c, `/drive/v3/files?${ALLD}&fields=${q('id,name,mimeType,webViewLink')}`, { method: 'POST', body: { name: need(p.name, 'the name'), mimeType: 'application/vnd.google-apps.folder', parents: [driveId(need(p.parentId, 'the folder'))] } }).then(gdFile));
+A('gdrive', 'delete', 'Move to trash', 'Moves a file or folder to the trash', [FILEID],
+  (a, c, p) => gd(a, c, `/drive/v3/files/${q(driveId(need(p.fileId, 'the file')))}?${ALLD}`, { method: 'PATCH', body: { trashed: true } }).then(() => ({ id: driveId(p.fileId), trashed: true })));
+
+/* ================= YouTube (an API key: Google Cloud → YouTube Data API v3) ================= */
+const yt = async (args, c, path) => failIfBad(await api(args, `https://www.googleapis.com/youtube/v3${path}${path.includes('?') ? '&' : '?'}key=${q(need(c.apiKey, 'the API key'))}`), 'YouTube');
+const vidId = v => (/(?:v=|youtu\.be\/|shorts\/|embed\/)([\w-]{11})/.exec(String(v)) || [])[1] || String(v || '').trim();
+const ytVideo = v => ({ id: v.id?.videoId || v.id, title: v.snippet?.title, channel: v.snippet?.channelTitle, channelId: v.snippet?.channelId, published: v.snippet?.publishedAt, description: v.snippet?.description, thumbnail: v.snippet?.thumbnails?.high?.url || v.snippet?.thumbnails?.default?.url, link: `https://www.youtube.com/watch?v=${v.id?.videoId || v.id}`,
+  ...(v.statistics ? { views: Number(v.statistics.viewCount || 0), likes: Number(v.statistics.likeCount || 0), comments: Number(v.statistics.commentCount || 0) } : {}), ...(v.contentDetails ? { duration: v.contentDetails.duration } : {}) });
+A('youtube', 'search', 'Search videos', 'Finds videos by words, newest or most relevant first', [F('query', 'Search', 'n8n tutorial'), SEL('order', 'Order', [['relevance', 'Most relevant'], ['date', 'Newest'], ['viewCount', 'Most viewed']]), LIMIT],
+  (a, c, p) => yt(a, c, `/search?part=snippet&type=video&maxResults=${lim(p, 10, 50)}&order=${q(p.order || 'relevance')}&q=${q(need(p.query, 'the search'))}`).then(b => (b.items || []).map(ytVideo)), { list: true });
+A('youtube', 'video', 'Video details', 'A video’s title, views, likes, comments and length', [F('video', 'Video (link or id)', 'https://youtu.be/dQw4w9WgXcQ')],
+  (a, c, p) => yt(a, c, `/videos?part=snippet,statistics,contentDetails&id=${q(vidId(need(p.video, 'the video')))}`).then(b => { if (!b.items?.length) throw new FlowError('No video has that link or id.', 'not_found'); return ytVideo(b.items[0]); }));
+A('youtube', 'channel', 'Channel details', 'A channel’s name, subscribers, views and number of videos', [F('channel', 'Channel (id UC…, or @handle)', '@mkbhd')],
+  (a, c, p) => { const ch = String(need(p.channel, 'the channel')).trim().replace(/^.*youtube\.com\//, '').replace(/^channel\//, ''); return yt(a, c, `/channels?part=snippet,statistics&${ch.startsWith('@') ? `forHandle=${q(ch)}` : `id=${q(ch)}`}`).then(b => { const x = b.items?.[0]; if (!x) throw new FlowError('No channel has that id or handle.', 'not_found'); return { id: x.id, name: x.snippet?.title, handle: x.snippet?.customUrl, description: x.snippet?.description, subscribers: Number(x.statistics?.subscriberCount || 0), views: Number(x.statistics?.viewCount || 0), videos: Number(x.statistics?.videoCount || 0), thumbnail: x.snippet?.thumbnails?.high?.url, link: `https://www.youtube.com/channel/${x.id}` }; }); });
+A('youtube', 'comments', 'Video comments', 'The top comments on a video', [F('video', 'Video (link or id)', '{{ $json.link }}'), LIMIT],
+  (a, c, p) => yt(a, c, `/commentThreads?part=snippet&order=relevance&maxResults=${lim(p, 20, 100)}&videoId=${q(vidId(need(p.video, 'the video')))}`).then(b => (b.items || []).map(t => { const s = t.snippet?.topLevelComment?.snippet || {}; return { author: s.authorDisplayName, text: s.textOriginal, likes: s.likeCount, replies: t.snippet?.totalReplyCount, published: s.publishedAt }; })), { list: true });
+
+/* ================= Reddit (public, no key) ================= */
+const rd = async (args, path) => failIfBad(await api(args, `https://www.reddit.com${path}${path.includes('?') ? '&' : '?'}raw_json=1`, { headers: { 'user-agent': 'WorkLine/1.0 (workflow node)' } }), 'Reddit');
+const sub = v => String(need(v, 'the subreddit')).replace(/^.*\/r\//, '').replace(/^r\//, '').replace(/[/?#].*$/, '').trim();
+const rdPost = x => ({ id: x.id, title: x.title, author: x.author, subreddit: x.subreddit, text: (x.selftext || '').slice(0, 10_000), url: x.url, permalink: `https://www.reddit.com${x.permalink}`, score: x.score, comments: x.num_comments, flair: x.link_flair_text || null, created: new Date(x.created_utc * 1000).toISOString() });
+A('reddit', 'posts', 'Subreddit posts', 'The hot, new or top posts of a subreddit', [F('subreddit', 'Subreddit', 'india'), SEL('sort', 'Sort', [['hot', 'Hot'], ['new', 'New'], ['top', 'Top today'], ['topweek', 'Top this week']]), LIMIT],
+  (a, c, p) => { const s = p.sort || 'hot', path = s.startsWith('top') ? `top.json?t=${s === 'topweek' ? 'week' : 'day'}&` : `${s}.json?`; return rd(a, `/r/${q(sub(p.subreddit))}/${path}limit=${lim(p, 25, 100)}`).then(b => (b.data?.children || []).map(ch => rdPost(ch.data))); }, { list: true });
+A('reddit', 'search', 'Search posts', 'Finds posts by words, in one subreddit or everywhere', [F('query', 'Search', 'workflow automation'), F('subreddit', 'Subreddit (blank: all)', ''), SEL('sort', 'Sort', [['relevance', 'Most relevant'], ['new', 'Newest'], ['top', 'Top']]), LIMIT],
+  (a, c, p) => rd(a, `${p.subreddit ? `/r/${q(sub(p.subreddit))}` : ''}/search.json?q=${q(need(p.query, 'the search'))}&sort=${q(p.sort || 'relevance')}&limit=${lim(p, 25, 100)}${p.subreddit ? '&restrict_sr=1' : ''}`).then(b => (b.data?.children || []).map(ch => rdPost(ch.data))), { list: true });
+A('reddit', 'comments', 'Post comments', 'The top comments on a post', [F('post', 'Post (link or id)', '{{ $json.permalink }}'), LIMIT],
+  (a, c, p) => { const id = (/comments\/(\w+)/.exec(String(need(p.post, 'the post'))) || [])[1] || String(p.post).trim(); return rd(a, `/comments/${q(id)}.json?limit=${lim(p, 20, 100)}&sort=top`).then(b => (b[1]?.data?.children || []).filter(ch => ch.kind === 't1').slice(0, lim(p, 20, 100)).map(ch => ({ author: ch.data.author, text: ch.data.body, score: ch.data.score, created: new Date(ch.data.created_utc * 1000).toISOString() }))); }, { list: true });
+
+/* ================= Discord: answer a slash command (from the Discord command trigger) ================= */
+A('discordbot', 'reply', 'Reply to a command', 'Posts the answer to a slash command (after the Discord command trigger), up to 15 minutes later; no credential needed', [F('applicationId', 'Application id', '{{ $node["Discord command"].json.applicationId }}'), F('token', 'Interaction token', '{{ $node["Discord command"].json.interactionToken }}'), TA('content', 'Message', '{{ $json.answer }}'), SEL('private', 'Who sees it', [['false', 'Everyone in the channel'], ['true', 'Only the person who asked']])],
+  (a, c, p) => api(a, `https://discord.com/api/v10/webhooks/${q(need(p.applicationId, 'the application id'))}/${q(need(p.token, 'the interaction token'))}`, { method: 'POST', body: { content: String(need(p.content, 'the message')).slice(0, 2000), ...(p.private === 'true' ? { flags: 64 } : {}) } }).then(r => { const b = failIfBad(r, 'Discord'); return { id: b.id, channelId: b.channel_id, sent: true }; }),
+  { ex: 'Discord command (/ask) → AI Agent → Discord: Reply to a command with {{ $json.answer }}' });

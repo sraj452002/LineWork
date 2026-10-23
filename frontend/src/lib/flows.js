@@ -665,6 +665,9 @@ export const CRED_TYPES = {
   pipedrive: { label: 'Pipedrive', help: 'Personal preferences → API.', fields: [key('apiToken', 'API token'), plain('domain', 'Company domain (optional)', 'your-company.pipedrive.com')] },
   stripe: { label: 'Stripe', help: 'Developers → API keys → secret key (a restricted key works too).', fields: [key('secretKey', 'Secret key')] },
   shopify: { label: 'Shopify', help: 'Settings → Apps → Develop apps → Admin API access token.', fields: [plain('shop', 'Shop', 'your-shop.myshopify.com'), key('token', 'Admin API token')] },
+  razorpay: { label: 'Razorpay', help: 'Dashboard → Account & Settings → API keys → Generate key: the key id and secret.', fields: [plain('keyId', 'Key id', 'rzp_live_…'), key('keySecret', 'Key secret')] },
+  woocommerce: { label: 'WooCommerce', help: 'WooCommerce → Settings → Advanced → REST API → Add key (Read/Write).', fields: [plain('url', 'Store address', 'https://myshop.com'), plain('consumerKey', 'Consumer key', 'ck_…'), key('consumerSecret', 'Consumer secret')] },
+  youtube: { label: 'YouTube', help: 'Google Cloud → APIs & Services → enable YouTube Data API v3 → Credentials → API key.', fields: [key('apiKey', 'API key')] },
   openai: { label: 'OpenAI', help: 'platform.openai.com → API keys. Any OpenAI-style API works with its base URL.', fields: [key('apiKey', 'API key'), plain('baseUrl', 'Base URL (optional)', 'https://api.openai.com/v1')] },
   gemini: { label: 'Gemini', help: 'aistudio.google.com → Get API key.', fields: [key('apiKey', 'API key')] },
   database: { label: 'Database', help: 'A connection string, as in the Database view.', fields: [
