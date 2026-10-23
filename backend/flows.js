@@ -5,6 +5,7 @@ import { NODE_TYPES } from './flow-nodes.js';
 import { APP_NODES } from './flow-apps.js';
 import { WORKLINE_NODES } from './flow-workline.js';
 import { POLL_EVERY, TRIGGER_TYPES } from './flow-triggers.js';
+import { MORE_TRIGGERS, cronDue, parseCron } from './flow-more-triggers.js';
 import { WEB_NODES } from './flow-web.js';
 import { EXTRA_NODES } from './flow-extra.js';
 import { UI_NODES, renderPage, codeBlock } from './flow-ui.js';
@@ -12,7 +13,7 @@ import { installRoutes } from './app-install.js';
 import { TOOL_NODES } from './flow-tools.js';
 import { ACTION_NODES } from './flow-actions.js';
 
-const TYPES = { ...NODE_TYPES, ...APP_NODES, ...WORKLINE_NODES, ...TRIGGER_TYPES, ...WEB_NODES, ...EXTRA_NODES, ...UI_NODES, ...TOOL_NODES, ...ACTION_NODES };
+const TYPES = { ...NODE_TYPES, ...APP_NODES, ...WORKLINE_NODES, ...TRIGGER_TYPES, ...MORE_TRIGGERS, ...WEB_NODES, ...EXTRA_NODES, ...UI_NODES, ...TOOL_NODES, ...ACTION_NODES };
 import { DUMMY, checkPassword, hashPassword, limiter, newToken, tokenHash } from './auth.js';
 
 /* Workflows on the server: credentials, runs, webhooks and schedules. A workflow lives in a file
@@ -130,6 +131,8 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
     // The account's own files, for the Workline nodes. A save is like the app's: versions, storage, triggers.
     files: {
       async read(id) { const t = await store.readFile(uid, String(id)); return t ? JSON.parse(t) : null; },
+      // Every file's id and when it last changed (without reading them), newest first.
+      index: async () => Object.entries(m.files?.[uid] || {}).map(([id, f]) => ({ id, updated: f.updated, size: f.size })).sort((a, b) => b.updated - a.updated),
       async save(file) {
         file.updated = Date.now();
         const text = JSON.stringify(file);
@@ -145,7 +148,7 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
       if (depth >= 3) throw new FlowError('Workflows can call each other only 3 deep.', 'too_deep');
       const flow = await savedFlow(uid, String(fileId));
       if (!flow) throw new FlowError('That workflow file wasn’t found (save it first).', 'not_found');
-      const start = flow.nodes.find(n => n.type === 'trigger.manual') || flow.nodes.find(n => String(n.type).startsWith('trigger.'));
+      const start = flow.nodes.find(n => n.type === 'trigger.workflow') || flow.nodes.find(n => n.type === 'trigger.manual') || flow.nodes.find(n => String(n.type).startsWith('trigger.'));
       if (!start) throw new FlowError('That workflow has no trigger to start from.', 'no_start');
       const r = await runFlow(flow, { startId: start.id, input, types: TYPES, ctx: ctxFor(uid, depth + 1) });
       if (r.status !== 'success') throw new FlowError(`The other workflow failed: ${r.error}`, 'subflow');
@@ -302,19 +305,20 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
       if (TYPES[n.type]?.poll) {
         const k = `${uid}:${fileId}:${n.id}`, was = before[k];
         // The same thing watched keeps what was seen; something else starts afresh.
-        const what = JSON.stringify([n.type, p.url, p.fileId, p.sheet, p.table, p.column, p.mailbox, p.calendarId, n.credential]);
+        const what = JSON.stringify([n.type, p.url, p.fileId, p.sheet, p.table, p.column, p.mailbox, p.calendarId, p.folderId, p.channel, p.subreddit, p.repo, n.credential]);
         m.polls[k] = { uid, fileId, nodeId: n.id, type: n.type, every: POLL_EVERY(p), last: was?.what === what ? was.last : 0, what, state: was?.what === what ? was.state : {}, error: null };
       }
       if (n.type === 'trigger.error') m.errorTriggers[`${uid}:${fileId}:${n.id}`] = { uid, fileId, nodeId: n.id, only: p.fileId ? String(p.fileId) : '' };
       if (n.type === 'trigger.schedule') {
         const k = `${uid}:${fileId}:${n.id}`;
-        m.schedules[k] = { uid, fileId, nodeId: n.id, mode: p.mode === 'daily' ? 'daily' : 'interval', every: Math.max(1, Number(p.every) || 15), unit: UNIT[p.unit] ? p.unit : 'minutes', at: /^\d\d:\d\d$/.test(p.at || '') ? p.at : '09:00', last: before[k]?.last || Date.now() };
+        m.schedules[k] = { uid, fileId, nodeId: n.id, mode: p.mode === 'daily' ? 'daily' : p.mode === 'cron' && parseCron(p.cron) ? 'cron' : 'interval', cron: String(p.cron || ''), every: Math.max(1, Number(p.every) || 15), unit: UNIT[p.unit] ? p.unit : 'minutes', at: /^\d\d:\d\d$/.test(p.at || '') ? p.at : '09:00', last: before[k]?.last || Date.now() };
       }
     }
     store.touch();
   };
   const due = (s, now) => {
     if (s.mode === 'interval') return now - s.last >= s.every * UNIT[s.unit];
+    if (s.mode === 'cron') return cronDue(s.cron, s.last, now);
     const d = new Date(now), [h, mi] = s.at.split(':').map(Number);
     const at = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), h, mi);
     return now >= at && s.last < at;
@@ -533,12 +537,14 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
     if (!flow || !flow.active) return notLive(req, res);
     const node = flow.nodes.find(n => n.id === h.nodeId), type = node && TYPES[node.type];
     if (type?.page) return servePage(req, res, h, flow, node);
-    const reply = r => (r.type === 'html' ? res.status(r.status).type('html').send(r.body) : res.status(r.status).json(r.body));
+    const reply = r => (r.type === 'html' || r.type === 'text' ? res.status(r.status).type(r.type).send(String(r.body)) : res.status(r.status).json(r.body));
     try {
       if (type?.hook) {
         const got = type.hook(req, node.params || {});
         if (got.error) return res.status(got.status).json({ error: got.error, message: got.message });
-        if (got.items) start(h.uid, h.fileId, flow, h.nodeId, got.items, node.type.replace('trigger.', ''));
+        const run = got.items ? start(h.uid, h.fileId, flow, h.nodeId, got.items, node.type.replace('trigger.', '')) : null;
+        // A chat waits for the workflow's answer: a Respond node's, or its last step's text.
+        if (got.chat && run) return res.json({ reply: await chatReply(run, flow) });
         return got.respond ? reply(got.respond) : res.status(202).json({ ok: true });
       }
       const headers = Object.fromEntries(Object.entries(req.headers).filter(([k]) => !/^(cookie|authorization|x-forwarded-|x-real-ip|cf-)/i.test(k)));
@@ -558,6 +564,17 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
     } catch (e) { res.status(e.code === 'busy' ? 429 : 500).json({ error: e.code || 'flow_error', message: e.message }); }
   };
   hooks.all('/:token', (req, res) => handleHook(req, res, req.params.token));
+  // What a chat shows for a run: the Respond node's body, or the last step's reply/answer/text field (up to 60 s).
+  const chatReply = async (run, flow) => {
+    const answer = await Promise.race([run.reply, new Promise(r => setTimeout(() => r('late'), 60_000))]);
+    if (answer === 'late') return 'Still working on it… ask again in a moment.';
+    const textOf = v => (v == null ? '' : typeof v === 'string' ? v : typeof v === 'object' ? String(v.reply ?? v.answer ?? v.text ?? v.output ?? v.message ?? v.content ?? JSON.stringify(v)) : String(v));
+    if (answer) return textOf(answer.body).slice(0, 20_000);
+    if (run.status === 'error') return `Something went wrong: ${run.error}`;
+    const ends = flow.nodes.filter(n => run.nodes[n.id]?.status === 'success' && !flow.edges.some(e => e.from === n.id && run.nodes[e.to]?.status === 'success'));
+    const items = ends.flatMap(n => run.nodes[n.id].output?.main || []);
+    return items.map(textOf).filter(Boolean).join('\n\n').slice(0, 20_000) || '(no answer)';
+  };
 
   /* ---- pages at a name of their own: /api/p/<name> (the site sends /p/* here) ---- */
   const pages = express.Router();

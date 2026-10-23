@@ -4,6 +4,7 @@ import { NODE_TYPES } from '../backend/flow-nodes.js';
 import { APP_NODES } from '../backend/flow-apps.js';
 import { WORKLINE_NODES } from '../backend/flow-workline.js';
 import { TRIGGER_TYPES } from '../backend/flow-triggers.js';
+import { MORE_TRIGGERS } from '../backend/flow-more-triggers.js';
 import { WEB_NODES } from '../backend/flow-web.js';
 import { EXTRA_NODES } from '../backend/flow-extra.js';
 import { UI_NODES } from '../backend/flow-ui.js';
@@ -14,7 +15,7 @@ import { CRED_TYPES, NODES } from '../frontend/src/lib/flows.js';
 
 // The workflow nodes: the app and the server agree on them, and the data nodes do what they say.
 
-const TYPES = { ...NODE_TYPES, ...APP_NODES, ...WORKLINE_NODES, ...TRIGGER_TYPES, ...WEB_NODES, ...EXTRA_NODES, ...UI_NODES, ...TOOL_NODES, ...ACTION_NODES };
+const TYPES = { ...NODE_TYPES, ...APP_NODES, ...WORKLINE_NODES, ...TRIGGER_TYPES, ...MORE_TRIGGERS, ...WEB_NODES, ...EXTRA_NODES, ...UI_NODES, ...TOOL_NODES, ...ACTION_NODES };
 
 test('every node in the app has a server side, and credentials ask for the fields the server keeps', () => {
   expect(Object.keys(NODES).length).toBeGreaterThanOrEqual(500);
