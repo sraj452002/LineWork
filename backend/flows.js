@@ -6,6 +6,7 @@ import { APP_NODES } from './flow-apps.js';
 import { WORKLINE_NODES } from './flow-workline.js';
 import { POLL_EVERY, TRIGGER_TYPES } from './flow-triggers.js';
 import { MORE_TRIGGERS, cronDue, parseCron } from './flow-more-triggers.js';
+import { EVENT_TRIGGERS } from './flow-event-triggers.js';
 import { WEB_NODES } from './flow-web.js';
 import { EXTRA_NODES } from './flow-extra.js';
 import { UI_NODES, renderPage, codeBlock } from './flow-ui.js';
@@ -13,7 +14,7 @@ import { installRoutes } from './app-install.js';
 import { TOOL_NODES } from './flow-tools.js';
 import { ACTION_NODES } from './flow-actions.js';
 
-const TYPES = { ...NODE_TYPES, ...APP_NODES, ...WORKLINE_NODES, ...TRIGGER_TYPES, ...MORE_TRIGGERS, ...WEB_NODES, ...EXTRA_NODES, ...UI_NODES, ...TOOL_NODES, ...ACTION_NODES };
+const TYPES = { ...NODE_TYPES, ...APP_NODES, ...WORKLINE_NODES, ...TRIGGER_TYPES, ...MORE_TRIGGERS, ...EVENT_TRIGGERS, ...WEB_NODES, ...EXTRA_NODES, ...UI_NODES, ...TOOL_NODES, ...ACTION_NODES };
 import { DUMMY, checkPassword, hashPassword, limiter, newToken, tokenHash } from './auth.js';
 
 /* Workflows on the server: credentials, runs, webhooks and schedules. A workflow lives in a file
@@ -76,6 +77,7 @@ export const CRED_FIELDS = {
   razorpay: ['keyId', 'keySecret'],
   woocommerce: ['url', 'consumerKey', 'consumerSecret'],
   youtube: ['apiKey'],
+  discordbot: ['botToken'],
 };
 const KEEP_RUNS = 20, SAMPLE = 20, MAX_DETAIL = 1_000_000, RUNNING_PER_USER = 5;
 const UNIT = { minutes: 60_000, hours: 3_600_000, days: 86_400_000 };
@@ -308,7 +310,7 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
       if (TYPES[n.type]?.poll) {
         const k = `${uid}:${fileId}:${n.id}`, was = before[k];
         // The same thing watched keeps what was seen; something else starts afresh.
-        const what = JSON.stringify([n.type, p.url, p.fileId, p.sheet, p.table, p.column, p.mailbox, p.calendarId, p.folderId, p.channel, p.subreddit, p.repo, n.credential]);
+        const what = JSON.stringify([n.type, p.url, p.fileId, p.sheet, p.table, p.column, p.mailbox, p.calendarId, p.folderId, p.channel, p.subreddit, p.repo, p.channelId, p.topic, n.credential]);
         m.polls[k] = { uid, fileId, nodeId: n.id, type: n.type, every: POLL_EVERY(p), last: was?.what === what ? was.last : 0, what, state: was?.what === what ? was.state : {}, error: null };
       }
       if (n.type === 'trigger.error') m.errorTriggers[`${uid}:${fileId}:${n.id}`] = { uid, fileId, nodeId: n.id, only: p.fileId ? String(p.fileId) : '' };
@@ -540,7 +542,7 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
     if (!flow || !flow.active) return notLive(req, res);
     const node = flow.nodes.find(n => n.id === h.nodeId), type = node && TYPES[node.type];
     if (type?.page) return servePage(req, res, h, flow, node);
-    const reply = r => (r.type === 'html' || r.type === 'text' ? res.status(r.status).type(r.type).send(String(r.body)) : res.status(r.status).json(r.body));
+    const reply = r => (['html', 'text', 'xml'].includes(r.type) ? res.status(r.status).type(r.type).send(String(r.body)) : res.status(r.status).json(r.body));
     try {
       if (type?.hook) {
         const got = type.hook(req, node.params || {});

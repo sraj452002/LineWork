@@ -98,6 +98,9 @@ const appHook = (type, label, note, logo, tone, events, hookHelp, icon = null, f
   fields: [...(filter ? [{ k: 'events', label: 'Only these events (blank: all)', kind: 'text', hint: events }] : []), { k: 'secret', label: 'Signing secret (recommended)', kind: 'text', secret: true }],
   defaults: () => ({ path: secretPath() }) } });
 
+// Meta's apps (Messenger, Instagram): the verify token for the URL check, and the app secret.
+const META_FIELDS = [{ k: 'verifyToken', label: 'Verify token (any words, the same as in Meta)', kind: 'text' }, { k: 'secret', label: 'App secret (recommended, checks the signature)', kind: 'text', secret: true }];
+
 // What to take from a page (Web page and Browser).
 const EXTRACT = [
   { k: 'extract', label: 'Take', kind: 'select', options: [['text', 'The text (title, description, words)'], ['links', 'Every link'], ['tables', 'Tables (one item per row)'], ['selector', 'What a CSS selector finds'], ['fields', 'Named fields (one item, or one per block)'], ['html', 'The HTML as it is']] },
@@ -190,6 +193,45 @@ export const NODES = {
     fields: [{ k: 'subreddit', label: 'Subreddit', kind: 'text', hint: 'webdev' }, { k: 'keywords', label: 'Only posts with (comma-separated, blank: all)', kind: 'text' }, EVERY], defaults: () => ({ every: 10 }) },
   'trigger.ghrelease': { group: 'Triggers', label: 'New GitHub release', note: 'Starts when a repository publishes a release', logo: 'github', icon: I.tag, tone: 'slate', trigger: true, poll: true, credential: ['github'], optionalCredential: true,
     fields: [{ k: 'repo', label: 'Repository', kind: 'text', hint: 'owner/name' }, { k: 'prereleases', label: 'Include pre-releases', kind: 'bool' }, EVERY], defaults: () => ({ prereleases: false, every: 30 }) },
+  'trigger.teams': { group: 'Triggers', label: 'Microsoft Teams message', note: 'Starts when someone @mentions your outgoing webhook in Teams', icon: I.chat, tone: 'indigo', trigger: true, hook: 'Teams callback URL',
+    hookHelp: 'In the team: ⋯ → Manage team → Apps → Create an outgoing webhook: this URL as the Callback URL; paste the security token it shows into the node.',
+    fields: [{ k: 'secret', label: 'Security token (recommended)', kind: 'text', secret: true }, { k: 'reply', label: 'Reply at once', kind: 'text', hint: 'Got it ✓' }], defaults: () => ({ path: secretPath(), reply: 'Got it ✓' }) },
+  'trigger.googlechat': { group: 'Triggers', label: 'Google Chat message', note: 'Starts when someone messages your Google Chat app', logo: 'googlechat', icon: I.chat, tone: 'green', trigger: true, hook: 'Chat app URL',
+    hookHelp: 'Google Cloud → Google Chat API → Configuration → Connection settings: HTTP endpoint URL = this URL (add ?key=<your secret> if you set one).',
+    fields: [{ k: 'events', label: 'Only these events (blank: all)', kind: 'text', hint: 'MESSAGE, ADDED_TO_SPACE' }, { k: 'secret', label: 'Secret (the ?key= in the URL, optional)', kind: 'text', secret: true }, { k: 'reply', label: 'Reply at once', kind: 'text', hint: 'Got it ✓' }, { k: 'welcome', label: 'When added to a space, say', kind: 'text' }],
+    defaults: () => ({ path: secretPath(), reply: 'Got it ✓', welcome: 'Thanks for adding me!' }) },
+  'trigger.messenger': { group: 'Triggers', label: 'Facebook Messenger message', note: 'Starts when someone messages your Facebook Page', icon: I.chat, tone: 'blue', trigger: true, hook: 'Messenger webhook URL',
+    hookHelp: 'Meta for Developers → your app → Messenger → Settings → Webhooks: this URL as the Callback URL, the same verify token; subscribe the Page to messages and messaging_postbacks.',
+    fields: META_FIELDS, defaults: () => ({ path: secretPath(), verifyToken: secretPath().slice(0, 16) }) },
+  'trigger.instagram': { group: 'Triggers', label: 'Instagram message or comment', note: 'Starts for each DM, comment or mention on your Instagram account', icon: I.image, tone: 'pink', trigger: true, hook: 'Instagram webhook URL',
+    hookHelp: 'Meta for Developers → your app → Instagram → Webhooks: this URL as the Callback URL, the same verify token; subscribe to messages, comments and mentions.',
+    fields: META_FIELDS, defaults: () => ({ path: secretPath(), verifyToken: secretPath().slice(0, 16) }) },
+  'trigger.twilio': { group: 'Triggers', label: 'SMS or WhatsApp (Twilio)', note: 'Starts when someone texts your Twilio number', icon: I.sms, tone: 'pink', trigger: true, hook: 'Twilio webhook URL',
+    hookHelp: 'Twilio Console → Phone Numbers → your number → Messaging → “A message comes in”: Webhook, this URL, HTTP POST. (WhatsApp: Messaging → Senders, the same.)',
+    fields: [{ k: 'secret', label: 'Auth token (checks the signature, optional)', kind: 'text', secret: true }, { k: 'reply', label: 'Text back at once (blank: nothing)', kind: 'text', hint: 'Thanks! We’ll reply soon.' }], defaults: () => ({ path: secretPath() }) },
+  'trigger.line': { group: 'Triggers', label: 'LINE message', note: 'Starts when someone messages your LINE Official Account', icon: I.chat, tone: 'green', trigger: true, hook: 'LINE webhook URL',
+    hookHelp: 'LINE Developers → your Messaging API channel → Webhook settings: this URL, Use webhook on; paste the Channel secret (Basic settings) into the node.',
+    fields: [{ k: 'events', label: 'Only these events (blank: all)', kind: 'text', hint: 'message, follow' }, { k: 'secret', label: 'Channel secret (recommended)', kind: 'text', secret: true }], defaults: () => ({ path: secretPath() }) },
+  ...appHook('trigger.intercom', 'Intercom', 'New conversations and replies', null, 'blue', 'conversation.user.created, conversation.user.replied', 'Developer Hub → your app → Webhooks: this URL as the endpoint, and pick the topics. The signing secret is the app’s Client secret (Basic information).', I.chat),
+  ...appHook('trigger.zendesk', 'Zendesk', 'Tickets created or updated (by a trigger)', 'zendesk', 'teal', '', 'Admin Center → Apps and integrations → Webhooks → Create webhook: this URL, POST, JSON; then a Trigger that notifies it. The signing secret is on the webhook’s page.', null, false),
+  'trigger.discordmsg': { group: 'Triggers', label: 'Discord channel message', note: 'Starts for each new message in a Discord channel', logo: 'discord', icon: I.chat, tone: 'indigo', trigger: true, poll: true, credential: ['discordbot'],
+    fields: [{ k: 'channelId', label: 'Channel id', kind: 'text', hint: 'Right-click the channel → Copy Channel ID' }, { k: 'bots', label: 'Include messages from bots', kind: 'bool' }, EVERY],
+    help: 'Uses your bot (it must be in the server and see the channel). Turn on Message Content Intent in the Developer Portal → Bot.', defaults: () => ({ bots: false, every: 1 }) },
+  ...appHook('trigger.zoom', 'Zoom', 'Meetings started or ended, recordings ready', null, 'blue', 'meeting.started, recording.completed', 'Zoom App Marketplace → Develop → your app → Features → Event subscriptions: this URL (Zoom checks it with the Secret Token, which goes in the node), and the events.', I.cal),
+  ...appHook('trigger.sentry', 'Sentry', 'New issues, errors and alerts', null, 'violet', 'issue.created, event_alert', 'Settings → Developer Settings → New internal integration: this URL as the Webhook URL, turn on Alert Rule Action and the resources; the Client Secret goes in the node.', I.alert),
+  ...appHook('trigger.pagerduty', 'PagerDuty', 'Incidents triggered, acknowledged, resolved', 'pagerduty', 'green', 'incident.triggered, incident.resolved', 'Integrations → Generic Webhooks (v3) → New webhook: this URL, the events; copy the secret it shows into the node.', I.siren),
+  ...appHook('trigger.twitch', 'Twitch', 'Going live, follows, subs, cheers', null, 'violet', 'stream.online, channel.follow', 'Create an EventSub subscription (Twitch API, transport webhook) with this URL as the callback and the same secret; Twitch checks the URL first.', I.play),
+  ...appHook('trigger.notion', 'Notion', 'Pages and databases changed, comments', 'notion', 'slate', 'page.created, comment.created', 'notion.so/profile/integrations → your integration → Webhooks: this URL. Notion sends a verification token: it shows in this workflow’s run Output; paste it here and in Notion.', null),
+  ...appHook('trigger.trello', 'Trello', 'Cards made, moved, commented', 'trello', 'blue', 'createCard, updateCard, commentCard', 'Create a webhook with Trello’s API (POST /1/webhooks: this URL as callbackURL, the board’s id as idModel). The secret is your Power-Up’s API secret (optional).', null),
+  ...appHook('trigger.clickup', 'ClickUp', 'Tasks created, updated, commented', 'clickup', 'violet', 'taskCreated, taskStatusUpdated', 'Create a webhook with ClickUp’s API (POST /team/{id}/webhook: this URL and the events); paste the secret it returns into the node.', null),
+  ...appHook('trigger.mailchimp', 'Mailchimp', 'Subscribes, unsubscribes, profile changes', 'mailchimp', 'amber', 'subscribe, unsubscribe', 'Audience → Manage audience → Settings → Webhooks → Create new webhook: this URL (add ?key=<your secret> if you set one), and the events.', null),
+  ...appHook('trigger.bitbucket', 'Bitbucket', 'Pushes, pull requests, issues', null, 'blue', 'repo:push, pullrequest:created', 'Repository settings → Webhooks → Add webhook: this URL, a secret (the same here), and the triggers.', I.code),
+  ...appHook('trigger.vercel', 'Vercel', 'Deployments created, ready, failed', null, 'slate', 'deployment.succeeded, deployment.error', 'Team Settings → Webhooks → Create: this URL and the events; copy the secret it shows into the node.', I.globe),
+  ...appHook('trigger.netlify', 'Netlify', 'Deploys started, succeeded or failed', null, 'teal', 'ready, error', 'Site configuration → Notifications → Deploy notifications → Add → HTTP POST request: this URL, an event, and a JWS secret token (the same here).', I.globe),
+  ...appHook('trigger.tally', 'Tally', 'Each new form response', null, 'slate', '', 'Your form → Integrations → Webhooks → Connect: this URL, and a signing secret (the same here).', I.form, false),
+  ...appHook('trigger.calcom', 'Cal.com', 'Bookings made, rescheduled, cancelled', null, 'slate', 'BOOKING_CREATED, BOOKING_CANCELLED', 'Settings → Developer → Webhooks → New: this URL as the Subscriber URL, the events, and a secret (the same here).', I.cal),
+  'trigger.ntfy': { group: 'Triggers', label: 'ntfy notification', note: 'Starts for each notification posted to an ntfy topic', logo: 'ntfy', icon: I.bell, tone: 'teal', trigger: true, poll: true, credential: ['ntfy'], optionalCredential: true,
+    fields: [{ k: 'topic', label: 'Topic', kind: 'text', hint: 'my-alerts' }, EVERY], help: 'Without a credential it reads ntfy.sh; a credential sets your own server and token.', defaults: () => ({ every: 1 }) },
 
   /* ---- Workline's own tools, on this account's files ---- */
   'workline.sheet': { group: 'Workline', label: 'Workline Sheet', note: 'Reads rows from a sheet, or adds each item as a row', icon: I.table, tone: 'brand',
@@ -528,6 +570,9 @@ export const SECTIONS = ['Start', 'Build', 'Advanced', 'Tools', 'Apps', 'Data so
 const APP_NAME = { 'trigger.github': 'GitHub', 'trigger.stripe': 'Stripe', 'trigger.shopify': 'Shopify', 'trigger.slack': 'Slack', 'trigger.typeform': 'Typeform', 'trigger.calendly': 'Calendly', 'trigger.telegram': 'Telegram',
   'trigger.whatsapp': 'WhatsApp', 'trigger.discord': 'Discord', 'trigger.gitlab': 'GitLab', 'trigger.jira': 'Jira', 'trigger.linear': 'Linear', 'trigger.razorpay': 'Razorpay', 'trigger.woocommerce': 'WooCommerce',
   'trigger.drive': 'Google Drive', 'trigger.youtube': 'YouTube', 'trigger.reddit': 'Reddit', 'trigger.ghrelease': 'GitHub',
+  'trigger.teams': 'Microsoft Teams', 'trigger.googlechat': 'Google Chat', 'trigger.messenger': 'Messenger', 'trigger.instagram': 'Instagram', 'trigger.twilio': 'Twilio', 'trigger.line': 'LINE', 'trigger.intercom': 'Intercom', 'trigger.zendesk': 'Zendesk',
+  'trigger.discordmsg': 'Discord', 'trigger.zoom': 'Zoom', 'trigger.sentry': 'Sentry', 'trigger.pagerduty': 'PagerDuty', 'trigger.twitch': 'Twitch', 'trigger.notion': 'Notion', 'trigger.trello': 'Trello', 'trigger.clickup': 'ClickUp',
+  'trigger.mailchimp': 'Mailchimp', 'trigger.bitbucket': 'Bitbucket', 'trigger.vercel': 'Vercel', 'trigger.netlify': 'Netlify', 'trigger.tally': 'Tally', 'trigger.calcom': 'Cal.com', 'trigger.ntfy': 'ntfy',
   openai: 'OpenAI', gemini: 'Gemini', deepl: 'DeepL', 'app.email': 'Email', twilio: 'Twilio', ntfy: 'ntfy', 'app.database': 'Database', supabase: 'Supabase', dropbox: 'Dropbox', bitly: 'Bitly' };
 const APP_GROUPS = new Set(['Communication', 'Productivity', 'Developer', 'Sales & payments']);
 const TOOL_GROUPS = new Set(MORE.groups.filter(g => g !== 'Public data'));
@@ -667,6 +712,7 @@ export const CRED_TYPES = {
   shopify: { label: 'Shopify', help: 'Settings → Apps → Develop apps → Admin API access token.', fields: [plain('shop', 'Shop', 'your-shop.myshopify.com'), key('token', 'Admin API token')] },
   razorpay: { label: 'Razorpay', help: 'Dashboard → Account & Settings → API keys → Generate key: the key id and secret.', fields: [plain('keyId', 'Key id', 'rzp_live_…'), key('keySecret', 'Key secret')] },
   woocommerce: { label: 'WooCommerce', help: 'WooCommerce → Settings → Advanced → REST API → Add key (Read/Write).', fields: [plain('url', 'Store address', 'https://myshop.com'), plain('consumerKey', 'Consumer key', 'ck_…'), key('consumerSecret', 'Consumer secret')] },
+  discordbot: { label: 'Discord bot', help: 'discord.com/developers → your app → Bot → Reset Token → copy it. Invite the bot to your server (OAuth2 → URL Generator → bot, Read Message History).', fields: [key('botToken', 'Bot token')] },
   youtube: { label: 'YouTube', help: 'Google Cloud → APIs & Services → enable YouTube Data API v3 → Credentials → API key.', fields: [key('apiKey', 'API key')] },
   openai: { label: 'OpenAI', help: 'platform.openai.com → API keys. Any OpenAI-style API works with its base URL.', fields: [key('apiKey', 'API key'), plain('baseUrl', 'Base URL (optional)', 'https://api.openai.com/v1')] },
   gemini: { label: 'Gemini', help: 'aistudio.google.com → Get API key.', fields: [key('apiKey', 'API key')] },
