@@ -126,7 +126,7 @@ export function setColumn(code, table, name, { name: to = name, type = '', meta 
   if (to !== name) out = renameRef(out, table, name, to);
   return out;
 }
-function renameRef(code, table, from, to) {
+export function renameRef(code, table, from, to) {
   const re = new RegExp(`(^|[\\s<>-])${table}\\.${from}(?=$|[\\s<>:-])`, 'g');
   let inside = false;
   return code.split('\n').map(line => {
@@ -170,4 +170,55 @@ export function moveColumn(code, table, name, dir) {
   const a = t.cols[k].i, b = t.cols[j].i;
   [lines[a], lines[b]] = [lines[b], lines[a]];
   return lines.join('\n');
+}
+
+/* ---- keeping relationships in step with code edits ----
+   When a table's or column's name is changed in the code itself, the relationship lines that name it
+   follow, so the diagram keeps its lines instead of growing an empty table under the old name.
+   `pending` (kept by the caller between keystrokes) remembers a name while its line is half-typed:
+   clearing "teams" and typing "staff" renames teams → staff once the line reads as a name again. */
+function describe(code) {
+  const out = [];
+  let table = null;
+  for (const line of code.split('\n')) {
+    const m = line.match(TABLE);
+    if (m) { table = m[2]; out.push({ k: 't', name: m[2] }); continue; }
+    if (table) {
+      if (line.trim() === '}') { table = null; out.push(null); continue; }
+      const c = line.match(/^\s*([\w-]+)(\s|$)/);
+      out.push(c && !line.trim().startsWith('#') ? { k: 'c', table, name: c[1] } : { k: '?', table });
+      continue;
+    }
+    out.push(null);
+  }
+  return out;
+}
+const declared = code => new Set(describe(code).filter(x => x && x.k === 't').map(x => x.name));
+
+export function followRenames(prev, next, pending = {}) {
+  const a = describe(prev), b = describe(next);
+  if (a.length !== b.length) { for (const k of Object.keys(pending)) delete pending[k]; return next; }
+  const tables = declared(next);
+  let out = next;
+  for (let i = 0; i < b.length; i++) {
+    const was = pending[i] || a[i], now = b[i];
+    if (!was || (was.k !== 't' && was.k !== 'c')) continue;
+    // The line no longer reads as a name (being retyped): remember what it was.
+    if (!now || now.k === '?' || (now.k !== was.k) || (was.k === 'c' && now.table !== was.table && now.table !== renamedTo(was.table, a, b))) {
+      if (now === null || now.k === '?') pending[i] = was; else delete pending[i];
+      continue;
+    }
+    delete pending[i];
+    if (now.name === was.name) continue;
+    if (was.k === 't') {
+      if (tables.has(was.name)) continue; // another table still has the old name
+      out = renameTable(out, was.name, now.name);
+    } else out = renameRef(out, now.table, was.name, now.name);
+  }
+  return out;
+}
+// The name a table has in `b` if its declaration line was renamed (for columns of a table being renamed).
+function renamedTo(name, a, b) {
+  const i = a.findIndex(x => x && x.k === 't' && x.name === name);
+  return i >= 0 && b[i] && b[i].k === 't' ? b[i].name : name;
 }

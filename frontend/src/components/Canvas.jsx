@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { C, PAL, TEMPLATES, TYPES, engineOf, prep, tableHue, tableIcon } from '../lib/engines.js';
-import { addColumn, deleteColumn, deleteTable, getColumn, moveColumn, notationOf, renameTable, setColumn, setNotation, setTableAttr } from '../lib/erdcode.js';
+import { addColumn, deleteColumn, deleteTable, followRenames, getColumn, moveColumn, notationOf, renameTable, setColumn, setNotation, setTableAttr } from '../lib/erdcode.js';
 import { highlight } from '../lib/highlight.js';
 import { LANG, NO_AI, copyFor, downloads, langFor, sampleP } from '../lib/ai.js';
 import { DIALECTS, erdToSql, readSql } from '../lib/sql.js';
@@ -257,8 +257,28 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
   const undo = () => { if (hist.i > 0) { hist.i--; restore(hist.stack[hist.i]); bump(n => n + 1); } };
   const redo = () => { if (hist.i < hist.stack.length - 1) { hist.i++; restore(hist.stack[hist.i]); bump(n => n + 1); } };
 
-  const editT = useRef(0);
+  const editT = useRef(0), renaming = useRef({}), caretAt = useRef(null);
+  // Put the caret back once React has written the changed code into the box.
+  useLayoutEffect(() => {
+    const at = caretAt.current;
+    if (at == null || !codeRef.current) return;
+    caretAt.current = null;
+    codeRef.current.selectionStart = codeRef.current.selectionEnd = at;
+  });
   const onCodeInput = v => {
+    // A database schema: renaming a table or column in the code renames it in the relationships too, so
+    // the diagram follows the code. The caret stays where it was in the line being typed.
+    if (dRef.current.type === 'erd') {
+      const t = codeRef.current, caret = t && document.activeElement === t ? t.selectionStart : null;
+      const w = followRenames(dRef.current.code, v, renaming.current);
+      if (w !== v) {
+        let k = 0;
+        while (k < v.length && v[k] === w[k]) k++;
+        const at = caret == null ? null : k >= caret ? caret : caret + (w.length - v.length);
+        v = w;
+        caretAt.current = at;
+      }
+    }
     setCode(v, { commit: false });
     clearTimeout(editT.current);
     editT.current = setTimeout(() => pushHist(snap(v, dRef.current.shapes)), 700);
@@ -349,8 +369,12 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
   const tableAttr = (id, key, value) => setCode(setTableAttr(dRef.current.code, id, key, value));
   const renameNode = (from, to) => {
     if (!/^[\w-]+$/.test(to)) { toast('Table names can use letters, numbers, - and _ (no spaces).'); return; }
-    if (ctx.m.tables && ctx.m.tables.has(to)) { toast(`There’s already a table called “${to}”.`); return; }
-    updateDiagram(x => { if (x.manual && x.manual[from]) { x.manual[to] = x.manual[from]; delete x.manual[from]; } });
+    // A table that only a relationship names (it has no { } block, so it shows “no columns”) can take an
+    // existing table's name: its relationships then point at that table, and the empty one goes.
+    const declaredHere = name => new RegExp(`^\\s*${name.replace(/-/g, '\\-')}\\s*(\\[[^\\]]*\\])?\\s*\\{`, 'm').test(dRef.current.code);
+    if (ctx.m.tables && ctx.m.tables.has(to) && declaredHere(from)) { toast(`There’s already a table called “${to}”.`); return; }
+    const merge = ctx.m.tables && ctx.m.tables.has(to);
+    updateDiagram(x => { if (x.manual && x.manual[from]) { if (!merge) x.manual[to] = x.manual[from]; delete x.manual[from]; } });
     setCode(renameTable(dRef.current.code, from, to));
     setSelection([NODE + to]);
   };
