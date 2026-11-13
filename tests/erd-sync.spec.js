@@ -53,7 +53,7 @@ test('typing a new table name in the code keeps the diagram connected', async ({
   await page.getByText('Database').first().click();
   await page.waitForTimeout(1500);
   await page.locator('[data-node="Employes"]').click({ position: { x: 30, y: 12 } });
-  await page.getByRole('button', { name: 'Code', exact: true }).first().click().catch(() => { /* the code may be open already */ });
+  await page.getByRole('button', { name: 'Code', exact: true }).first().click({ timeout: 3000 }).catch(() => { /* the code may be open already */ });
   const ta = page.getByLabel('Diagram code');
   await expect(ta).toBeVisible();
   // put the caret right after "Employes" on line 2, delete it, type a new name key by key
@@ -76,4 +76,40 @@ test('typing a new table name in the code keeps the diagram connected', async ({
   await f.fill('Staff'); await f.press('Enter');
   await expect(page.locator('[data-node="Ghost"]')).toHaveCount(0);
   expect(await ta.inputValue()).toContain('tasks > Staff');
+});
+
+test('toolbar edits show in the code as they’re typed, and a line drawn between tables is a relationship', async ({ page }) => {
+  await page.addInitScript(code => {
+    if (sessionStorage.getItem('seeded')) return; sessionStorage.setItem('seeded', '1');
+    localStorage.clear(); localStorage.setItem('linework:local-mode', '1'); localStorage.setItem('linework:ai-open', '0');
+    const now = Date.now();
+    localStorage.setItem('linework:files:v2', JSON.stringify([{ id: 'f1', title: 'Database', created: now, updated: now, doc: '', diagrams: [{ id: 'd1', type: 'erd', name: 'Company', code }], active: 0, view: 'canvas' }]));
+  }, CODE);
+  await page.goto('/');
+  await page.getByText('Database').first().click();
+  await page.locator('[data-node="users"]').click({ position: { x: 30, y: 12 } });
+  await page.getByRole('button', { name: 'Code', exact: true }).first().click({ timeout: 3000 }).catch(() => { /* the code may be open already */ });
+  const ta = page.getByLabel('Diagram code');
+  await page.locator('[data-node="users"]').click({ position: { x: 30, y: 12 } });
+  // The table's name, typed key by key without pressing Enter: the code and the diagram follow each key.
+  const name = page.getByLabel('Table name');
+  await name.click(); await name.press('End');
+  await name.pressSequentially('_x');
+  await expect(page.locator('[data-node="users_x"]')).toBeVisible();
+  expect(await ta.inputValue()).toContain('tasks.assignee_id > users_x.id');
+  await expect(name).toBeFocused();
+  await expect(name).toHaveValue('users_x');
+  await name.press('Enter');
+
+  // A line dragged from one table's port to another table: a relationship in the code.
+  await page.locator('[data-node="tasks"]').hover({ position: { x: 30, y: 12 } });
+  const port = page.locator('[data-connector-node="tasks"][data-connector-side="out"]');
+  const a = await port.boundingBox(), b = await page.locator('[data-node="Employes"]').boundingBox();
+  await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(b.x + b.width / 2, b.y + 20, { steps: 12 });
+  await page.mouse.up();
+  await expect.poll(() => ta.inputValue()).toContain('tasks > Employes');
+  await expect(page.locator('[data-node]')).toHaveCount(4); // no new drawing, no new table
+  await page.screenshot({ path: 'test-results/erd-live.png' });
 });

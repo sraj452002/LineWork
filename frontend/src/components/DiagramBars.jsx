@@ -6,16 +6,24 @@ import { IC, Ico } from './Toolbar.jsx';
 import { useUI } from './ui.jsx';
 
 // A field that commits on Enter or blur, and puts the old value back on Escape.
-function NameField({ value, label, onCommit, placeholder, className = 'sbar-name', allowEmpty }) {
+// live: each change goes through as it's typed (onCommit(text, true): quietly, skipped while it isn't
+// valid yet), so the diagram and its code change with every key; leaving the box commits as usual.
+function NameField({ value, label, onCommit, placeholder, className = 'sbar-name', allowEmpty, live }) {
   const [v, setV] = useState(value);
-  useEffect(() => { setV(value); }, [value]);
-  const commit = () => { const t = v.trim(); if ((t || allowEmpty) && t !== value) onCommit(t); else setV(value); };
+  const typing = useRef(false);
+  useEffect(() => { if (!typing.current) setV(value); }, [value]);
+  const commit = () => { typing.current = false; const t = v.trim(); if ((t || allowEmpty) && t !== value) onCommit(t); else setV(value); };
+  const change = e => {
+    const t = e.target.value;
+    setV(t);
+    if (live && (t.trim() || allowEmpty) && t.trim() !== value) { typing.current = true; onCommit(t.trim(), true); }
+  };
   return (
     <input className={className} aria-label={label} value={v} spellCheck={false} placeholder={placeholder}
-      onChange={e => setV(e.target.value)} onBlur={commit}
+      onChange={change} onBlur={commit}
       onKeyDown={e => {
         if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); }
-        else if (e.key === 'Escape') { e.stopPropagation(); setV(value); requestAnimationFrame(() => e.target.blur()); }
+        else if (e.key === 'Escape') { e.stopPropagation(); typing.current = false; setV(value); requestAnimationFrame(() => e.target.blur()); }
       }} />
   );
 }
@@ -91,7 +99,7 @@ export function TableBar({ table, hue, packs, onRename, onAttr, onCode, onDelete
   return (
     <div className="sbar" ref={barRef} role="toolbar" aria-label={'Table ' + table.id}>
       {panel && <div className={'spop spop-' + pop.k} ref={popRef} style={{ left: pop.x }}>{panel}</div>}
-      <NameField value={table.id} label="Table name" onCommit={onRename} />
+      <NameField value={table.id} label="Table name" onCommit={onRename} live />
       <B label="Icon" caret open={pop?.k === 'icon'} onClick={e => { setQ(''); toggle('icon', e); }}>
         <span className="sbar-ic" style={{ color: hue }} dangerouslySetInnerHTML={{ __html: `<svg viewBox="0 0 ${table.iconVb} ${table.iconVb}">${table.iconBody}</svg>` }} />
       </B>
@@ -112,7 +120,7 @@ export function TableBar({ table, hue, packs, onRename, onAttr, onCode, onDelete
 // Toolbar for one selected column: name, type and metadata (keys and anything else after the type).
 export function FieldBar({ table, col, onChange, onAdd, onDelete, onMove, onTable }) {
   const { popup } = useUI();
-  const set = patch => onChange({ ...col, ...patch });
+  const set = (patch, quiet) => onChange({ ...col, ...patch }, quiet);
   const meta = col.meta.split(/\s+/).filter(Boolean);
   const toggle = flag => {
     const has = meta.some(x => x.toLowerCase() === flag);
@@ -120,9 +128,9 @@ export function FieldBar({ table, col, onChange, onAdd, onDelete, onMove, onTabl
   };
   return (
     <div className="sbar field" role="toolbar" aria-label={`Column ${table}.${col.name}`}>
-      <NameField value={col.name} label="Column name" onCommit={v => set({ name: v })} />
-      <NameField value={col.type} label="Column type" placeholder="type" className="sbar-name type" allowEmpty onCommit={v => set({ type: v })} />
-      <NameField value={col.meta} label="Column metadata" placeholder="metadata" className="sbar-name meta" allowEmpty onCommit={v => set({ meta: v })} />
+      <NameField value={col.name} label="Column name" onCommit={(v, q) => set({ name: v }, q)} live />
+      <NameField value={col.type} label="Column type" placeholder="type" className="sbar-name type" allowEmpty onCommit={(v, q) => set({ type: v }, q)} live />
+      <NameField value={col.meta} label="Column metadata" placeholder="metadata" className="sbar-name meta" allowEmpty onCommit={(v, q) => set({ meta: v }, q)} live />
       <span className="sep" />
       {['pk', 'fk'].map(k => (
         <button key={k} className="sbtn ico text key" aria-pressed={meta.some(x => x.toLowerCase() === k)} title={k === 'pk' ? 'Primary key' : 'Foreign key'} onClick={() => toggle(k)}>{k}</button>

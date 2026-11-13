@@ -366,25 +366,43 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
   };
 
   /* ---- schema edits from the table and diagram toolbars ---- */
+  // Code from a toolbar: typed changes (quiet) land at once and make one undo step when the typing pauses.
+  const liveCode = (v, quiet) => {
+    if (!quiet) { setCode(v); return; }
+    setCode(v, { commit: false });
+    clearTimeout(editT.current);
+    editT.current = setTimeout(() => pushHist(snap(v, dRef.current.shapes)), 700);
+  };
+  // The table and column toolbars keep their place (and the box being typed in) when a rename changes what's
+  // selected; another selection gets a fresh toolbar.
+  const bars = useRef({ table: null, field: null, n: 0, renamed: null });
+  const barKey = (kind, now) => {
+    const b = bars.current;
+    if (b[kind] !== now) { if (now !== b.renamed) b.n++; b[kind] = now; b.renamed = null; }
+    return `${kind}${b.n}`;
+  };
   const tableAttr = (id, key, value) => setCode(setTableAttr(dRef.current.code, id, key, value));
-  const renameNode = (from, to) => {
-    if (!/^[\w-]+$/.test(to)) { toast('Table names can use letters, numbers, - and _ (no spaces).'); return; }
+  // quiet: from a toolbar box as it's typed: nothing to say while the name isn't valid yet, and one undo step.
+  const renameNode = (from, to, quiet) => {
+    if (!/^[\w-]+$/.test(to)) { if (!quiet) toast('Table names can use letters, numbers, - and _ (no spaces).'); return; }
     // A table that only a relationship names (it has no { } block, so it shows “no columns”) can take an
     // existing table's name: its relationships then point at that table, and the empty one goes.
     const declaredHere = name => new RegExp(`^\\s*${name.replace(/-/g, '\\-')}\\s*(\\[[^\\]]*\\])?\\s*\\{`, 'm').test(dRef.current.code);
-    if (ctx.m.tables && ctx.m.tables.has(to) && declaredHere(from)) { toast(`There’s already a table called “${to}”.`); return; }
+    if (ctx.m.tables && ctx.m.tables.has(to) && (declaredHere(from) || quiet)) { if (!quiet) toast(`There’s already a table called “${to}”.`); return; }
     const merge = ctx.m.tables && ctx.m.tables.has(to);
     updateDiagram(x => { if (x.manual && x.manual[from]) { if (!merge) x.manual[to] = x.manual[from]; delete x.manual[from]; } });
-    setCode(renameTable(dRef.current.code, from, to));
+    bars.current.renamed = to;
+    liveCode(renameTable(dRef.current.code, from, to), quiet);
     setSelection([NODE + to]);
   };
-  const columnSet = parts => {
+  const columnSet = (parts, quiet) => {
     const { t, f } = field;
     if (parts.name !== f) {
-      if (!/^[\w-]+$/.test(parts.name)) { toast('Column names can use letters, numbers, - and _ (no spaces).'); return; }
-      if (ctx.m.tables.get(t).fields.some(x => x.name === parts.name)) { toast(`“${t}” already has a column called “${parts.name}”.`); return; }
+      if (!/^[\w-]+$/.test(parts.name)) { if (!quiet) toast('Column names can use letters, numbers, - and _ (no spaces).'); return; }
+      if (ctx.m.tables.get(t).fields.some(x => x.name === parts.name)) { if (!quiet) toast(`“${t}” already has a column called “${parts.name}”.`); return; }
+      bars.current.renamed = `${t}.${parts.name}`;
     }
-    setCode(setColumn(dRef.current.code, t, f, parts));
+    liveCode(setColumn(dRef.current.code, t, f, parts), quiet);
     setSelField({ t, f: parts.name });
   };
   const columnAdd = () => {
@@ -527,6 +545,14 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
     }
     to = to || hitTargetRef.current(p, dr.from);
     if (!movedFar || !to) return false;
+    // From one diagram node to another (two tables, two steps, two services): a connection in the code,
+    // so the diagram and its code stay one thing. Tables get "A > B" (A holds the foreign key).
+    if (dr.from.n && to.a.n && dRef.current.code.trim() && dRef.current.type !== 'sequence') {
+      const line = `${dr.from.n} > ${to.a.n}`;
+      if (!dRef.current.code.split('\n').some(l => l.trim().startsWith(line))) setCode(dRef.current.code.replace(/\s*$/, '\n') + line);
+      setSelection([NODE + to.a.n]);
+      return true;
+    }
     const arrow = dr.shape || drawn('arrow', dr.a, p, false, dr.id);
     // A wire made from the ports runs from the source's output to the target's input.
     arrow.a0 = { ...dr.from, p: 'out' }; arrow.a1 = { ...to.a, p: 'in' };
@@ -1502,7 +1528,7 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
       {d.type === 'erd' && field && !selShapes.length && !editing && (() => {
         const col = getColumn(d.code, field.t, field.f);
         return col && (
-          <FieldBar key={field.t + '.' + field.f} table={field.t} col={col}
+          <FieldBar key={barKey('field', field.t + '.' + field.f)} table={field.t} col={col}
             onChange={columnSet} onAdd={columnAdd} onDelete={columnDelete}
             onMove={columnMove} onTable={() => setSelField(null)} />
         );
@@ -1511,9 +1537,9 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
       {d.type === 'erd' && sel && !field && !selShapes.length && !editing && ctx.m.tables.get(sel) && (() => {
         const t = ctx.m.tables.get(sel), ic = tableIcon(t.icon);
         return (
-          <TableBar key={sel} table={{ ...t, iconBody: ic.body, iconVb: ic.vb }} packs={packs}
+          <TableBar key={barKey('table', sel)} table={{ ...t, iconBody: ic.body, iconVb: ic.vb }} packs={packs}
             hue={tableHue(t, [...ctx.m.tables.keys()].indexOf(sel), d.style === 'mono')}
-            onRename={to => renameNode(sel, to)} onAttr={(k, v) => tableAttr(sel, k, v)}
+            onRename={(to, quiet) => renameNode(sel, to, quiet)} onAttr={(k, v) => tableAttr(sel, k, v)}
             onCode={() => setDrawer(true)} onDelete={() => removeTable(sel)} onAddColumn={columnAdd} />
         );
       })()}
