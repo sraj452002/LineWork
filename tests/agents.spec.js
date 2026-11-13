@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { openStore } from '../backend/store.js';
-import { memoryBackend } from '../backend/drive.js';
+import { memoryBackend } from '../backend/storage.js';
 import { createApp } from '../backend/app.js';
 
 // Agents: make one (its instructions, knowledge, what it may use), chat with it, have Nemo make one, and use

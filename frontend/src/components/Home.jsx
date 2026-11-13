@@ -72,7 +72,7 @@ function AccountMenu({ account, who, initial, saveState, storage, onAccount, onS
           </div>
           <div className="acct-items">
             {onAccount && <button onClick={go(onAccount)}><Ico d={IC.shield} size={17} />Account &amp; security</button>}
-            <button onClick={go(onSignOut)}><Ico d={IC.logout} size={17} />{account ? 'Sign out' : 'Sign in or create an account'}</button>
+            {onSignOut && <button onClick={go(onSignOut)}><Ico d={IC.logout} size={17} />{account ? 'Sign out' : 'Sign in or create an account'}</button>}
           </div>
         </div>
       )}

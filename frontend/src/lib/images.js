@@ -3,7 +3,7 @@ import { rid } from './utils.js';
 import { api } from './backend.js';
 
 /* Shapes keep only a key ({img}); the picture itself is kept apart. Signed in, that's on the account
-   (PUT/GET /api/images/:key, in Google Drive), and pictures left in this browser by earlier versions
+   (PUT/GET /api/images/:key, in the server’s database), and pictures left in this browser by earlier versions
    move there the first time they're shown. Without an account (the frontend on its own, the tests),
    they're in IndexedDB, which has far more room than localStorage. Older files, a shared file's own
    additions, and browsers without IndexedDB keep the data inline ({src}). */

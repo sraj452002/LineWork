@@ -18,31 +18,10 @@ services:
       # The frontend's address on Netlify, e.g. https://linework.netlify.app
       - key: APP_URL
         sync: false
-      # Where the data is kept: Google Drive (see backend/.env.example; `npm run drive-auth` gets the token).
-      - key: GOOGLE_DRIVE_CLIENT_ID
-        sync: false
-      - key: GOOGLE_DRIVE_CLIENT_SECRET
-        sync: false
-      - key: GOOGLE_DRIVE_REFRESH_TOKEN
-        sync: false
-      - key: GOOGLE_DRIVE_FOLDER_ID
-        sync: false
       - key: ANTHROPIC_API_KEY
-        sync: false
-      # Your account's email: its published workflows are open to everyone at /run (the end users' app).
-      - key: STORE_OWNER
         sync: false
       - key: NVIDIA_API_KEY
         sync: false
       # Encrypts workflow credentials; Render makes a random one once.
       - key: FLOW_SECRET
         generateValue: true
-      # Each account's storage in Google Drive, in MB (2 GB).
-      - key: STORAGE_LIMIT_MB
-        value: "2048"
-      # Only the accounts in DEFAULT_USERS (and ones made before): nobody new can sign up.
-      - key: ALLOW_SIGNUP
-        value: "false"
-      # Accounts made at start: email:password, separated by commas (see backend/.env.example).
-      - key: DEFAULT_USERS
-        sync: false

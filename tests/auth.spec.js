@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openStore } from '../backend/store.js';
-import { memoryBackend } from '../backend/drive.js';
+import { memoryBackend } from '../backend/storage.js';
 import { createApp } from '../backend/app.js';
 import { codeAt, stepAt } from '../backend/totp.js';
 import { ensureUsers } from '../backend/accounts.js';

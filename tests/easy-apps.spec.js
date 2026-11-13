@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { openStore } from '../backend/store.js';
-import { memoryBackend } from '../backend/drive.js';
+import { memoryBackend } from '../backend/storage.js';
 import { createApp } from '../backend/app.js';
 
 // Help → Easy start: a guide in plain words, and two examples (a workflow, then an app on it) that open

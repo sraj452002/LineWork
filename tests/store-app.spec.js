@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { openStore } from '../backend/store.js';
-import { memoryBackend } from '../backend/drive.js';
+import { memoryBackend } from '../backend/storage.js';
 import { createApp } from '../backend/app.js';
 
 // The end users' app (/run, what the Android APK opens): with STORE_OWNER set, anyone sees that

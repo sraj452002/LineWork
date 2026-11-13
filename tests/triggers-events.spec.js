@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { createServer } from 'node:http';
 import { createHash, createHmac } from 'node:crypto';
 import { openStore } from '../backend/store.js';
-import { memoryBackend } from '../backend/drive.js';
+import { memoryBackend } from '../backend/storage.js';
 import { createApp } from '../backend/app.js';
 import { EVENT_TRIGGERS } from '../backend/flow-event-triggers.js';
 

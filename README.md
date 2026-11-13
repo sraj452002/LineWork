@@ -7,9 +7,9 @@ The repository has two separate parts, each with its own `package.json`, that ta
 | | What | Hosted on |
 |---|---|---|
 | [`frontend/`](frontend) | The app: React + Vite. It calls the API at `/api` on its own site. | Netlify |
-| [`backend/`](backend) | The Workline API: Express, with accounts, files, version history, share links, AI and live databases. Data in Google Drive. | Render (or any Node host) |
+| [`backend/`](backend) | The Workline API: Express, with AI, workflows, published apps and live databases. No accounts and no storage. | Render (or any Node host) |
 
-The frontend's site proxies `/api/*` to the backend (Netlify's proxy rule in production, Vite's proxy in development), so the browser sees one site: the session cookie is first-party and the backend needs no CORS.
+The frontend's site proxies `/api/*` to the backend (Netlify's proxy rule in production, Vite's proxy in development), so the browser sees one site and the backend needs no CORS.
 
 ## Run locally
 
@@ -18,32 +18,26 @@ npm install          # also installs frontend/ and backend/
 npm run dev
 ```
 
-Open http://localhost:5173. This starts the backend on port 8787 (restarting on changes; settings from `backend/.env`, with data in Google Drive when that's set up there, else in `backend/data`) and the frontend, with `/api` sent to the backend. Copy `backend/.env.example` to `backend/.env` to start.
+Open http://localhost:5173. This starts the backend on port 8787 (restarting on changes; settings from `backend/.env`) and the frontend, with `/api` sent to the backend. Copy `backend/.env.example` to `backend/.env` to start.
 
 Each part also runs on its own:
 
 ```bash
 cd backend && npm run dev                                       # the API on :8787
 cd frontend && LINEWORK_API=http://localhost:8787 npm run dev   # the app, with /api sent there
-cd frontend && npm run dev                                      # the app alone: no accounts, files stay in the browser
+cd frontend && npm run dev                                      # the app alone: files stay in the browser, no AI or workflows
 ```
 
-## The API
+## No accounts, no storage
 
-Everything is under `/api` on the backend (see [`backend/app.js`](backend/app.js) and [`backend/accounts.js`](backend/accounts.js)). Requests that change something must send JSON, from the app's own site (the backend checks `Origin` against its own host and `APP_URL`). The session is an HttpOnly cookie.
+Nobody signs in, and there's nothing to set up for storage:
 
-| | |
-|---|---|
-| `GET /api/server` | What this backend offers: sign-up, email, Google/GitHub, features, AI. The app uses it to know the API is there. |
-| `/api/auth/…` | `signup`, `login`, `logout`, `me` (`GET`, `PATCH`), `verify`, `resend`, `forgot`, `reset`, `2fa/setup`, `2fa/enable`, `2fa/verify`, `2fa/disable`, `2fa/recovery`, `oauth/:provider` (and its `callback`), `unlink` |
-| `GET/PUT/DELETE /api/files[/:id]` | The account's files. |
-| `GET /api/files/:id/versions[/:vid]` | Version history. |
-| `GET/POST /api/files/:id/shares`, `DELETE /api/shares/:token`, `GET/PUT /api/shared/:token` | Share links, and opening or saving a shared file. |
-| `GET/PUT /api/folders` | The account's folders. |
-| `POST /api/ai`, `GET /api/ai/status` | AI (streamed), with a daily allowance per account. |
-| `POST /api/db` | Live database connections (the Database view). |
+- **Files stay in the browser** (localStorage), as do folders and the archive. Export a file to keep a copy elsewhere.
+- **The backend has no accounts.** Every request is its one built-in user (`LOCAL_USER` in [`backend/app.js`](backend/app.js)), who owns the workflows, their credentials, the published apps and the agents. Its published workflows are open at `/run` (the phone app).
+- **What the backend keeps is in memory** (`backend/storage.js`): the app sends a copy of each file to it whenever one changes and each time it opens, so workflows (webhooks, schedules, Workline nodes) and published apps work. When the backend restarts, workflow runs and saved credentials go; enter credentials again. `DATA_DIR` keeps it in a folder instead, on a machine with a lasting disk.
+- Version history and share links needed accounts, so they're gone.
 
-The frontend's calls are in [`frontend/src/lib/backend.js`](frontend/src/lib/backend.js), [`auth.js`](frontend/src/lib/auth.js), [`cloud.js`](frontend/src/lib/cloud.js), [`ai.js`](frontend/src/lib/ai.js) and [`dbclient.js`](frontend/src/lib/dbclient.js).
+Requests that change something must send JSON, from the app's own site (the backend checks `Origin` against its own host and `APP_URL`). Under `/api`: `GET /api/server` (what the backend offers), `POST /api/ai` and `/api/ai/chat` (AI, streamed), `/api/flows/…` (workflows), `/api/agents`, and `POST /api/db` (the Database view). The frontend's calls are in [`frontend/src/lib/backend.js`](frontend/src/lib/backend.js), [`ai.js`](frontend/src/lib/ai.js), [`assistant.js`](frontend/src/lib/assistant.js) and [`dbclient.js`](frontend/src/lib/dbclient.js).
 
 ## Deploy
 
@@ -51,11 +45,11 @@ The frontend's calls are in [`frontend/src/lib/backend.js`](frontend/src/lib/bac
 
 Render → **New → Blueprint** → this repository: [`render.yaml`](render.yaml) makes a web service from `backend/` (build `npm ci`, start `npm start`, health check `/api/server`) and asks for the settings. Or make a **Web Service** by hand with **Root Directory** `backend`, the same commands, and the environment variables below. Note its address (e.g. `https://linework-api.onrender.com`).
 
-- `APP_URL`: the frontend's address on Netlify (e.g. `https://linework.netlify.app`). Email links, share links and Google/GitHub sign-in point there.
+- `APP_URL`: the frontend's address on Netlify (e.g. `https://linework.netlify.app`).
 - `TRUST_PROXY=2` (Netlify's proxy, then Render's load balancer).
-- The Google Drive settings (**Google Drive storage**, below), and optionally `ANTHROPIC_API_KEY` and/or `NVIDIA_API_KEY`, email and Google/GitHub sign-in.
+- Optionally `ANTHROPIC_API_KEY` and/or `NVIDIA_API_KEY` for AI.
 
-It needs no disk, since the data is in Google Drive. Run **one** instance: it holds the accounts in memory and is the only writer to the Drive folder. A free Render service sleeps after 15 idle minutes and takes about a minute to wake; the app waits for it (`frontend/src/lib/backend.js`). Or use [`backend/Dockerfile`](backend/Dockerfile): `cd backend && docker build -t linework-api . && docker run -p 8787:8787 --env-file .env linework-api`.
+Run **one** instance: it holds everything in memory. A free Render service sleeps after 15 idle minutes and takes about a minute to wake; the app waits for it (`frontend/src/lib/backend.js`). A sleeping or restarted backend has forgotten what it kept, until the app is opened again. Or use [`backend/Dockerfile`](backend/Dockerfile): `cd backend && docker build -t linework-api . && docker run -p 8787:8787 --env-file .env linework-api`.
 
 ### Frontend on Netlify
 
@@ -65,57 +59,21 @@ Connect the repository in Netlify and set **Base directory** to `frontend`. [`fr
 
 Netlify's proxy waits at most 26 seconds for a response to start. AI answers stream, so they start in time; a sleeping backend answers 502/504 until it's awake, and the app asks again.
 
-For Google/GitHub sign-in, register the redirect URI `<APP_URL>/api/auth/oauth/google/callback` (or `…/github/callback`): the Netlify address, which proxies it to the backend.
+### Settings
 
-## Accounts and where files are saved
-
-- **Signed in**: accounts on the backend, with everything kept in **Google Drive** (no database), plus **share links**, **version history** and a **daily AI allowance** per account.
-- **Without an account**: files stay in the browser. Only where the API isn't there (the frontend on its own, the tests), or it allows it (`ALLOW_LOCAL_MODE=true`). Otherwise **sign-in is required**; files someone made without an account are offered for import when they sign in.
-
-What the backend does:
-
-- **Data in Google Drive**, not a database: accounts, sessions, folders, share links and the AI allowance in one `meta.json`, and each saved file and each version as its own JSON file, all in one Drive folder (see **Google Drive storage** below).
-- **Accounts** with email and password (scrypt hashes; sessions are an HttpOnly cookie for 30 days; 10 wrong passwords lock an email for 15 minutes).
-- **Email confirmation and password reset**, when the backend can send email (`RESEND_API_KEY`, or `SMTP_URL` for any SMTP service, and `MAIL_FROM`). New accounts confirm their address with an emailed link before they can sign in; **Forgot password?** emails a one-hour reset link, and resetting signs out every other device. Without email, nothing needs confirming and passwords are reset by whoever runs the backend (below).
-- **Continue with Google / GitHub** (`GOOGLE_CLIENT_ID`/`_SECRET`, `GITHUB_CLIENT_ID`/`_SECRET`). The authorization-code flow with PKCE and a state cookie. A provider's *verified* email signs in to the account with that email, or creates one; people can connect or disconnect Google and GitHub under **Account & security**.
-- **Two-step verification** (TOTP): **Account & security** shows a QR code for an authenticator app (Google Authenticator, 1Password, Authy…). After that, signing in (with a password or Google/GitHub) asks for the 6-digit code. Each code works once; ten **recovery codes** stand in for the phone, each once; five wrong codes end the attempt.
-- **Admin commands**: `npm run admin -- users` lists accounts; `reset-password <email> <new password>`, `verify-user <email>`, `disable-2fa <email>` (lost phone and codes) and `delete-user <email>` (with its files).
-- **Folders and the archive** saved to the account.
-- **Version history**: each stretch of editing (10 minutes) keeps a version, the last 100 per file. **Version history…** on a file's ⋯ menu restores one.
-- **Share links**: **Share…** makes a link that opens one file, read-only or editable, for anyone who has it (no account needed). Edits through an edit link are saved to the owner's account. Links can be turned off.
-- **AI without limits by default**: no daily allowance and no wait between questions; `AI_DAILY_LIMIT` sets one (requests per account per UTC day). When the AI service is busy (429/503) the server asks again by itself (up to 3 times), and when the picked model fails before answering, the next model answers.
-
-Settings are environment variables; [`backend/.env.example`](backend/.env.example) lists them all. The main ones:
+Environment variables; [`backend/.env.example`](backend/.env.example) lists them all:
 
 | Variable | Default | |
 |---|---|---|
 | `PORT` | `8787` | |
-| `APP_URL` | | The frontend's public address, for email and share links, Google/GitHub, and the `Origin` check. |
-| `GOOGLE_DRIVE_REFRESH_TOKEN`, `GOOGLE_DRIVE_CLIENT_ID`, `GOOGLE_DRIVE_CLIENT_SECRET` | | Keep data in your own Google Drive (`npm run drive-auth` gets the token). |
-| `GOOGLE_SERVICE_ACCOUNT_KEY` | | Or a service account's JSON key (or a path to it), with `GOOGLE_DRIVE_FOLDER_ID` in a Shared Drive. |
-| `GOOGLE_DRIVE_FOLDER_ID` | | The Drive folder. Empty: the backend makes "Linework data" and prints its id. |
-| `DATA_DIR` | | A local folder instead of Drive (relative to `backend/`), for development. |
+| `APP_URL` | | The frontend's public address, for the `Origin` check. |
+| `DATA_DIR` | | A folder to keep the backend's data in, instead of memory (relative to `backend/`). |
+| `FLOW_SECRET` | | Encrypts workflows' saved credentials. |
 | `ANTHROPIC_API_KEY` | | Turns AI on. `ANTHROPIC_MODEL` picks the model. |
-| `STORE_OWNER` | | An account's email: its published workflows are open to everyone at `/run` (the end users' phone app). |
 | `NVIDIA_API_KEY` | | Also (or instead) turns on NVIDIA's models (build.nvidia.com). `NVIDIA_MODEL` picks them, comma-separated (default `deepseek-ai/deepseek-v4.1-flash,nvidia/nemotron-3.5-lightning-30b-a3b`: DeepSeek V4.1 Flash and NVIDIA Nemotron), each a choice in the AI chat, `NVIDIA_BASE_URL` another OpenAI-style endpoint. With both keys, people pick the model in the AI chat. |
-| `AI_DAILY_LIMIT` | `0` | Requests per account per day; `0` is no limit. |
-| `ALLOW_SIGNUP` | `false` | `true` lets anyone create an account. Off: only the accounts already there and `DEFAULT_USERS` (Google/GitHub can still sign in to existing ones). |
-| `RESEND_API_KEY` or `SMTP_URL`, `MAIL_FROM` | | Email: confirmation and reset links. |
-| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | | Continue with Google. |
-| `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | | Continue with GitHub. |
-| `ALLOW_LOCAL_MODE` | `false` | `true` lets people use the app without an account. |
-| `TRUST_PROXY` | | The number of proxies in front (`2` on Render behind Netlify), so cookies are marked Secure on HTTPS and sign-in limits see the visitor's address. |
-
-### Google Drive storage
-
-The backend keeps its data in one Drive folder. It signs in to Drive in one of two ways:
-
-- **Your own Drive (simplest).** In the Google Cloud console, turn on the **Google Drive API**, make an OAuth client of type **Desktop app**, and set the OAuth consent screen to **In production**. Refresh tokens from a project still in *Testing* stop working after 7 days. Then put the client's id and secret in `backend/.env` as `GOOGLE_DRIVE_CLIENT_ID` and `GOOGLE_DRIVE_CLIENT_SECRET`, run `npm run drive-auth`, sign in, and put the values it prints into the backend's environment. The token has the `drive.file` permission, so it reaches only the files the backend makes, not the rest of the Drive. Leave `GOOGLE_DRIVE_FOLDER_ID` empty the first time: the backend makes a **Linework data** folder and prints its id. (A folder you made yourself isn't visible to `drive.file`.)
-- **A service account.** Make one, download its JSON key, and add its email as a *Content manager* of a folder in a **Shared Drive** (service accounts have no storage of their own). Set `GOOGLE_SERVICE_ACCOUNT_KEY` to the key's JSON or its path, and `GOOGLE_DRIVE_FOLDER_ID` to the folder.
-
-What's in the folder: `meta.json` (accounts with scrypt password hashes, sessions by the hash of their token, sign-in links, Google/GitHub identities, folders, share links, AI usage, and the list of files and versions), `file.<account>.<file>.json` for each saved file, and `version.<n>.json` for each version. Anyone who can open the folder can read every account's files, so keep it private. Back it up by copying the folder.
-
-The backend loads `meta.json` when it starts and answers a change only after it's written to Drive. Stop the backend before `npm run admin`, which edits the same `meta.json`.
+| `AI_DAILY_LIMIT` | `0` | Requests per day; `0` is no limit. When the AI service is busy (429/503) the server asks again by itself (up to 3 times), and when the picked model fails before answering, the next model answers. |
+| `TRUST_PROXY` | | The number of proxies in front (`2` on Render behind Netlify). |
+| `DB_ALLOW_PRIVATE` | `0` | `1` lets the Database view reach databases on private networks. |
 
 ## Workflows
 
@@ -170,7 +128,7 @@ The **AI Agent** workflow node (AI group) gives a task (`{{ $json.text }}` by de
 
 Each app node asks for a credential of its kind (an API key or token; the dialog says where to find it). Node types are described in `frontend/src/lib/flows.js` (fields, ports, credentials) and run by `backend/flow-nodes.js` (flow and data) and `backend/flow-apps.js` (apps); `tests/flow-nodes.spec.js` checks the two agree. App logos come from simple-icons (`npm run icons`-style script: `node scripts/build-flow-logos.mjs` in `frontend/`).
 
-Workflows run on the backend (`backend/flows.js`, `flow-engine.js`, `flow-nodes.js`): **Run workflow** runs what's in the editor and shows each node's output; a workflow switched **Active** (and saved) listens on its webhooks and runs on its schedules. Each workflow keeps its last 20 runs in the account's Drive folder, counted in its storage.
+Workflows run on the backend (`backend/flows.js`, `flow-engine.js`, `flow-nodes.js`): **Run workflow** runs what's in the editor and shows each node's output; a workflow switched **Active** (and saved) listens on its webhooks and runs on its schedules. Each workflow keeps its last 20 runs with the account's data, counted in its storage.
 
 - **Credentials** (API keys, tokens, connection strings) are encrypted with AES-256-GCM under `FLOW_SECRET` and never sent back to the browser. Set `FLOW_SECRET` to a long random value and keep it: changing it makes saved credentials unreadable. (`render.yaml` generates one.)
 - **Schedules run while the server is awake.** A free Render service sleeps after 15 idle minutes, so a schedule then waits until something wakes it: a webhook, a visit, or a pinger such as cron-job.org calling the site every 10 minutes. Webhooks wake it themselves (the first call takes about a minute).
@@ -380,8 +338,7 @@ backend/                the API (Render)
   app.js                the API: files, versions, folders, share links, AI, databases
   accounts.js           sign-up, sign-in, email links, two-step verification, Google/GitHub
   store.js              accounts, files and versions, kept in a storage backend
-  drive.js              the backends: Google Drive, a local folder, memory (tests)
-  drive-auth.js         gets a Drive refresh token (npm run drive-auth)
+  storage.js            where the backend keeps its data: memory (the default) or a folder (DATA_DIR)
   dbconnect.js          live database connections (PostgreSQL, MySQL, SQL Server, MongoDB)
   flows.js              workflows: credentials, runs, webhooks and schedules
   flow-engine.js        runs a workflow: order, items, {{ expressions }}

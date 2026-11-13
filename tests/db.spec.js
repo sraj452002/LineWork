@@ -8,7 +8,7 @@ import initSqlJs from 'sql.js';
 import { handle, isPrivateIp, mongoCommand, parseConn } from '../backend/dbconnect.js';
 import { schemaToErd, shortType } from '../frontend/src/lib/dbclient.js';
 import { openStore } from '../backend/store.js';
-import { memoryBackend } from '../backend/drive.js';
+import { memoryBackend } from '../backend/storage.js';
 import { createApp } from '../backend/app.js';
 
 // Live databases (the Database view): the connector's parsing and safety checks, the server's /api/db, a SQLite

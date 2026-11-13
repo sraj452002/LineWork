@@ -3,12 +3,11 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "The Linework API: accounts, files with version history, share links, AI and live databases.",
+  "description": "The Linework API: AI, workflows, published apps and live databases (no accounts, no storage).",
   "scripts": {
     "start": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env index.js",
     "dev": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env --watch index.js",
-    "admin": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env admin.js",
-    "drive-auth": "node --env-file-if-exists=.env drive-auth.js"
+    "admin": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env admin.js"
   },
   "dependencies": {
     "exceljs": "^4.4.0",

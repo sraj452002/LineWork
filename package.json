@@ -10,7 +10,6 @@
     "build": "npm run build --prefix frontend",
     "start": "npm start --prefix backend",
     "admin": "npm run admin --prefix backend --",
-    "drive-auth": "npm run drive-auth --prefix backend",
     "test": "playwright test"
   },
   "devDependencies": {

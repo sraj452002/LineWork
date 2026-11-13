@@ -41,7 +41,11 @@ const AUTH_ERRORS = {
 // here. Returns {mode, user?, pending?, notice?}, or null when nobody is signed in.
 // pending: {type: 'recovery' | 'mfa', token} — a step still to do on the sign-in screen.
 export async function startSession() {
-  if (!(await serverInfo())) return (await localAllowed()) ? { mode: 'local' } : null;
+  const srv = await serverInfo();
+  // A server without accounts: no sign-in; files stay in this browser, and the server (AI, workflows,
+  // apps) is used as its one built-in user.
+  if (srv && srv.accounts === false) return { mode: 'local', server: true };
+  if (!srv) return (await localAllowed()) ? { mode: 'local' } : null;
   const h = takeHash();
   let notice = h.auth_error ? AUTH_ERRORS[h.auth_error] || 'Sign-in didn’t work. Try again.' : null;
   if (h.account) notice = h.account === 'taken' ? 'That account is already connected to a different Workline account.' : `Connected ${/github/.test(h.account) ? 'GitHub' : 'Google'}. You can sign in with it now.`;

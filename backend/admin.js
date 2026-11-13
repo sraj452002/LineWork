@@ -1,7 +1,7 @@
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openStore } from './store.js';
-import { backendFromEnv } from './drive.js';
+import { backendFromEnv } from './storage.js';
 import { hashPassword } from './auth.js';
 
 // Account chores for whoever runs the server (it sends no email, so password resets happen here):

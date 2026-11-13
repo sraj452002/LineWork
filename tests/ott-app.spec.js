@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { openStore } from '../backend/store.js';
-import { memoryBackend } from '../backend/drive.js';
+import { memoryBackend } from '../backend/storage.js';
 import { createApp } from '../backend/app.js';
 
 // Templates → Apps → OTT streaming app: a workflow fetches the video files and builds the catalogue; the
