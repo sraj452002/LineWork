@@ -1,52 +1,37 @@
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openStore } from './store.js';
-import { backendFromEnv } from './drive.js';
-import { NVIDIA_MODELS, createApp } from './app.js';
-import { ensureUsers } from './accounts.js';
-import { createMailer } from './mail.js';
+import { backendFromEnv } from './storage.js';
+import { LOCAL_USER, NVIDIA_MODELS, createApp } from './app.js';
 
 // Start the Workline API. Settings come from environment variables (see .env.example).
 const root = resolve(fileURLToPath(import.meta.url), '..');
 const env = process.env;
 const num = (v, d) => (v === undefined || v === '' ? d : Number(v));
 
-// Data goes to Google Drive (see drive.js); DATA_DIR keeps it in a local folder instead, for development.
+// No accounts and no storage: files stay in each person's browser. What the server keeps (workflows,
+// credentials, runs) is in memory, or in DATA_DIR if it's set (see storage.js).
 const backend = backendFromEnv(env, root);
-if (!backend) {
-  console.error('No storage set up. Set GOOGLE_DRIVE_REFRESH_TOKEN (run `npm run drive-auth`) or GOOGLE_SERVICE_ACCOUNT_KEY for Google Drive, or DATA_DIR for a local folder. See .env.example.');
-  process.exit(1);
-}
-// Each account's storage in Google Drive (files, versions and pictures): STORAGE_LIMIT_MB, 0 for no limit.
-const store = await openStore(backend, { storageLimit: num(env.STORAGE_LIMIT_MB, 2048) * 2 ** 20 });
+const store = await openStore(backend, { storageLimit: 0 });
 console.log(`Data is kept in ${backend.describe()}.`);
-// Accounts to have from the start (DEFAULT_USERS), made once.
-for (const email of await ensureUsers(store, env.DEFAULT_USERS)) console.log(`Made the account ${email} (DEFAULT_USERS).`);
 const app = createApp(store, {
-  // New accounts only with ALLOW_SIGNUP=true; otherwise just the ones there (and DEFAULT_USERS).
-  allowSignup: env.ALLOW_SIGNUP === 'true',
+  // No sign-in: every request is the one built-in user.
+  noAccounts: true,
   aiKey: env.ANTHROPIC_API_KEY || '',
   aiModel: env.ANTHROPIC_MODEL || 'claude-sonnet-5-5',
   aiBase: env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com',
   nvidiaKey: env.NVIDIA_API_KEY || '',
-  // The account whose published apps anyone can run in the WorkLine Apps phone app (/run), by email.
-  storeOwner: env.STORE_OWNER || '',
+  // Whose published apps anyone can run in the WorkLine Apps phone app (/run): the built-in user's.
+  storeOwner: env.STORE_OWNER || LOCAL_USER,
   nvidiaModel: env.NVIDIA_MODEL || NVIDIA_MODELS,
   nvidiaBase: env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1',
   aiDailyLimit: num(env.AI_DAILY_LIMIT, 0),
   trustProxy: env.TRUST_PROXY ? (/^\d+$/.test(env.TRUST_PROXY) ? Number(env.TRUST_PROXY) : env.TRUST_PROXY) : false,
   appUrl: env.APP_URL || '',
-  allowLocal: env.ALLOW_LOCAL_MODE === 'true',
   // Let the Database view reach databases on private networks (this machine, a LAN, a VPC). Off by default.
   dbAllowPrivate: env.DB_ALLOW_PRIVATE === '1' || env.DB_ALLOW_PRIVATE === 'true',
   // Workflows: the key their saved credentials are encrypted with (without it, one kept in meta.json).
   flowSecret: env.FLOW_SECRET || '',
-  mailer: createMailer({ resendKey: env.RESEND_API_KEY, smtpUrl: env.SMTP_URL, from: env.MAIL_FROM }),
-  requireVerified: env.REQUIRE_EMAIL_VERIFICATION === undefined || env.REQUIRE_EMAIL_VERIFICATION === '' ? undefined : env.REQUIRE_EMAIL_VERIFICATION !== 'false',
-  oauth: {
-    google: { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET },
-    github: { clientId: env.GITHUB_CLIENT_ID, clientSecret: env.GITHUB_CLIENT_SECRET },
-  },
 });
 
 const port = num(env.PORT, 8787), host = env.HOST || '0.0.0.0';

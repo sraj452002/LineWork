@@ -58,7 +58,7 @@ function Workspace({ session, onSignOut, onUser }) {
   const { toast, ask } = useUI();
   useEffect(() => { if (session.notice) toast(session.notice); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const cloud = session.mode === 'cloud', uid = cloud ? session.user.id : null;
-  // Signed in, everything is on the account (in Google Drive) and nothing is kept in this browser:
+  // Signed in, everything is on the account (in the server’s database) and nothing is kept in this browser:
   // what's been uploaded is tracked in memory only. synced: file id -> its `updated` on the account.
   const book = useRef(null);
   if (!book.current) {
@@ -119,6 +119,20 @@ function Workspace({ session, onSignOut, onUser }) {
     if (again.current) { again.current = false; sync(); }
     else if (failed) retry.current = setTimeout(sync, 15000);
   }, [cloud, toast]);
+
+  // A server without accounts: files stay in this browser, and a copy of each goes to the server too, so
+  // workflows (their webhooks, schedules, Workline nodes) and published apps work there. The server keeps
+  // them in memory, so they're all sent again each time the app opens.
+  const mirrored = useRef({});
+  useEffect(() => {
+    if (!session.server) return undefined;
+    const t = setTimeout(async () => {
+      const fs = filesRef.current, ids = new Set(fs.map(f => f.id));
+      for (const f of fs) if (mirrored.current[f.id] !== f.updated) { try { await putFile(f); mirrored.current[f.id] = f.updated; } catch (e) { /* tried again on the next change */ } }
+      for (const id of Object.keys(mirrored.current)) if (!ids.has(id)) { try { await removeFile(id); delete mirrored.current[id]; } catch (e) { /* likewise */ } }
+    }, 800);
+    return () => clearTimeout(t);
+  }, [files, session.server]);
 
   const first = useRef(true);
   useEffect(() => {
@@ -321,7 +335,7 @@ function Workspace({ session, onSignOut, onUser }) {
   return (<>
     <Home files={files} folders={folders} setFolders={setFolders} account={cloud ? session.user : null} saveState={saveState} storage={storage}
       onOpen={setOpenId} onCreate={create} onUpdate={update} onRename={rename}
-      onDuplicate={duplicate} onDelete={remove} onSignOut={onSignOut} onGuide={setGuide} serverProps={serverProps}
+      onDuplicate={duplicate} onDelete={remove} onSignOut={session.server ? null : onSignOut} onGuide={setGuide} serverProps={serverProps}
       onAccount={server && cloud ? () => setDialog({ type: 'account' }) : null} />
     {dialogs}
     {warning}

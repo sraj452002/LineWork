@@ -21,12 +21,15 @@ export const NVIDIA_MODELS = 'deepseek-ai/deepseek-v4.1-flash,nvidia/nemotron-3.
 const NVIDIA_NAMES = { 'deepseek-ai/deepseek-v4.1-flash': 'DeepSeek V4.1 Flash', 'z-ai/glm-5.3-flash': 'GLM 5.3 Flash', 'nvidia/nemotron-3.5-lightning-30b-a3b': 'NVIDIA Nemotron' };
 export const nvidiaLabel = m => NVIDIA_NAMES[m] || (/nemotron/i.test(m) ? 'NVIDIA Nemotron' : m.split('/').pop().replace(/[-_]+/g, ' ').replace(/\b([a-z])/g, c => c.toUpperCase()).replace(/\bGlm\b/, 'GLM'));
 
+// The one user of a server without accounts.
+export const LOCAL_USER = 'me@workline.local';
+
 export function createApp(store, opts = {}) {
   const {
     allowSignup = true, aiKey = '', aiModel = 'claude-sonnet-5-5', aiBase = 'https://api.anthropic.com',
     nvidiaKey = '', nvidiaModel = NVIDIA_MODELS, nvidiaBase = 'https://integrate.api.nvidia.com/v1',
     aiDailyLimit = 0, trustProxy = false,
-    mailer = createMailer(), oauth = {}, appUrl = '', allowLocal = false, dbAllowPrivate = false, dbTimeout = 30_000,
+    mailer = createMailer(), oauth = {}, appUrl = '', allowLocal = false, noAccounts = false, dbAllowPrivate = false, dbTimeout = 30_000,
   } = opts;
   // New accounts confirm their email when the server can send one (unless turned off).
   const requireVerified = opts.requireVerified ?? mailer.configured;
@@ -59,13 +62,17 @@ export function createApp(store, opts = {}) {
     next();
   });
   api.use(express.json({ limit: '30mb' })); // a file is at most 4 MB; AI requests can carry pictures
+  // Without accounts (noAccounts): no sign-in at all; every request is the one built-in user, who owns the
+  // workflows, credentials and apps on this server.
+  if (noAccounts && !s.userByEmail.get(LOCAL_USER)) s.addUser.run('local', LOCAL_USER, 'Me', '!', Date.now(), 1);
   api.use((req, res, next) => {
     const t = readCookie(req, COOKIE);
     req.token = t;
     req.user = t ? s.session.get(tokenHash(t), Date.now()) || null : null;
+    if (!req.user && noAccounts) req.user = s.userByEmail.get(LOCAL_USER) || null;
     next();
   });
-  // A change is answered once it's in storage (Google Drive), so nothing reported as done is lost.
+  // A change is answered once it's in storage (the database), so nothing reported as done is lost.
   api.use((req, res, next) => {
     if (req.method === 'GET' && !req.path.startsWith('/auth/oauth/')) return next();
     const after = fn => (...a) => {
@@ -86,7 +93,7 @@ export function createApp(store, opts = {}) {
 
   // What this server offers. allowLocal: whether the app may be used without an account.
   api.get('/server', (req, res) => res.json({
-    name: 'linework-server', ...accounts.info(), allowLocal,
+    name: 'linework-server', ...accounts.info(), allowLocal, accounts: !noAccounts,
     features: ['versions', 'share', 'folders', 'ai-limits', '2fa', 'db', 'flows'],
     ai: { configured: Boolean(aiKey || nvidiaKey), dailyLimit: aiDailyLimit },
   }));

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-/* The server's data, kept in a backend from drive.js (Google Drive in production) instead of a database.
+/* The server's data, kept as named JSON blobs in a backend from storage.js (a PostgreSQL table in production).
 
    meta.json            accounts, sessions, sign-in links, Google/GitHub identities, folders, share links,
                         AI usage, and the index of everyone's files and versions. Small: it's held in memory

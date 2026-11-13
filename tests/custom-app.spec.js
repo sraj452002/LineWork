@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { openStore } from '../backend/store.js';
-import { memoryBackend } from '../backend/drive.js';
+import { memoryBackend } from '../backend/storage.js';
 import { createApp } from '../backend/app.js';
 
 // Custom apps (the App view): a page of your own that runs workflows, tried in the editor's preview and

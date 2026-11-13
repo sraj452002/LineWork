@@ -1,7 +1,7 @@
 import { api } from './backend.js';
 
 /* The account's own settings, by name (saved database connections, query history…). Signed in, they
-   live on the account (GET/PUT /api/userdata, kept in Google Drive): loaded once when the workspace
+   live on the account (GET/PUT /api/userdata, kept on the server): loaded once when the workspace
    opens, read from memory after that, and each change sent back shortly after. Without an account
    (the frontend on its own, the tests) they stay in this browser. */
 

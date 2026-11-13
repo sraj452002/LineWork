@@ -1,5 +1,5 @@
 /* The Database view's side of live connections.
-   - Saved connections live on the account (userdata.js, in Google Drive). Passwords are kept only when
+   - Saved connections live on the account (userdata.js, on the server). Passwords are kept only when
      "Remember password" is ticked; otherwise only for this visit. They are never put in files, which can be shared.
    - PostgreSQL, MySQL, SQL Server and MongoDB go through the server (POST /api/db, see backend/dbconnect.js).
    - SQLite files open right here in the browser (sql.js), and can be downloaded again after changes.

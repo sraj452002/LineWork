@@ -95,7 +95,7 @@ const require = createRequire(join(ROOT, 'backend/package.json'));
 const express = require('express');
 const { createApp } = await import(join(ROOT, 'backend/app.js'));
 const { openStore } = await import(join(ROOT, 'backend/store.js'));
-const { memoryBackend } = await import(join(ROOT, 'backend/drive.js'));
+const { memoryBackend } = await import(join(ROOT, 'backend/storage.js'));
 const main = express();
 main.use(express.static(DIST));
 main.use(createApp(await openStore(memoryBackend()), { requireVerified: false }));

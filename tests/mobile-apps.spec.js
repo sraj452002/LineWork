@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { openStore } from '../backend/store.js';
-import { memoryBackend } from '../backend/drive.js';
+import { memoryBackend } from '../backend/storage.js';
 import { createApp } from '../backend/app.js';
 
 // WorkLine Apps (/mobile): the phone app. Signed in, it lists only the account's published workflows,

@@ -5,7 +5,7 @@ import { useUI } from './ui.jsx';
 import { signOut, startSession } from '../lib/auth.js';
 import { listFiles } from '../lib/cloud.js';
 import { publishedApps } from '../lib/apps.js';
-import { serverInfo } from '../lib/backend.js';
+import { api, asUser, serverInfo } from '../lib/backend.js';
 import Assistant from './Assistant.jsx';
 
 /* WorkLine Apps (/mobile): the end user's phone app. Two things only: the published workflows (those
@@ -94,7 +94,13 @@ function StoreApp() {
 function OwnerApp() {
   // undefined while checking; null when nobody is signed in.
   const [session, setSession] = useState(undefined);
-  useEffect(() => { startSession().then(setSession, () => setSession(null)); }, []);
+  useEffect(() => {
+    startSession().then(async s => {
+      // A server without accounts: its one built-in user's apps, without signing in.
+      if (s && s.server) { try { return setSession({ mode: 'cloud', server: true, user: asUser((await api('/auth/me')).user) }); } catch (e) { /* shown as signed out */ } }
+      setSession(s);
+    }, () => setSession(null));
+  }, []);
   if (session === undefined) return <div className="boot" aria-busy="true" />;
   if (!session || !session.mode || session.pending) return <div className="m-login"><Login pending={session && session.pending} notice={session && session.notice} onSignedIn={setSession} /></div>;
   if (session.mode !== 'cloud') return (
@@ -211,7 +217,7 @@ function AppsHome({ session, onSignOut }) {
     <div className="m-app-shell">
       <div className="m-shell">
         {open && tab === 'run' ? <div className="m-run"><AppRunner file={open} server={server} onBack={() => setOpenId(null)} /></div> : (<>
-          <MobileBar user={session.user} onSignOut={out} onRefresh={tab === 'run' ? load : null} busy={busy} title={tab === 'run' ? 'Workflows' : 'Nemo'}
+          <MobileBar user={session.server ? null : session.user} onSignOut={out} onRefresh={tab === 'run' ? load : null} busy={busy} title={tab === 'run' ? 'Workflows' : 'Nemo'}
             hello={`${greeting()}${session.user.name ? `, ${session.user.name.split(' ')[0]}` : ''}`} />
           {install && <button className="btn primary m-wide m-install" onClick={async () => { install.prompt(); await install.userChoice.catch(() => {}); setInstall(null); }}>⬇ Install WorkLine Apps</button>}
           {tab === 'run' ? (<>
