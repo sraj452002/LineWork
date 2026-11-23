@@ -765,7 +765,8 @@ export function runFields(text) {
     if (kind.startsWith('choice:')) { options = m[1].replace(/^choice\s*:/i, '').split(',').map(x => x.trim()).filter(Boolean); kind = 'choice'; }
     if (kind === 'yes/no') kind = 'yesno';
     const label = l.replace(m ? m[0] : '', '').trim(), required = label.endsWith('*'), name = label.replace(/\*$/, '').trim() || 'Field';
-    const key = name.replace(/[^\w ]+/g, '').trim().replace(/\s+(\w)/g, (_, c) => c.toUpperCase()).replace(/^\w/, c => c.toLowerCase()) || 'field';
+    // camelCase, each word lowercased first: "GST rate" → gstRate, "Price includes GST" → priceIncludesGst.
+    const key = name.replace(/[^\w ]+/g, '').trim().split(/\s+/).filter(Boolean).map((w, i) => (i ? w[0].toUpperCase() + w.slice(1).toLowerCase() : w.toLowerCase())).join('') || 'field';
     return { name, key, kind, required, options };
   });
 }
