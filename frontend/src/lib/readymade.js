@@ -585,6 +585,15 @@ const WORKFLOWS = [
     ];
     return flowFile('Weekly sales report', nodes);
   } },
+  { k: 'w-gst', name: 'GST invoice calculator', note: 'Run it, fill in the form: the GST, the total and the amount in words, ready to send', make: () => {
+    const nodes = [
+      node('trigger.manual', 'Invoice details', 80, { fields: 'Customer*\nItem*\nAmount (number)\nGST rate (choice: 18, 5, 12, 28)\nPrice includes GST (yes/no)' }),
+      node('num.gst', 'Work out the GST', 340, { value: '{{ $json.amount }}', rate: '{{ $json.gstRate }}', mode: '{{ $json.priceIncludesGst ? "included" : "excluded" }}', output: 'tax' }),
+      node('conv.words', 'Total in words', 600, { value: '{{ $json.tax.total }}', system: 'indian', money: true, output: 'inWords' }),
+      node('core.set', 'The invoice', 860, { fields: [{ name: 'invoice', value: 'Invoice for {{ $json.customer }}\n{{ $json.item }}\nAmount: ₹{{ $json.tax.net }}\nCGST ({{ $json.gstRate / 2 }}%): ₹{{ $json.tax.cgst }}\nSGST ({{ $json.gstRate / 2 }}%): ₹{{ $json.tax.sgst }}\nTotal: ₹{{ $json.tax.total }}\n({{ $json.inWords }})' }] }),
+    ];
+    return flowFile('GST invoice calculator', nodes);
+  } },
   { k: 'w-alerts', name: 'Failure alerts', note: 'When any of your workflows fails, post what broke to Slack', make: () => {
     const nodes = [
       node('trigger.error', 'A workflow failed', 80, {}),

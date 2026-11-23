@@ -73,3 +73,26 @@ test('Run workflow opens the form, and the workflow gets what was filled in', as
     expect(errors).toEqual([]);
   } finally { try { process.kill(-vite.pid); } catch (e) {} srv.close(); app.flows.close(); }
 });
+
+// The ready-made "GST invoice calculator": its form's answers in, the invoice out.
+test('the GST invoice calculator template works out the invoice from the form', async () => {
+  Object.assign(globalThis, { innerWidth: globalThis.innerWidth || 1400 });
+  const mod = await import('../frontend/src/lib/readymade.js');
+  const list = Object.values(mod).find(v => Array.isArray(v) && v.some(t => t && t.k === 'w-gst'));
+  const { flow } = list.find(t => t.k === 'w-gst').make();
+  const { runFlow } = await import('../backend/flow-engine.js');
+  const types = { ...(await import('../backend/flow-nodes.js')).NODE_TYPES, ...(await import('../backend/flow-tools.js')).TOOL_NODES };
+  expect(runFields(flow.nodes[0].params.fields).map(f => f.key)).toEqual(['customer', 'item', 'amount', 'gstRate', 'priceIncludesGst']);
+  const run = async answers => {
+    const r = await runFlow(flow, { startId: flow.nodes[0].id, input: [{ json: answers }], types, ctx: {} });
+    expect(r.status).toBe('success');
+    const out = r.nodes[flow.nodes.at(-1).id].output.main[0];
+    return out.json ?? out;
+  };
+  const a = await run({ customer: 'Asha Traders', item: 'Website design', amount: 25000, gstRate: '18', priceIncludesGst: false });
+  expect(a.tax).toEqual({ net: 25000, tax: 4500, total: 29500, cgst: 2250, sgst: 2250 });
+  expect(a.invoice).toBe('Invoice for Asha Traders\nWebsite design\nAmount: ₹25000\nCGST (9%): ₹2250\nSGST (9%): ₹2250\nTotal: ₹29500\n(Rupees twenty-nine thousand five hundred only)');
+  // A price that already includes GST: the tax is taken out of it.
+  const b = await run({ customer: 'Ravi', item: 'Shoes', amount: 1180, gstRate: '18', priceIncludesGst: true });
+  expect(b.tax).toMatchObject({ net: 1000, tax: 180, total: 1180 });
+});
