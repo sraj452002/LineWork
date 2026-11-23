@@ -116,7 +116,9 @@ const LANGS = [['EN-US', 'English (US)'], ['EN-GB', 'English (UK)'], ['HI', 'Hin
 export const GROUPS = ['Triggers', 'Workline', 'Flow', 'Data', ...MORE.groups.filter(g => g !== 'Public data'), 'UI', 'Web', 'AI', 'Communication', 'Productivity', 'Developer', 'Sales & payments', 'Storage & feeds', 'Public data'];
 export const NODES = {
   /* ---- triggers ---- */
-  'trigger.manual': { group: 'Triggers', label: 'Run by hand', note: 'Starts when you press Run', icon: I.play, tone: 'green', trigger: true, fields: [] },
+  'trigger.manual': { group: 'Triggers', label: 'Run by hand', note: 'Starts when you press Run', icon: I.play, tone: 'green', trigger: true,
+    fields: [{ k: 'fields', label: 'Ask for these when it runs (one a line, optional)', kind: 'textarea', hint: 'Name*\nEmail* (email)\nAmount (number)\nPlan (choice: Free, Pro)\nNotes (long)' }],
+    help: 'With fields, Run workflow opens a form; what you fill in is the first item ({{ $json.name }}…). A * makes a field required; (long), (email), (number), (date), (yes/no) or (choice: A, B) set its kind.' },
   'trigger.webhook': { group: 'Triggers', label: 'Webhook', note: 'Starts when another app calls its URL', icon: I.hook, tone: 'green', trigger: true,
     fields: [{ k: 'method', label: 'Method', kind: 'select', options: [['ANY', 'Any'], ['POST', 'POST'], ['GET', 'GET'], ['PUT', 'PUT'], ['DELETE', 'DELETE']] },
       { k: 'respond', label: 'Respond', kind: 'select', options: [['now', 'At once (202 Accepted)'], ['end', 'When the workflow ends (or a Respond node answers)']] }],
@@ -751,6 +753,26 @@ export const listCredentials = () => api('/credentials').then(r => r.credentials
 export const createCredential = (type, name, data) => api('/credentials', { method: 'POST', body: { type, name, data } }).then(r => r.credential);
 export const updateCredential = (id, name, data) => api(`/credentials/${encodeURIComponent(id)}`, { method: 'PUT', body: { name, data } }).then(r => r.credential);
 export const deleteCredential = id => api(`/credentials/${encodeURIComponent(id)}`, { method: 'DELETE' });
-export const startRun = (fileId, flow, startId) => api(`/flows/${encodeURIComponent(fileId)}/run`, { method: 'POST', body: { flow, startId } }).then(r => r.runId);
+export const startRun = (fileId, flow, startId, input) => api(`/flows/${encodeURIComponent(fileId)}/run`, { method: 'POST', body: { flow, startId, ...(input !== undefined ? { input } : {}) } }).then(r => r.runId);
+
+/* The form a Run by hand trigger asks for when it runs: one field a line. "Email*" is required; (long),
+   (email), (number), (date), (time), (tel), (url), (yes/no) or (choice: A, B, C) set its kind. Each field's
+   key is its name in camelCase ("First name" → firstName), which is what the workflow reads ({{ $json.firstName }}). */
+export function runFields(text) {
+  return String(text || '').split('\n').map(l => l.trim()).filter(Boolean).slice(0, 40).map(l => {
+    const m = /\((long|email|number|date|time|tel|url|yes\/no|yesno|choice\s*:[^)]*)\)/i.exec(l);
+    let kind = m ? m[1].toLowerCase().replace(/\s+/g, '') : 'text', options = [];
+    if (kind.startsWith('choice:')) { options = m[1].replace(/^choice\s*:/i, '').split(',').map(x => x.trim()).filter(Boolean); kind = 'choice'; }
+    if (kind === 'yes/no') kind = 'yesno';
+    const label = l.replace(m ? m[0] : '', '').trim(), required = label.endsWith('*'), name = label.replace(/\*$/, '').trim() || 'Field';
+    const key = name.replace(/[^\w ]+/g, '').trim().replace(/\s+(\w)/g, (_, c) => c.toUpperCase()).replace(/^\w/, c => c.toLowerCase()) || 'field';
+    return { name, key, kind, required, options };
+  });
+}
+// The answers as the workflow gets them: numbers as numbers, yes/no as true/false.
+export const runValues = (fields, v) => Object.fromEntries(fields.map(f => {
+  const x = v[f.key];
+  return [f.key, f.kind === 'number' ? (x === '' || x == null ? null : Number(x)) : f.kind === 'yesno' ? x === true : String(x ?? '')];
+}));
 export const getRun = id => api(`/runs/${encodeURIComponent(id)}`).then(r => r.run);
 export const listRuns = fileId => api(`/flows/${encodeURIComponent(fileId)}/runs`).then(r => r.runs);

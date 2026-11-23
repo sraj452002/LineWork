@@ -4,7 +4,7 @@ import { api, serverInfo } from '../lib/backend.js';
 import { clone, rid } from '../lib/utils.js';
 import {
   CRED_TYPES, GROUPS, ICON, NODES, shelfOf, shelves, createCredential, deleteCredential, emptyFlow, getRun, inputsOf, listCredentials,
-  listRuns, newNode, nodeDef, outputsOf, outsOf, startRun, updateCredential,
+  listRuns, newNode, nodeDef, outputsOf, outsOf, runFields, runValues, startRun, updateCredential,
 } from '../lib/flows.js';
 import { LOGOS } from '../lib/flowlogos.js';
 import { listFiles } from '../lib/cloud.js';
@@ -51,7 +51,7 @@ const ago = t => { const s = Math.round((Date.now() - t) / 1000); return s < 60 
 const TRIGGER_NAME = { manual: 'By hand', app: 'App', webhook: 'Webhook', schedule: 'Schedule', poll: 'Something new', form: 'Form', github: 'GitHub', stripe: 'Stripe', shopify: 'Shopify', slack: 'Slack', typeform: 'Typeform', calendly: 'Calendly' };
 
 export default function FlowView({ file, update, visible, saveState = 'Saved', onGuide, assist }) {
-  const { toast, ask } = useUI();
+  const { toast, ask, popup } = useUI();
   useEffect(() => { if (!file.flow) update(c => { c.flow = emptyFlow(); }); }, [file.flow, update]);
   const flow = file.flow || { nodes: [], edges: [] };
   const change = useCallback(fn => update(c => { fn(c.flow); }), [update]);
@@ -74,6 +74,7 @@ export default function FlowView({ file, update, visible, saveState = 'Saved', o
   const [tab, setTab] = useState('settings');
   const [credDlg, setCredDlg] = useState(null); // {types, pick?: id => void}
   const [help, setHelp] = useState(null);       // a node type explained in a popup
+  const [runAsk, setRunAsk] = useState(null);   // the input form before a run: {startId, mode: 'form' | 'json'}
   const [publish, setPublish] = useState(false);
   const [webPub, setWebPub] = useState(false);
   // A workflow that starts with a Page trigger is a web app: Publish puts its page on the web.
@@ -195,13 +196,21 @@ export default function FlowView({ file, update, visible, saveState = 'Saved', o
   fitRef.current = fit;
 
   /* ---- running ---- */
-  const go = async startId => {
+  const firstOf = startId => startId || nodes.find(n => n.type === 'trigger.manual')?.id || nodes.find(n => nodeDef(n.type).trigger)?.id;
+  // Run workflow: a Run by hand trigger with fields asks for them first; anything else runs at once.
+  const askRun = startId => {
+    const first = firstOf(startId), n = nodes.find(x => x.id === first);
+    if (n && n.type === 'trigger.manual' && runFields(n.params?.fields).length) setRunAsk({ startId: first, mode: 'form' });
+    else go(startId);
+  };
+  // input: the items to start with (from the run form), else the trigger's own empty item.
+  const go = async (startId, input) => {
     if (!server) { toast('Workflows run on the Workline server. Sign in to run them.'); return; }
-    const first = startId || nodes.find(n => n.type === 'trigger.manual')?.id || nodes.find(n => nodeDef(n.type).trigger)?.id;
+    const first = firstOf(startId);
     if (!first) { toast('Add a trigger first: Run by hand, Webhook or Schedule.'); return; }
     setBusy(true);
     try {
-      const id = await startRun(file.id, clone(flow), first);
+      const id = await startRun(file.id, clone(flow), first, input);
       let r = { id, status: 'running', nodes: {} };
       setRun(r);
       for (let i = 0; i < 400 && r.status === 'running'; i++) {
@@ -389,7 +398,11 @@ ${more}`;
         <button className="fv-tool" disabled={!server} onClick={() => setCredDlg({ types: Object.keys(CRED_TYPES) })}>
           <Ico d="M14 10a4 4 0 1 0-1.2 2.8L20 20M17 17l2-2" size={15} />Credentials
         </button>
-        <button ref={runBtn} className="btn primary fv-run" disabled={busy || !server} onClick={() => go()}>{busy ? <><i className="spin" />Running</> : <><Ico d={ICON.play} size={13} />Run workflow</>}</button>
+        <span className="fv-runwrap">
+          <button ref={runBtn} className="btn primary fv-run" disabled={busy || !server} onClick={() => askRun()}>{busy ? <><i className="spin" />Running</> : <><Ico d={ICON.play} size={13} />Run workflow</>}</button>
+          <button className="btn primary fv-runmore" disabled={busy || !server} aria-label="More ways to run" title="More ways to run"
+            onClick={e => popup(e.currentTarget, [{ label: 'Run with input…', act: () => setRunAsk({ startId: firstOf(), mode: 'form' }) }, { label: 'Run without input', act: () => go() }])}>▾</button>
+        </span>
         <button className="fv-tool icon" aria-label={sideOpen ? 'Hide the side panel' : 'Show the side panel'} title={sideOpen ? 'Hide the side panel' : 'Show the side panel'} aria-pressed={sideOpen} onClick={() => setSideOpen(!sideOpen)}>
           <Ico d="M4 5h16v14H4zM15 5v14" size={15} />
         </button>
@@ -487,7 +500,7 @@ ${more}`;
         {sideOpen && <aside className="fv-panel">
           {selected ? (
             <NodePanel key={selected.id} node={selected} flow={flow} change={change} creds={creds} tab={tab} setTab={setTab} result={status(selected.id)} active={!!flow.active}
-              onHelp={setHelp} onCred={(types, pick) => setCredDlg({ types, pick })} onRun={() => go(selected.id)} onDelete={() => remove({ kind: 'node', id: selected.id })} canRun={!!server && !busy}
+              onHelp={setHelp} onCred={(types, pick) => setCredDlg({ types, pick })} onRun={() => askRun(selected.id)} onDelete={() => remove({ kind: 'node', id: selected.id })} canRun={!!server && !busy}
               onPreview={server ? () => previewPage(selected.id) : null} />
           ) : (
             <div className="fv-over">
@@ -525,6 +538,8 @@ ${more}`;
           </div>
         </div>
       )}
+      {runAsk && <RunForm fileId={file.id} node={nodes.find(n => n.id === runAsk.startId)} onClose={() => setRunAsk(null)}
+        onRun={input => { const at = runAsk.startId; setRunAsk(null); go(at, input); }} />}
       {publish && <PublishDialog file={file} flow={flow} change={change} onClose={() => setPublish(false)} />}
       {webPub && pageNode && <WebPublishDialog fileId={file.id} flow={flow} node={pageNode} server={server} change={change} onForm={() => { setWebPub(false); setPublish(true); }} onClose={() => setWebPub(false)} />}
       {credDlg && <Credentials types={credDlg.types} creds={creds} onChanged={loadCreds} onPick={credDlg.pick} onClose={() => setCredDlg(null)} ask={ask} toast={toast} />}
@@ -937,6 +952,66 @@ function Credentials({ types, creds, onChanged, onPick, onClose, ask, toast }) {
           <div className="mact"><button className="btn" onClick={() => (onPick ? onClose() : setForm(null))}>Cancel</button><button className="btn dark" disabled={busy} onClick={save}>{busy ? 'Saving…' : 'Save'}</button></div>
         </>)}
       </div>
+    </div>
+  );
+}
+
+/* The form before a run: the fields a Run by hand trigger asks for, or (for any trigger, or "Run with
+   input…") the first item as JSON. What was entered last time is filled in again (kept in this browser). */
+function RunForm({ fileId, node, onRun, onClose }) {
+  const fields = node && node.type === 'trigger.manual' ? runFields(node.params?.fields) : [];
+  const store = `linework:run-input:${fileId}:${node ? node.id : ''}`;
+  const saved = (() => { try { return JSON.parse(localStorage.getItem(store) || 'null') || {}; } catch (e) { return {}; } })();
+  const [mode, setMode] = useState(fields.length ? 'form' : 'json');
+  const [vals, setVals] = useState(() => Object.fromEntries(fields.map(f => [f.key, saved.vals?.[f.key] ?? (f.kind === 'yesno' ? false : f.kind === 'choice' ? f.options[0] || '' : '')])));
+  const [json, setJson] = useState(saved.json || '{\n  \n}');
+  const [err, setErr] = useState('');
+  const set = (k, v) => { setVals(x => ({ ...x, [k]: v })); setErr(''); };
+  const submit = e => {
+    e.preventDefault();
+    let input;
+    if (mode === 'form') {
+      const missing = fields.filter(f => f.required && f.kind !== 'yesno' && !String(vals[f.key] ?? '').trim());
+      if (missing.length) { setErr(`Fill in ${missing.map(f => f.name).join(', ')}.`); return; }
+      input = [runValues(fields, vals)];
+    } else {
+      try { const v = JSON.parse(json || '{}'); input = Array.isArray(v) ? v : [v]; } catch (x) { setErr('That isn’t valid JSON. Example: {"name": "Asha", "amount": 1200}'); return; }
+      if (input.some(x => !x || typeof x !== 'object' || Array.isArray(x))) { setErr('Give an object, or a list of objects (one item each).'); return; }
+    }
+    try { localStorage.setItem(store, JSON.stringify({ vals, json })); } catch (x) { /* only a convenience */ }
+    onRun(input);
+  };
+  const box = f => {
+    const common = { id: `rf-${f.key}`, value: vals[f.key] ?? '', onChange: e => set(f.key, e.target.value), required: f.required };
+    if (f.kind === 'long') return <textarea {...common} rows={3} />;
+    if (f.kind === 'choice') return <select {...common}>{f.options.map(o => <option key={o} value={o}>{o}</option>)}</select>;
+    if (f.kind === 'yesno') return <label className="fv-rf-check"><input type="checkbox" id={`rf-${f.key}`} checked={!!vals[f.key]} onChange={e => set(f.key, e.target.checked)} /> Yes</label>;
+    return <input {...common} type={f.kind === 'text' ? 'text' : f.kind} inputMode={f.kind === 'number' ? 'decimal' : undefined} step={f.kind === 'number' ? 'any' : undefined} />;
+  };
+  return (
+    <div className="modal" onPointerDown={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <form className="mbox fv-runform" role="dialog" aria-modal="true" aria-label="Run with input" noValidate onSubmit={submit} onKeyDown={e => { if (e.key === 'Escape') onClose(); }}>
+        <h3>Run {node ? `from “${node.name}”` : 'the workflow'}</h3>
+        <p>{mode === 'form' ? 'What you fill in is the first item the workflow gets.' : 'The first item, as JSON: an object, or a list of objects for one item each.'}</p>
+        {fields.length > 0 && (
+          <div className="seg fv-rf-tabs" role="tablist">
+            <button type="button" role="tab" aria-selected={mode === 'form'} onClick={() => { setMode('form'); setErr(''); }}>Form</button>
+            <button type="button" role="tab" aria-selected={mode === 'json'} onClick={() => { setMode('json'); setErr(''); setJson(JSON.stringify(runValues(fields, vals), null, 2)); }}>JSON</button>
+          </div>
+        )}
+        {mode === 'form'
+          ? fields.map((f, i) => (
+            <div className="fv-rf-field" key={f.key + i}>
+              <label htmlFor={`rf-${f.key}`}>{f.name}{f.required && <b aria-hidden="true"> *</b>}<code>{`{{ $json.${f.key} }}`}</code></label>
+              {box(f)}
+            </div>))
+          : <textarea className="fv-rf-json" aria-label="Input as JSON" spellCheck={false} rows={8} value={json} onChange={e => setJson(e.target.value)} />}
+        {err && <p className="fv-rf-err" role="alert">{err}</p>}
+        <footer className="fv-rf-foot">
+          <button type="button" className="btn" onClick={onClose}>Cancel</button>
+          <button className="btn primary" autoFocus={!fields.length}><Ico d={ICON.play} size={13} />Run</button>
+        </footer>
+      </form>
     </div>
   );
 }

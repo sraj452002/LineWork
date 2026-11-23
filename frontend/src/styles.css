@@ -2992,3 +2992,22 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .as-tools label{display:flex;align-items:flex-start;gap:9px;font-size:13.5px;cursor:pointer}
 .as-tools label span{display:flex;flex-direction:column}.as-tools label small{color:var(--ink2);font-size:12.5px}
 .as-tools input{margin-top:3px}
+
+/* Run workflow with input: the split button and the form before a run */
+.fv-runwrap{display:inline-flex;align-items:stretch}
+.fv-runwrap .fv-run{border-top-right-radius:0;border-bottom-right-radius:0}
+.fv-runmore{height:32px;padding:0 9px;border-top-left-radius:0;border-bottom-left-radius:0;border-left:1px solid color-mix(in srgb,currentColor 25%,transparent);font-size:12px}
+.fv-runform{width:min(480px,100%);max-height:calc(100vh - 32px);overflow:auto}
+.fv-rf-tabs{margin:0 0 12px}
+.fv-rf-tabs button[aria-selected="true"]{background:var(--ink);color:var(--paper)}
+.fv-rf-field{display:flex;flex-direction:column;gap:5px;margin:0 0 12px}
+.fv-rf-field label{display:flex;align-items:baseline;gap:6px;font-size:13px;font-weight:600}
+.fv-rf-field label b{color:var(--danger,#c0392b)}
+.fv-rf-field label code{margin-left:auto;font-size:11px;font-weight:400;color:var(--ink3,var(--ink2));background:none}
+.fv-rf-field input,.fv-rf-field textarea,.fv-rf-field select,.fv-rf-json{width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:var(--surface);color:var(--ink);font:inherit}
+.fv-rf-field .fv-rf-check{display:flex;align-items:center;gap:8px;font-weight:400}
+.fv-rf-field .fv-rf-check input{width:auto}
+.fv-rf-json{font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;resize:vertical}
+.fv-rf-err{color:var(--danger,#c0392b)!important;font-size:13px}
+.fv-rf-foot{display:flex;justify-content:flex-end;gap:8px;margin-top:6px}
+.fv-rf-foot .btn{display:inline-flex;align-items:center;gap:6px}
