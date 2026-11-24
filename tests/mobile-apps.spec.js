@@ -43,10 +43,12 @@ test('WorkLine Apps: sign in on a phone, see only the published workflows, run o
     await page.request.put('/api/files/f_greet', { data: { id: 'f_greet', title: 'Greeter', diagrams: [{ id: 'd1', type: 'architecture', name: 'D', code: '', manual: {}, dir: 'LR', style: 'color' }], active: 0, doc: '', updated: Date.now(), view: 'flow', flow } });
     await page.getByRole('button', { name: 'Refresh' }).click();
     await expect(page.getByRole('button', { name: 'Run Greeter' })).toBeVisible();
-    // A workflow published as a web app is there too, and opens inside the app with a way back.
+    // A workflow published as a web app is under Pages, and opens inside the app with a way back.
+    await page.getByRole('tab', { name: /Pages/ }).click();
     await page.getByRole('button', { name: 'Open Hello' }).click();
     await expect(page.locator('.m-page-view iframe')).toHaveAttribute('src', '/p/hello-maya');
-    await page.getByRole('button', { name: '← Workflows' }).click();
+    await page.getByRole('button', { name: '← Pages' }).click();
+    await page.getByRole('tab', { name: /Workflows/ }).click();
     // Something published on the computer shows when the app comes back to the front.
     const later = { ...flow, app: { ...flow.app, name: 'Second', icon: '🎯' } };
     await page.request.put('/api/files/f_two', { data: { id: 'f_two', title: 'Second', diagrams: [{ id: 'd1', type: 'architecture', name: 'D', code: '', manual: {}, dir: 'LR', style: 'color' }], active: 0, doc: '', updated: Date.now(), view: 'flow', flow: { ...later, active: false } } });
@@ -62,9 +64,10 @@ test('WorkLine Apps: sign in on a phone, see only the published workflows, run o
     await expect(page.getByText('HELLO MAYA!')).toBeVisible({ timeout: 20_000 });
     await page.screenshot({ path: 'test-results/mobile-apps-run.png' });
 
-    // The other tab: AI chat (and nothing else).
-    await expect(page.getByRole('navigation', { name: 'WorkLine Apps' }).getByRole('button')).toHaveText(['Workflows', 'Nemo']);
-    await page.getByRole('button', { name: 'Nemo', exact: true }).click();
+    // Nemo, the AI chat, beside Workflows and Pages (back from the run first).
+    await page.getByRole('button', { name: /^←/ }).first().click();
+    await expect(page.getByRole('tablist', { name: 'Show' }).getByRole('tab')).toHaveText([/Workflows/, /Pages/, /Nemo/]);
+    await page.getByRole('tab', { name: /Nemo/ }).click();
     await page.getByLabel('Message').fill('Hello');
     await page.getByRole('button', { name: 'Send' }).click();
     await expect(page.locator('.as-msg.ai')).toContainText('Namaste! Main madad karunga.');

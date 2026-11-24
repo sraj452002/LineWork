@@ -54,6 +54,13 @@ export function iconPng(letter, color, size) {
   return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
 }
 
+// The App view's own icon (file.ui.iconPng, a PNG data URL made in the browser), as bytes; else null.
+const customIcon = file => {
+  const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(String((file.ui && file.ui.iconPng) || ''));
+  if (!m) return null;
+  const buf = Buffer.from(m[1], 'base64');
+  return buf.length > 8 && buf.length < 3_000_000 && buf.readUInt32BE(0) === 0x89504e47 ? buf : null;
+};
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const nameOf = file => String((file.ui && file.ui.spec && file.ui.spec.name) || file.title || 'App').slice(0, 60);
 const colorOf = file => (file.ui && file.ui.spec && file.ui.spec.theme && file.ui.spec.theme.primary) || '#4f46e5';
@@ -105,11 +112,15 @@ export function installRoutes(ui, uiOf) {
     res.type('application/manifest+json').set('cache-control', 'no-cache').send(JSON.stringify({
       name, short_name: name.slice(0, 12), id: `${base}/app`, start_url: `${base}/app`, scope: `${base}/`, display: 'standalone',
       background_color: bgOf(file), theme_color: colorOf(file),
-      icons: [192, 512].map(size => ({ src: `${base}/icon-${size}.png`, sizes: `${size}x${size}`, type: 'image/png', purpose: 'any maskable' })),
+      icons: customIcon(file) ? [{ src: `${base}/icon-512.png`, sizes: '512x512', type: 'image/png', purpose: 'any' }]
+        : [192, 512].map(size => ({ src: `${base}/icon-${size}.png`, sizes: `${size}x${size}`, type: 'image/png', purpose: 'any maskable' })),
     }));
   }));
   ui.get('/:token/icon-:size.png', app((req, res, file) => {
     const size = Number(req.params.size) === 512 ? 512 : 192;
+    // An icon chosen in the App view (a picture, or an emoji drawn as one): served as it is.
+    const own = customIcon(file);
+    if (own) return res.type('png').set('cache-control', 'no-cache').send(own);
     res.type('png').set('cache-control', 'public, max-age=86400').send(iconPng(letterOf(nameOf(file)), colorOf(file), size));
   }));
   // A service worker, so it can be installed: it passes requests on, and says so when offline.
