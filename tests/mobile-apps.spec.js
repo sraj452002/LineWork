@@ -64,9 +64,10 @@ test('WorkLine Apps: sign in on a phone, see only the published workflows, run o
     await expect(page.getByText('HELLO MAYA!')).toBeVisible({ timeout: 20_000 });
     await page.screenshot({ path: 'test-results/mobile-apps-run.png' });
 
-    // The other tab: AI chat (and nothing else).
-    await expect(page.getByRole('navigation', { name: 'WorkLine Apps' }).getByRole('button')).toHaveText(['Workflows', 'Nemo']);
-    await page.getByRole('button', { name: 'Nemo', exact: true }).click();
+    // Nemo, the AI chat, beside Workflows and Pages (back from the run first).
+    await page.getByRole('button', { name: /^←/ }).first().click();
+    await expect(page.getByRole('tablist', { name: 'Show' }).getByRole('tab')).toHaveText([/Workflows/, /Pages/, /Nemo/]);
+    await page.getByRole('tab', { name: /Nemo/ }).click();
     await page.getByLabel('Message').fill('Hello');
     await page.getByRole('button', { name: 'Send' }).click();
     await expect(page.locator('.as-msg.ai')).toContainText('Namaste! Main madad karunga.');

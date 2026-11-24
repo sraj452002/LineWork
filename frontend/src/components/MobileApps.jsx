@@ -65,11 +65,10 @@ function StoreApp() {
   // Pages (active workflows with a Page trigger) open here too, full screen, with a way back.
   const pages = store ? store.pages || [] : [];
   const [page, setPage] = useState(null);
-  const [tab, setTab] = useState('workflows'); // workflows | pages | published
-  // Nemo (AI chat) beside the workflows, on a server without accounts (where anyone may use its AI).
-  const [section, setSection] = useState('run'); // run | chat
+  const [tab, setTab] = useState('workflows'); // workflows | pages | chat (Nemo)
+  // Nemo (AI chat) beside the workflows and pages, on a server without accounts (where anyone may use its AI).
   const [chatOk, setChatOk] = useState(false);
-  useEffect(() => { serverInfo().then(i => setChatOk(!!(i && i.accounts === false && i.ai && i.ai.configured)), () => {}); }, []);
+  useEffect(() => { serverInfo().then(i => setChatOk(!!(i && i.accounts === false)), () => {}); }, []);
   // An open page is a step back in history, so the phone's back button returns to the list (not out of the app).
   useEffect(() => {
     if (!page) return undefined;
@@ -102,36 +101,20 @@ function StoreApp() {
       <AppRunner file={{ id: open.id, flow: { nodes: [], edges: [], app: open } }} server runner={runner} backLabel="← Workflows" onBack={() => setOpenId(null)} />
     </div>
   );
-  const nav = chatOk && (
-    <nav className="m-tabs" aria-label="WorkLine Apps">
-      <button aria-current={section === 'run' ? 'page' : undefined} onClick={() => setSection('run')}><Svg d={ICON.grid} size={19} /><span>Workflows</span></button>
-      <button aria-current={section === 'chat' ? 'page' : undefined} onClick={() => setSection('chat')}><Svg d={ICON.spark} size={19} /><span>Nemo</span></button>
-    </nav>
-  );
-  if (chatOk && section === 'chat') return (
-    <div className="m-app-shell">
-      <div className="m-shell">
-        <MobileBar title="Nemo" hello={greeting()} />
-        <Assistant compact user={null} />
-      </div>
-      {nav}
-    </div>
-  );
   const list = (
     <div className="m-shell">
-      <MobileBar onRefresh={load} busy={busy} title={tab === 'pages' ? 'Pages' : tab === 'published' ? 'Published' : 'Workflows'} hello={(store && store.name) || greeting()} />
+      <MobileBar onRefresh={tab === 'chat' ? null : load} busy={busy} title={tab === 'pages' ? 'Pages' : tab === 'chat' ? 'Nemo' : 'Workflows'} hello={(store && store.name) || greeting()} />
       {error && <p className="m-note err">{error} <button className="link" onClick={load}>Try again</button></p>}
       {!store && !error && <Skeleton />}
-      {store && (apps.length > 0 || pages.length > 0) && <Sections tab={tab} setTab={setTab} apps={apps.length} pages={pages.length} published />}
-      {store && (!apps.length && !pages.length ? <Empty text="No workflows here yet. Pull back in a little while." />
-        : tab === 'published' ? <Published apps={apps} pages={pages} onRun={a => setOpenId(a.id)} onOpen={setPage} />
-        : tab === 'pages' ? (!pages.length ? <Empty text="No pages yet. A workflow with a Page trigger, published as a web app, shows up here." />
+      {(store || chatOk) && <Sections tab={tab} setTab={setTab} apps={apps.length} pages={pages.length} chat={chatOk} />}
+      {tab === 'chat' ? <Assistant compact user={null} />
+        : store && (tab === 'pages' ? (!pages.length ? <Empty text="No pages yet. A workflow with a Page trigger, published as a web app, shows up here." />
           : <Workflows kind="page" items={pages.map(pg => ({ key: pg.id, name: pg.title, description: pg.description, icon: pg.icon || '🌐', tone: 'sky', web: true, label: `Open ${pg.title}`, onClick: () => setPage(pg) }))} />)
         : !apps.length ? <Empty text="No workflows yet. Publish a workflow as an app and it shows up here." />
         : <Workflows items={apps.map(a => ({ key: a.id, name: a.name, description: a.description, icon: a.icon, tone: a.tone, label: `Run ${a.name}`, onClick: () => setOpenId(a.id) }))} />)}
     </div>
   );
-  return nav ? <div className="m-app-shell">{list}{nav}</div> : list;
+  return list;
 }
 
 // The account owner's own view (/mobile): their published workflows, and AI chat.
@@ -220,45 +203,14 @@ function Workflows({ items, kind = 'workflow' }) {
 }
 
 /* Workflows and pages apart: a workflow runs here with a form; a page opens at its own link. */
-function Sections({ tab, setTab, apps, pages, published }) {
+function Sections({ tab, setTab, apps, pages, chat }) {
   return (
     <div className="m-seg" role="tablist" aria-label="Show">
       <button role="tab" aria-selected={tab === 'workflows'} onClick={() => setTab('workflows')}>Workflows <b>{apps}</b></button>
       <button role="tab" aria-selected={tab === 'pages'} onClick={() => setTab('pages')}>Pages <b>{pages}</b></button>
-      {published && <button role="tab" aria-selected={tab === 'published'} onClick={() => setTab('published')}>Published</button>}
+      {chat && <button role="tab" aria-selected={tab === 'chat'} onClick={() => setTab('chat')}>✦ Nemo</button>}
     </div>
   );
-}
-
-/* Published: what's live in this store, each with its kind, when it last changed, and a way to open and
-   share it. Apps run here (their link is this app's); web pages have links of their own. */
-const agoShort = t => { if (!t) return ''; const s = Math.round((Date.now() - t) / 1000); return s < 60 ? 'just now' : s < 3600 ? `${Math.round(s / 60)} min ago` : s < 86400 ? `${Math.round(s / 3600)} h ago` : new Date(t).toLocaleDateString(); };
-function Published({ apps, pages, onRun, onOpen }) {
-  const { toast } = useUI();
-  const share = async (title, url) => {
-    const full = new URL(url, location.origin).href;
-    try { if (navigator.share) return await navigator.share({ title, url: full }); } catch (e) { if (e && e.name === 'AbortError') return; }
-    navigator.clipboard?.writeText(full).then(() => toast('Link copied'), () => toast(full));
-  };
-  const items = [
-    ...apps.map(a => ({ key: a.id, kind: 'Workflow', icon: a.icon || '✨', tone: a.tone || 'blue', name: a.name, updated: a.updated, go: 'Run', onGo: () => onRun(a), url: '/run' })),
-    ...pages.map(p => ({ key: p.id, kind: 'Page', icon: p.icon || '🌐', tone: 'sky', name: p.title, updated: p.updated, go: 'Open', onGo: () => onOpen(p), url: p.url })),
-  ].sort((a, b) => (b.updated || 0) - (a.updated || 0));
-  return (<>
-    <p className="m-pub-sum"><span className="m-pub-dot" aria-hidden="true" />{items.length} live · {apps.length} workflow{apps.length === 1 ? '' : 's'} · {pages.length} page{pages.length === 1 ? '' : 's'}</p>
-    <ul className="m-pub">
-      {items.map(it => (
-        <li key={it.key} className={'t-' + it.tone}>
-          <i aria-hidden="true"><AppIcon icon={it.icon} /></i>
-          <span className="m-pub-txt"><b>{it.name}</b><small><em>{it.kind}</em>● Live{it.updated ? ` · ${agoShort(it.updated)}` : ''}</small></span>
-          <span className="m-pub-acts">
-            <button className="btn" onClick={() => share(it.name, it.url)} aria-label={`Share ${it.name}`}>Share</button>
-            <button className="btn primary" onClick={it.onGo} aria-label={`${it.go} ${it.name}`}>{it.go}</button>
-          </span>
-        </li>
-      ))}
-    </ul>
-  </>);
 }
 
 // The end user's app: two tabs, run a published workflow, or chat with AI. Nothing else.
@@ -287,7 +239,7 @@ function AppsHome({ session, onSignOut }) {
   const pages = files ? livePages(files) : [];
   const open = apps.find(f => f.id === openId);
   const [page, setPage] = useState(null);
-  const [kind, setKind] = useState('workflows'); // workflows | pages
+  const [kind, setKind] = useState('workflows'); // workflows | pages | chat (Nemo)
   const out = async () => { if (await ask({ title: 'Sign out?', text: 'You can sign in again any time.', input: false, ok: 'Sign out' })) onSignOut(); };
   // A web app opens here, full screen, with a way back.
   if (page) return (
@@ -300,13 +252,13 @@ function AppsHome({ session, onSignOut }) {
     <div className="m-app-shell">
       <div className="m-shell">
         {open && tab === 'run' ? <div className="m-run"><AppRunner file={open} server={server} onBack={() => setOpenId(null)} /></div> : (<>
-          <MobileBar user={session.server ? null : session.user} onSignOut={out} onRefresh={tab === 'run' ? load : null} busy={busy} title={tab === 'run' ? (kind === 'pages' ? 'Pages' : 'Workflows') : 'Nemo'}
+          <MobileBar user={session.server ? null : session.user} onSignOut={out} onRefresh={kind !== 'chat' ? load : null} busy={busy} title={kind === 'chat' ? 'Nemo' : kind === 'pages' ? 'Pages' : 'Workflows'}
             hello={`${greeting()}${session.user.name ? `, ${session.user.name.split(' ')[0]}` : ''}`} />
           {install && <button className="btn primary m-wide m-install" onClick={async () => { install.prompt(); await install.userChoice.catch(() => {}); setInstall(null); }}>⬇ Install WorkLine Apps</button>}
-          {tab === 'run' ? (<>
+          <Sections tab={kind} setTab={setKind} apps={apps.length} pages={pages.length} chat />
+          {kind !== 'chat' ? (<>
             {error && <p className="m-note err">{error} <button className="link" onClick={load}>Try again</button></p>}
             {!files && !error && <Skeleton />}
-            {files && (apps.length > 0 || pages.length > 0) && <Sections tab={kind} setTab={setKind} apps={apps.length} pages={pages.length} />}
             {files && (!apps.length && !pages.length ? <Empty>No published workflows yet. On WorkLine, open a workflow and press <b>Publish</b>: it shows up here.</Empty>
               : kind === 'pages' ? (!pages.length ? <Empty text="No pages yet. A workflow with a Page trigger, published as a web app, shows up here." />
                 : <Workflows kind="page" items={pages.map(p => ({ key: p.id, name: p.title, description: p.description, icon: p.icon, tone: 'sky', web: true, label: `Open ${p.title}`, onClick: () => setPage(p) }))} />)
@@ -315,10 +267,6 @@ function AppsHome({ session, onSignOut }) {
           </>) : <Assistant compact user={session.user} />}
         </>)}
       </div>
-      <nav className="m-tabs" aria-label="WorkLine Apps">
-        <button aria-current={tab === 'run' ? 'page' : undefined} onClick={() => { setTab('run'); }}><Svg d={ICON.grid} size={19} /><span>Workflows</span></button>
-        <button aria-current={tab === 'chat' ? 'page' : undefined} onClick={() => setTab('chat')}><Svg d={ICON.spark} size={19} /><span>Nemo</span></button>
-      </nav>
     </div>
   );
 }

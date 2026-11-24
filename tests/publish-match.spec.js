@@ -44,12 +44,14 @@ test('publish: questions that match the workflow, and Nemo in the phone app', as
     await expect(dlg).not.toContainText('nothing in the workflow reads it');
     await expect(dlg.getByText('{{ $json.code }}', { exact: true })).toBeVisible();
 
-    // The phone app: Workflows and Nemo.
+    // The phone app: Workflows, Pages and Nemo (no Published).
     const phone = await ctx.newPage();
     await phone.setViewportSize({ width: 412, height: 860 });
     await phone.goto('/run');
-    await expect(phone.getByRole('navigation', { name: 'WorkLine Apps' })).toBeVisible({ timeout: 20_000 });
-    await phone.getByRole('button', { name: 'Nemo' }).click();
+    const tabs = phone.getByRole('tablist', { name: 'Show' }).getByRole('tab');
+    await expect(tabs).toHaveText([/Workflows/, /Pages/, /Nemo/], { timeout: 20_000 });
+    await expect(phone.getByText('Published', { exact: true })).toHaveCount(0);
+    await phone.getByRole('tab', { name: /Nemo/ }).click();
     await expect(phone.getByLabel('Message')).toBeVisible();
     await phone.screenshot({ path: 'test-results/run-nemo.png' });
     expect(errors).toEqual([]);
