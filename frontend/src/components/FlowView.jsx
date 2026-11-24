@@ -18,7 +18,8 @@ import { NodeCard } from './NodeGuide.jsx';
 import CustomNodes from './CustomNodes.jsx';
 import RunForm from './RunForm.jsx';
 import { addMissing, loadCustomNodes, onCustomNodes } from '../lib/customnodes.js';
-import { APP_ICONS, INPUT_KINDS, SHOW, emptyApp, inputsFromTrigger, keyOf, namesRead } from '../lib/apps.js';
+import { INPUT_KINDS, SHOW, emptyApp, inputsFromTrigger, isImageIcon, keyOf, namesRead } from '../lib/apps.js';
+import { IconPicker } from './AppIcon.jsx';
 
 /* The Workflow view: an n8n-style editor for file.flow. Nodes sit on a canvas you can pan (drag the
    background) and zoom (Ctrl + wheel); drag from a node's output dot to another's input to connect them,
@@ -822,7 +823,7 @@ function AgentPick({ value, onChange }) {
   return (
     <select value={value || ''} onChange={e => onChange(e.target.value)}>
       <option value="">{list && !list.length ? 'No agents yet: describe one below' : 'Describe one here (below)'}</option>
-      {(list || []).map(a => <option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}
+      {(list || []).map(a => <option key={a.id} value={a.id}>{isImageIcon(a.icon) ? '' : `${a.icon} `}{a.name}</option>)}
     </select>
   );
 }
@@ -918,6 +919,8 @@ function WebPublishDialog({ fileId, flow, node, server, change, onForm, onClose 
   const setName = v => change(f => { const n = f.nodes.find(x => x.id === node.id); if (n) (n.params ||= {}).link = v.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 40); });
   const named = name && check && check.ok;
   const link = named ? `${location.origin}/p/${name}` : hookLink;
+  // How it shows in the phone app's Pages: an icon (an emoji or a picture of your own).
+  const setIcon = v => change(f => { const n = f.nodes.find(x => x.id === node.id); if (n) (n.params ||= {}).icon = v; });
   const turn = on => {
     change(f => { f.active = on; });
     dispatchEvent(new Event('workline:save'));
@@ -930,6 +933,7 @@ function WebPublishDialog({ fileId, flow, node, server, change, onForm, onClose 
         <p className="muted">This workflow draws a page (it starts with a <b>Page</b> trigger). Publish it and the page is a web app at its own link: anyone can open it on a phone or computer, no account needed. It always runs the saved workflow.</p>
         {!server && <p className="err">Sign in to the Workline server to publish: the server is what answers the link.</p>}
         <label className={'fv-active' + (live ? ' on' : '')}><input type="checkbox" checked={live} disabled={!server} onChange={e => turn(e.target.checked)} /><i />{live ? 'Live: anyone with the link can use it' : 'Not published'}</label>
+        <IconPicker value={(node.params || {}).icon || '🌐'} onChange={setIcon} />
         <h4>A name for its link</h4>
         <div className="fv-row fv-pub-name"><span className="muted">{location.host}/p/</span><input aria-label="Custom link name" placeholder="starplay" value={name} onChange={e => setName(e.target.value)} /></div>
         {name && check && <p className={check.ok ? 'ok' : 'err'}>{check.reason || (check.taken ? 'Taken: pick another name.' : check.live ? 'Yours: the link works.' : live ? 'Free: it’s yours once saved.' : 'Free: publish to take it.')}</p>}
@@ -979,7 +983,7 @@ function PublishDialog({ file, flow, change, onClose }) {
         <div className="fv-pub-look">
           <label className="fv-f"><span>Name</span><input value={app.name} onChange={e => set({ name: e.target.value.slice(0, 60) })} /></label>
           <label className="fv-f"><span>What it does (one line)</span><input value={app.description} placeholder="Checks the weather in any city" onChange={e => set({ description: e.target.value.slice(0, 160) })} /></label>
-          <div className="fv-f"><span>Icon</span><div className="fv-pub-icons">{APP_ICONS.map(ic => <button key={ic} type="button" aria-pressed={app.icon === ic} onClick={() => set({ icon: ic })}>{ic}</button>)}</div></div>
+          <IconPicker value={app.icon} onChange={v => set({ icon: v })} />
           <div className="fv-f"><span>Colour</span><div className="fv-pub-tones">{TONES.map(t => <button key={t} type="button" className={'t-' + t} aria-label={t} aria-pressed={app.tone === t} onClick={() => set({ tone: t })} />)}</div></div>
         </div>
 

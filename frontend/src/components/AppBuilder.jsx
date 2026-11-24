@@ -4,6 +4,8 @@ import { secretPath } from '../lib/flows.js';
 import { APP_STARTERS, appDoc } from '../lib/apphost.js';
 import { COMPONENTS, STEP_KINDS, builderHtml, newVisualApp } from '../lib/appbuilder.js';
 import { useUI } from './ui.jsx';
+import { AppIcon, IconPicker } from './AppIcon.jsx';
+import { emojiPng, isImageIcon } from '../lib/apps.js';
 
 const VisualBuilder = lazy(() => import('./VisualBuilder.jsx'));
 
@@ -45,6 +47,7 @@ export default function AppBuilder({ file, update, files = [], onGuide, assist }
   const visual = !!(file.ui && file.ui.mode === 'visual' && file.ui.spec);
   const [previewing, setPreviewing] = useState(false);
   const [building, setBuilding] = useState('');
+  const [iconOpen, setIconOpen] = useState(false); // the app's icon: on its installed app (phone, computer)
   // Is the published link answering? Checked when the app opens published, and after publishing.
   const [live, setLive] = useState(null), [liveCheck, setLiveCheck] = useState(0);
   const liveLink = file.ui && file.ui.published && file.ui.token ? `${location.origin}/api/ui/${file.ui.token}` : '';
@@ -264,12 +267,23 @@ ${ui ? ui.html : ''}`,
           <a className="btn" href={link} target="_blank" rel="noreferrer">Open</a>
         </>}
         {ui.published && live && <span className={'ab-live ' + live} role="status" title={LIVE_HELP[live]}>{LIVE_TEXT[live]}</span>}
+        <button className="btn ab-iconbtn" onClick={() => setIconOpen(true)} title="The app’s icon, when it’s installed on a phone or computer" aria-label="App icon"><span className="ab-iconprev"><AppIcon icon={ui.icon} fallback="🖼" /></span>Icon</button>
         <label className={'fv-active' + (ui.published ? ' on' : '')} title="Stays published, at the same link, until you turn it off. Anyone with the link can use the app, and run its workflows with your credentials">
           <input type="checkbox" checked={!!ui.published} disabled={server === false} onChange={e => setPublished(e.target.checked)} />
           <i />{ui.published ? 'Published' : 'Publish'}
         </label>
       </div>
       {server === false && <p className="ab-note">Apps run workflows on the Workline server: sign in to try it and to publish.</p>}
+      {iconOpen && (
+        <div className="modal" onPointerDown={e => { if (e.target === e.currentTarget) setIconOpen(false); }}>
+          <div className="mbox fv-pub" role="dialog" aria-modal="true" aria-label="App icon">
+            <h3>The app’s icon</h3>
+            <p className="muted">Shown when the app is installed on a phone or computer (Install, Add to Home Screen). An emoji, or a picture of your own: it’s made square.</p>
+            <IconPicker value={ui.icon} size={512} onChange={v => write({ icon: v, iconPng: isImageIcon(v) ? v : emojiPng(v) })} />
+            <div className="mact"><button className="btn dark" onClick={() => setIconOpen(false)}>Done</button></div>
+          </div>
+        </div>
+      )}
       {visual && !previewing && (
         <Suspense fallback={<p className="ab-note">Loading the builder…</p>}>
           <VisualBuilder spec={ui.spec} onChange={sp => write({ spec: sp })} access={ui.access || 'public'} allow={ui.allow || []}

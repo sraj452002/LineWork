@@ -30,7 +30,7 @@ test('/run lists live pages and opens them inside the app', async ({ browser }) 
   try {
     // The store lists the active page (not the inactive one), with its link.
     const s = await (await fetch(`${api}/store`)).json();
-    expect(s.pages).toEqual([{ id: 'fpage1:t', title: 'StarPlay', description: 'Shows to watch tonight', url: '/api/hook/pagepathabc123456', updated: now }]);
+    expect(s.pages).toEqual([{ id: 'fpage1:t', title: 'StarPlay', description: 'Shows to watch tonight', url: '/api/hook/pagepathabc123456', updated: now, icon: '🌐' }]);
 
     const url = `http://localhost:${port}`;
     for (let i = 0; i < 60; i++) { try { if ((await fetch(url)).ok) break; } catch (e) {} await new Promise(r => setTimeout(r, 500)); }
@@ -38,10 +38,11 @@ test('/run lists live pages and opens them inside the app', async ({ browser }) 
     const tab = await ctx.newPage();
     const errors = []; tab.on('pageerror', e => errors.push(e.message));
     await tab.goto('/run');
-    // Listed as a web app, beside any published apps.
+    // Listed under Pages, apart from the workflows.
+    await tab.getByRole('tab', { name: /Pages/ }).click();
     const open = tab.getByRole('button', { name: 'Open StarPlay' });
     await expect(open).toBeVisible();
-    await expect(open).toContainText('Web app');
+    await expect(open).toContainText('Page');
     await expect(tab.getByRole('button', { name: 'Open Draft page' })).toHaveCount(0);
     // It opens full screen inside the app, the page itself drawn by its workflow.
     await open.click();
@@ -53,9 +54,9 @@ test('/run lists live pages and opens them inside the app', async ({ browser }) 
     await tab.goBack();
     await expect(tab.getByRole('button', { name: 'Open StarPlay' })).toBeVisible();
     await expect(tab).toHaveURL(/\/run$/);
-    // And the on-screen ← Workflows does too.
+    // And the on-screen ← Pages does too.
     await tab.getByRole('button', { name: 'Open StarPlay' }).click();
-    await tab.getByRole('button', { name: '← Workflows' }).click();
+    await tab.getByRole('button', { name: '← Pages' }).click();
     await expect(tab.getByRole('button', { name: 'Open StarPlay' })).toBeVisible();
     expect(errors).toEqual([]);
   } finally { stop(vite); srv.close(); app.flows.close(); }

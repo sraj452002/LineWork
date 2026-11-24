@@ -749,7 +749,9 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
     const storeUid = () => { const e = String(storeOwner || '').trim().toLowerCase(); return e ? store.s.userByEmail.get(e)?.id || null : null; };
     const storeRuns = new Map(); // token → {run, flow, expires}
     const storeLimit = limiter({ max: 30, windowMs: 10 * 60_000 });
-    const appInfo = (id, a) => ({ id, name: String(a.name || 'App').slice(0, 80), description: String(a.description || '').slice(0, 300), icon: a.icon || '✨', tone: a.tone || 'blue', show: a.show || 'auto',
+    // An icon: an emoji, or a small picture (a PNG data URL) of the owner's own.
+    const iconOf = (v, d) => (typeof v === 'string' && v && v.length < 600_000 ? v : d);
+    const appInfo = (id, a) => ({ id, name: String(a.name || 'App').slice(0, 80), description: String(a.description || '').slice(0, 300), icon: iconOf(a.icon, '✨'), tone: a.tone || 'blue', show: a.show || 'auto',
       inputs: (Array.isArray(a.inputs) ? a.inputs : []).map(f => ({ key: f.key, label: f.label, kind: f.kind, required: !!f.required, options: f.options, placeholder: f.placeholder, hint: f.hint })) });
     const shown = (flow, r) => {
       const ok = id => r.nodes[id]?.status === 'success', app = flow.app || {};
@@ -774,7 +776,7 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
         .filter(n => n.type === 'trigger.page' && n.params && /^[\w-]{12,80}$/.test(String(n.params.path || '')))
         .map(n => {
           const p = n.params, own = p.title && p.title !== 'My page' ? String(p.title) : '';
-          return { id: `${f.id}:${n.id}`, title: (own || f.title || 'Page').slice(0, 80), description: String(p.description || '').slice(0, 200),
+          return { id: `${f.id}:${n.id}`, title: (own || f.title || 'Page').slice(0, 80), description: String(p.description || '').slice(0, 200), icon: iconOf(p.icon, '🌐'),
             url: p.link && PAGE_LINK.test(String(p.link)) ? `/p/${p.link}` : `/api/hook/${p.path}`, updated: f.updated || 0 };
         }));
       res.set('cache-control', 'no-store').json({ name: store.s.userById?.get?.(uid)?.name || null, apps, pages });

@@ -4336,3 +4336,14 @@ button.rv-line:hover{background:rgba(255,255,255,.04)}
 
 .fv-pub-hint{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:8px 10px;border:1px dashed var(--line);border-radius:10px;font-size:13px;color:var(--ink2)}
 .fv-pub-hint .btn{margin-left:auto}
+
+/* Icons of your own (a picture), and choosing them */
+.app-img-icon{width:1em;height:1em;object-fit:cover;border-radius:22%;display:inline-block;vertical-align:middle}
+.icon-pick .fv-pub-icons button .app-img-icon{width:22px;height:22px}
+.icon-own{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;align-items:center}
+.icon-own input{flex:1 1 180px;min-width:0;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit}
+.ab-iconbtn{display:inline-flex;align-items:center;gap:6px}
+.ab-iconprev{display:inline-flex;font-size:16px}
+.apps-sec{margin:28px 0 4px;font-size:16px;display:flex;align-items:baseline;gap:8px}
+.apps-sec small{color:var(--ink2);font-weight:500}
+.apps-sec-note{margin:0 0 12px;color:var(--ink2);font-size:13px}

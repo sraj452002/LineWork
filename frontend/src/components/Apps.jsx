@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { serverInfo } from '../lib/backend.js';
 import { getRun, listRuns } from '../lib/flows.js';
-import { isImage, isLink, mainText, publishedApps, resultOf, runApp, shapeOf, toCSV } from '../lib/apps.js';
+import { isImage, isLink, livePages, mainText, publishedApps, resultOf, runApp, shapeOf, toCSV } from '../lib/apps.js';
+import { AppIcon } from './AppIcon.jsx';
 import { download } from '../lib/flowio.js';
 import { confetti } from '../lib/confetti.js';
 import { useUI } from './ui.jsx';
@@ -32,6 +33,8 @@ export default function Apps({ files, q = '', onEdit, onUpdate }) {
   if (open) return <AppRunner file={open} server={server} onBack={() => setOpenId(null)} onEdit={onEdit} onRemove={onUpdate ? async () => { if (await remove(open)) setOpenId(null); } : null} />;
   const needle = q.trim().toLowerCase();
   const shown = apps.filter(f => !needle || `${f.flow.app.name} ${f.flow.app.description}`.toLowerCase().includes(needle));
+  // Pages (workflows published as web apps) apart from the form apps: each opens at its own link.
+  const pages = livePages(files).filter(p => !needle || `${p.title} ${p.description}`.toLowerCase().includes(needle));
   return (
     <div className="apps">
       <header className="tpl-head">
@@ -50,7 +53,7 @@ export default function Apps({ files, q = '', onEdit, onUpdate }) {
             return (
               <div key={f.id} className="app-wrap">
                 <button className={'app-card t-' + (a.tone || 'blue')} onClick={() => setOpenId(f.id)} aria-label={`Open the app ${a.name}`}>
-                  <i className="app-icon" aria-hidden="true">{a.icon || '✨'}</i>
+                  <i className="app-icon" aria-hidden="true"><AppIcon icon={a.icon} /></i>
                   <b>{a.name}</b>
                   {a.description && <small>{a.description}</small>}
                   <span className="app-go">Open →</span>
@@ -61,6 +64,22 @@ export default function Apps({ files, q = '', onEdit, onUpdate }) {
           })}
         </div>
       )}
+      {pages.length > 0 && (<>
+        <h3 className="apps-sec">Pages <small>{pages.length}</small></h3>
+        <p className="apps-sec-note">Workflows published as web pages: each opens at its own link, for anyone.</p>
+        <div className="app-grid">
+          {pages.map(p => (
+            <div key={p.id} className="app-wrap">
+              <a className="app-card t-sky" href={p.url} target="_blank" rel="noreferrer" aria-label={`Open the page ${p.title}`}>
+                <i className="app-icon" aria-hidden="true"><AppIcon icon={p.icon} fallback="🌐" /></i>
+                <b>{p.title}</b>
+                {p.description && <small>{p.description}</small>}
+                <span className="app-go">Open ↗</span>
+              </a>
+            </div>
+          ))}
+        </div>
+      </>)}
     </div>
   );
 }
@@ -109,7 +128,7 @@ export function AppRunner({ file, server, onBack, onEdit, onRemove, runner, back
         {onRemove && <button className="btn danger-text" onClick={onRemove}>Unpublish</button>}
       </div>
       <header className={'app-hero t-' + (a.tone || 'blue')}>
-        <i className="app-icon" aria-hidden="true">{a.icon || '✨'}</i>
+        <i className="app-icon" aria-hidden="true"><AppIcon icon={a.icon} /></i>
         <div><h2>{a.name}</h2>{a.description && <p>{a.description}</p>}</div>
       </header>
       {server === false && !runner && <p className="fv-note">Apps run on the Workline server. Sign in to your account to run this one.</p>}
