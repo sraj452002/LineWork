@@ -1,5 +1,5 @@
 import { api } from './backend.js';
-import { nodeDef } from './flows.js';
+import { nodeDef, runFields } from './flows.js';
 
 /* Apps: a workflow published for people who don't build workflows. Its file.flow.app says how it looks
    and what it asks for:
@@ -14,11 +14,32 @@ export const SHOW = [['auto', 'Best fit'], ['text', 'Text'], ['table', 'Table'],
 export const APP_ICONS = ['✨', '🚀', '📊', '📝', '📬', '🔎', '🛒', '💬', '📅', '🧾', '🌦️', '🔔', '🤖', '📈', '🗂️', '🌐'];
 
 // A field label → a key for {{ $json.key }}: "Your city" → yourCity.
-export const keyOf = label => String(label || '').replace(/[^\w ]+/g, '').trim().replace(/\s+(\w)/g, (_, c) => c.toUpperCase()).replace(/^\w/, c => c.toLowerCase()) || 'field';
+// (Each word lowercased first, like Run by hand's fields: "GST rate" → gstRate.)
+export const keyOf = label => String(label || '').replace(/[^\w ]+/g, '').trim().split(/\s+/).filter(Boolean).map((w, i) => (i ? w[0].toUpperCase() + w.slice(1).toLowerCase() : w.toLowerCase())).join('') || 'field';
+// The questions a Run by hand trigger already asks (its fields), as an app's questions: the same names,
+// so the workflow gets the same {{ $json.… }} either way.
+const KIND_OF = { text: 'text', long: 'long', number: 'number', email: 'email', date: 'date', choice: 'choice', yesno: 'yesno', tel: 'text', url: 'text', time: 'text' };
+export const inputsFromTrigger = node => (node && node.type === 'trigger.manual' ? runFields(node.params?.fields) : [])
+  .map(f => ({ label: f.name, key: f.key, kind: KIND_OF[f.kind] || 'text', required: f.required, ...(f.options.length ? { options: f.options } : {}) }));
+// The names a workflow reads from the item it starts with: {{ $json.x }} in the nodes right after its trigger,
+// and {{ $node["Trigger"].json.x }} anywhere.
+export function namesRead(flow, startId) {
+  const start = flow.nodes.find(n => n.id === startId), out = new Set();
+  if (!start) return out;
+  const next = new Set(flow.edges.filter(e => e.from === startId).map(e => e.to));
+  const scan = (text, re) => { for (const m of text.matchAll(re)) out.add(m[1]); };
+  for (const n of flow.nodes) {
+    const text = JSON.stringify(n.params || {});
+    if (next.has(n.id)) scan(text, /\$json\.([A-Za-z_]\w*)/g);
+    scan(text, new RegExp(`\\$node\\[\\\\?["']${start.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\\\?["']\\]\\.json\\.([A-Za-z_]\\w*)`, 'g'));
+  }
+  return out;
+}
 export const emptyApp = (file, flow) => ({
   published: false, name: file.title || 'My app', description: '', icon: '✨', tone: 'blue',
   startId: (flow.nodes.find(n => n.type === 'trigger.manual') || flow.nodes.find(n => nodeDef(n.type).trigger) || {}).id || '',
-  outputId: '', show: 'auto', inputs: [],
+  outputId: '', show: 'auto',
+  inputs: inputsFromTrigger(flow.nodes.find(n => n.type === 'trigger.manual')),
 });
 export const publishedApps = files => files.filter(f => !f.archived && f.flow && f.flow.app && f.flow.app.published);
 

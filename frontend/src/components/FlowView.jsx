@@ -18,7 +18,7 @@ import { NodeCard } from './NodeGuide.jsx';
 import CustomNodes from './CustomNodes.jsx';
 import RunForm from './RunForm.jsx';
 import { addMissing, loadCustomNodes, onCustomNodes } from '../lib/customnodes.js';
-import { APP_ICONS, INPUT_KINDS, SHOW, emptyApp, keyOf } from '../lib/apps.js';
+import { APP_ICONS, INPUT_KINDS, SHOW, emptyApp, inputsFromTrigger, keyOf, namesRead } from '../lib/apps.js';
 
 /* The Workflow view: an n8n-style editor for file.flow. Nodes sit on a canvas you can pan (drag the
    background) and zoom (Ctrl + wheel); drag from a node's output dot to another's input to connect them,
@@ -961,6 +961,13 @@ function PublishDialog({ file, flow, change, onClose }) {
   const others = flow.nodes.filter(n => !nodeDef(n.type).trigger);
   const keys = app.inputs.map(x => x.key);
   const dup = keys.find((k, i) => keys.indexOf(k) !== i);
+  // The questions and what the workflow reads should match, or answers arrive under names nobody reads.
+  const startNode = flow.nodes.find(n => n.id === app.startId);
+  const fromTrigger = inputsFromTrigger(startNode);
+  const sameAsTrigger = fromTrigger.length > 0 && fromTrigger.map(f => f.key).join() === keys.join();
+  const read = namesRead(flow, app.startId);
+  const unread = key => read.size > 0 && !read.has(key);
+  const missing = [...read].filter(k => !keys.includes(k));
   return (
     <div className="modal" onPointerDown={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="mbox fv-pub" role="dialog" aria-modal="true" aria-label="Publish as an app">
@@ -978,6 +985,11 @@ function PublishDialog({ file, flow, change, onClose }) {
 
         <h4>What it asks for</h4>
         <p className="muted">Each answer reaches the workflow as <code>{'{{ $json.<name> }}'}</code> on the trigger it starts from.</p>
+        {fromTrigger.length > 0 && !sameAsTrigger && (
+          <p className="fv-pub-hint">“{startNode.name}” already asks for {fromTrigger.map(f => f.label).join(', ')}.
+            <button type="button" className="btn" onClick={() => set({ inputs: fromTrigger })}>Ask the same here</button></p>
+        )}
+        {missing.length > 0 && <p className="err">The workflow reads {missing.map(k => `{{ $json.${k} }}`).join(', ')}, but no question gives {missing.length === 1 ? 'it' : 'them'}: it would get nothing. Add {missing.length === 1 ? 'a question' : 'questions'} with {missing.length === 1 ? 'that name' : 'those names'}, or change the workflow.</p>}
         {app.inputs.map((f, i) => (
           <div key={i} className="fv-pub-in">
             <input aria-label="Question" placeholder="Question, e.g. City" value={f.label} onChange={e => setInput(i, { label: e.target.value.slice(0, 60) })} />
@@ -985,7 +997,7 @@ function PublishDialog({ file, flow, change, onClose }) {
             <label className="fv-check"><input type="checkbox" checked={!!f.required} onChange={e => setInput(i, { required: e.target.checked })} />Required</label>
             <button type="button" className="btn" aria-label="Remove" onClick={() => set({ inputs: app.inputs.filter((_, j) => j !== i) })}>×</button>
             {f.kind === 'choice' && <input className="wide" aria-label="Choices" placeholder="Choices, separated by commas" value={(f.options || []).join(', ')} onChange={e => setInput(i, { options: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} />}
-            <small className="wide muted">In the workflow: <code>{`{{ $json.${f.key} }}`}</code></small>
+            <small className={'wide ' + (unread(f.key) ? 'err' : 'muted')}>In the workflow: <code>{`{{ $json.${f.key} }}`}</code>{unread(f.key) && ' (nothing in the workflow reads it)'}</small>
           </div>
         ))}
         {dup && <p className="err">Two questions give the same name ({dup}). Make them different.</p>}

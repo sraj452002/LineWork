@@ -65,6 +65,10 @@ function StoreApp() {
   const pages = store ? store.pages || [] : [];
   const [page, setPage] = useState(null);
   const [tab, setTab] = useState('workflows'); // workflows | published
+  // Nemo (AI chat) beside the workflows, on a server without accounts (where anyone may use its AI).
+  const [section, setSection] = useState('run'); // run | chat
+  const [chatOk, setChatOk] = useState(false);
+  useEffect(() => { serverInfo().then(i => setChatOk(!!(i && i.accounts === false && i.ai && i.ai.configured)), () => {}); }, []);
   // An open page is a step back in history, so the phone's back button returns to the list (not out of the app).
   useEffect(() => {
     if (!page) return undefined;
@@ -97,7 +101,22 @@ function StoreApp() {
       <AppRunner file={{ id: open.id, flow: { nodes: [], edges: [], app: open } }} server runner={runner} backLabel="← Workflows" onBack={() => setOpenId(null)} />
     </div>
   );
-  return (
+  const nav = chatOk && (
+    <nav className="m-tabs" aria-label="WorkLine Apps">
+      <button aria-current={section === 'run' ? 'page' : undefined} onClick={() => setSection('run')}><Svg d={ICON.grid} size={19} /><span>Workflows</span></button>
+      <button aria-current={section === 'chat' ? 'page' : undefined} onClick={() => setSection('chat')}><Svg d={ICON.spark} size={19} /><span>Nemo</span></button>
+    </nav>
+  );
+  if (chatOk && section === 'chat') return (
+    <div className="m-app-shell">
+      <div className="m-shell">
+        <MobileBar title="Nemo" hello={greeting()} />
+        <Assistant compact user={null} />
+      </div>
+      {nav}
+    </div>
+  );
+  const list = (
     <div className="m-shell">
       <MobileBar onRefresh={load} busy={busy} title="Workflows" hello={(store && store.name) || greeting()} />
       {error && <p className="m-note err">{error} <button className="link" onClick={load}>Try again</button></p>}
@@ -116,6 +135,7 @@ function StoreApp() {
         ]} />)}
     </div>
   );
+  return nav ? <div className="m-app-shell">{list}{nav}</div> : list;
 }
 
 // The account owner's own view (/mobile): their published workflows, and AI chat.

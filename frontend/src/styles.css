@@ -4334,3 +4334,5 @@ button.rv-line:hover{background:rgba(255,255,255,.04)}
 .fr-list li .fr-no{margin-right:2px}
 @media (prefers-reduced-motion:reduce){.fr-orb .fr-stepno{animation:none}}
 
+.fv-pub-hint{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:8px 10px;border:1px dashed var(--line);border-radius:10px;font-size:13px;color:var(--ink2)}
+.fv-pub-hint .btn{margin-left:auto}
