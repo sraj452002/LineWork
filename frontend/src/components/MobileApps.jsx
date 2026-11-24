@@ -64,6 +64,7 @@ function StoreApp() {
   // Pages (active workflows with a Page trigger) open here too, full screen, with a way back.
   const pages = store ? store.pages || [] : [];
   const [page, setPage] = useState(null);
+  const [tab, setTab] = useState('workflows'); // workflows | published
   // An open page is a step back in history, so the phone's back button returns to the list (not out of the app).
   useEffect(() => {
     if (!page) return undefined;
@@ -101,7 +102,14 @@ function StoreApp() {
       <MobileBar onRefresh={load} busy={busy} title="Workflows" hello={(store && store.name) || greeting()} />
       {error && <p className="m-note err">{error} <button className="link" onClick={load}>Try again</button></p>}
       {!store && !error && <Skeleton />}
+      {store && (apps.length > 0 || pages.length > 0) && (
+        <div className="m-seg" role="tablist" aria-label="Show">
+          <button role="tab" aria-selected={tab === 'workflows'} onClick={() => setTab('workflows')}>Workflows</button>
+          <button role="tab" aria-selected={tab === 'published'} onClick={() => setTab('published')}>Published <b>{apps.length + pages.length}</b></button>
+        </div>
+      )}
       {store && (!apps.length && !pages.length ? <Empty text="No workflows here yet. Pull back in a little while." />
+        : tab === 'published' ? <Published apps={apps} pages={pages} onRun={a => setOpenId(a.id)} onOpen={setPage} />
         : <Workflows items={[
           ...apps.map(a => ({ key: a.id, name: a.name, description: a.description, icon: a.icon, tone: a.tone, label: `Run ${a.name}`, onClick: () => setOpenId(a.id) })),
           ...pages.map(pg => ({ key: pg.id, name: pg.title, description: pg.description, icon: '🌐', tone: 'sky', web: true, label: `Open ${pg.title}`, onClick: () => setPage(pg) })),
@@ -191,6 +199,37 @@ function Workflows({ items }) {
       </div>
     </>}
     {needle && !shown.length && <Empty text={`Nothing called “${q.trim()}”.`} />}
+  </>);
+}
+
+/* Published: what's live in this store, each with its kind, when it last changed, and a way to open and
+   share it. Apps run here (their link is this app's); web pages have links of their own. */
+const agoShort = t => { if (!t) return ''; const s = Math.round((Date.now() - t) / 1000); return s < 60 ? 'just now' : s < 3600 ? `${Math.round(s / 60)} min ago` : s < 86400 ? `${Math.round(s / 3600)} h ago` : new Date(t).toLocaleDateString(); };
+function Published({ apps, pages, onRun, onOpen }) {
+  const { toast } = useUI();
+  const share = async (title, url) => {
+    const full = new URL(url, location.origin).href;
+    try { if (navigator.share) return await navigator.share({ title, url: full }); } catch (e) { if (e && e.name === 'AbortError') return; }
+    navigator.clipboard?.writeText(full).then(() => toast('Link copied'), () => toast(full));
+  };
+  const items = [
+    ...apps.map(a => ({ key: a.id, kind: 'App', icon: a.icon || '✨', tone: a.tone || 'blue', name: a.name, updated: a.updated, go: 'Run', onGo: () => onRun(a), url: '/run' })),
+    ...pages.map(p => ({ key: p.id, kind: 'Web page', icon: '🌐', tone: 'sky', name: p.title, updated: p.updated, go: 'Open', onGo: () => onOpen(p), url: p.url })),
+  ].sort((a, b) => (b.updated || 0) - (a.updated || 0));
+  return (<>
+    <p className="m-pub-sum"><span className="m-pub-dot" aria-hidden="true" />{items.length} live · {apps.length} app{apps.length === 1 ? '' : 's'} · {pages.length} web page{pages.length === 1 ? '' : 's'}</p>
+    <ul className="m-pub">
+      {items.map(it => (
+        <li key={it.key} className={'t-' + it.tone}>
+          <i aria-hidden="true">{it.icon}</i>
+          <span className="m-pub-txt"><b>{it.name}</b><small><em>{it.kind}</em>● Live{it.updated ? ` · ${agoShort(it.updated)}` : ''}</small></span>
+          <span className="m-pub-acts">
+            <button className="btn" onClick={() => share(it.name, it.url)} aria-label={`Share ${it.name}`}>Share</button>
+            <button className="btn primary" onClick={it.onGo} aria-label={`${it.go} ${it.name}`}>{it.go}</button>
+          </span>
+        </li>
+      ))}
+    </ul>
   </>);
 }
 

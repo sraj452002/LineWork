@@ -10,7 +10,9 @@ export const aiProvider = () => {
 };
 // Pictures go to a model that reads them (Claude), whichever is picked.
 const providerFor = images => { const p = aiProvider(); return images && images.length && p && !p.images ? aiProviders.find(x => x.images) || p : p; };
-export const setAIProvider = id => { try { localStorage.setItem(PROVIDER_KEY, id); } catch(_){} };
+// The server is told too: workflow AI steps left on “Same as AI chat” use this model.
+const tellServer = id => { if (id) fetch('/api/flows/ai-model', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ model: id }) }).catch(() => {}); };
+export const setAIProvider = id => { try { localStorage.setItem(PROVIDER_KEY, id); } catch(_){} tellServer(id); };
 // A model that reasons first (Nemotron) sends its thinking as it goes; listeners see it (the chat shows it).
 const thinkers = new Set();
 export const onAIThinking = fn => { thinkers.add(fn); return () => thinkers.delete(fn); };
@@ -60,6 +62,7 @@ function createSample(){
       : j && j.limit !== undefined ? AI_NO_KEY_SERVER : AI_NO_KEY;
     aiProviders = (j && j.providers) || [];
     aiDefault = (j && j.default) || null;
+    if (aiProviders.length) tellServer(aiProvider()?.id);
     return j && j.enabled ? sample : null;
   }).catch(() => null);
 }

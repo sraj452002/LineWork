@@ -236,7 +236,7 @@ export function createAgent({ store, flows, providers, defaultProvider, dailyLim
   }
 
   /* ---- an agent as a workflow step (the AI Agent node): the task in, its answer out ---- */
-  async function runTask({ uid, agentId, inline, task, signal }) {
+  async function runTask({ uid, agentId, inline, task, signal, model = '', chatModel = '' }) {
     if (!providers.length) throw Object.assign(new Error('AI is off on this server (set NVIDIA_API_KEY or ANTHROPIC_API_KEY).'), { code: 'ai_off' });
     const agent = agentId ? flows.agent.getAgent(uid, String(agentId)) : { name: 'Agent', instructions: inline?.instructions || '', tools: inline?.tools || [] };
     if (!agent) throw Object.assign(new Error('That agent was deleted. Pick another in the node.'), { code: 'no_agent' });
@@ -244,7 +244,10 @@ export function createAgent({ store, flows, providers, defaultProvider, dailyLim
     let text = '';
     const steps = [];
     const send = ev => { if (ev.type === 'text') text += ev.delta; else if (ev.type === 'tool') steps.push({ tool: ev.name, input: ev.input }); else if (ev.type === 'tool_done') Object.assign(steps[steps.length - 1] || {}, { ok: ev.ok }); };
-    await withFallback(defaultProvider, () => text === '', pick => answer({ uid, pick, system: AGENT_SYSTEM(agent, { name: '' }, new Date().toISOString().slice(0, 10), true), history: [{ role: 'user', text: String(task || '').slice(0, 100_000) || 'Do your task.' }], send, signal, toolList: toolsFor(agent), agent }));
+    // The step's own AI model when it picked one (and the server has it), else the default.
+    const first = (model && providers.find(p => p.id === model)) || (chatModel && providers.find(p => p.id === chatModel)) || defaultProvider;
+    if (model && !providers.some(p => p.id === model)) throw Object.assign(new Error(`This step’s AI model (${model}) isn’t on this server. Pick another in the step.`), { code: 'ai_off' });
+    await withFallback(first, () => text === '', pick => answer({ uid, pick, system: AGENT_SYSTEM(agent, { name: '' }, new Date().toISOString().slice(0, 10), true), history: [{ role: 'user', text: String(task || '').slice(0, 100_000) || 'Do your task.' }], send, signal, toolList: toolsFor(agent), agent }));
     return { text: text.trim(), steps, agent: agent.name };
   }
 

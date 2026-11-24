@@ -3,6 +3,7 @@ import { createHash, createHmac, randomBytes, randomUUID } from 'node:crypto';
 import { FlowError, getPath, items, setPath } from './flow-engine.js';
 import { handle as dbHandle } from './dbconnect.js';
 import { attachments, cred, each, failIfBad, json, need, obj, pairs, request } from './flow-util.js';
+import { askAI } from './flow-ai.js';
 import { LOCAL_LANGS, runLocal, runRemote } from './flow-code.js';
 
 /* What each kind of workflow node does. A node gets its input items and returns {port: items}; most
@@ -96,17 +97,10 @@ export const NODE_TYPES = {
     if (!r.ok && p.failOnError !== false) failIfBad(r, url.host);
     return Array.isArray(r.body) ? r.body : typeof r.body === 'object' && r.body ? r.body : { status: r.status, body: r.body };
   }) },
-  'ai.claude': { run: args => each(args, async p => {
-    const ai = args.ctx.ai || {};
-    if (!ai.key) throw new FlowError('AI is off on this server (no ANTHROPIC_API_KEY).', 'ai_off');
-    if (!ai.allow()) throw new FlowError('Today’s AI allowance is used up.', 'ai_limit');
-    const r = await request(`${ai.base}/v1/messages`, {
-      method: 'POST', headers: { 'x-api-key': ai.key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-      body: JSON.stringify({ model: ai.model, max_tokens: Math.min(4000, Number(p.maxTokens) || 1024), ...(p.system ? { system: String(p.system) } : {}), messages: [{ role: 'user', content: String(need(p.prompt, 'the prompt')) }] }),
-    }, { allowPrivate: true, timeout: 90_000 });
-    const body = failIfBad(r, 'Claude');
-    return { text: (body.content || []).filter(c => c.type === 'text').map(c => c.text).join('') };
-  }) },
+  // The server's AI: Claude, or NVIDIA's models without an Anthropic key (flow-ai.js).
+  'ai.claude': { run: args => each(args, async p => ({
+    text: await askAI(args, { system: p.system ? String(p.system) : undefined, content: String(need(p.prompt, 'the prompt')), maxTokens: Math.min(4000, Number(p.maxTokens) || 1024) }),
+  })) },
 
   /* ---- apps (each with a credential) ---- */
   'app.slack': { run: async args => {

@@ -2,6 +2,7 @@ import { FlowError, getPath, setPath } from './flow-engine.js';
 import { checkHost, handle as dbHandle } from './dbconnect.js';
 import { googleToken } from './flow-apps.js';
 import { api, cred, each, failIfBad, need, obj, pairs, request } from './flow-util.js';
+import { askAI } from './flow-ai.js';
 
 /* More workflow nodes:
    - AI helpers on the server's Claude (summarize, extract, classify, rewrite, translate, read an image,
@@ -9,18 +10,8 @@ import { api, cred, each, failIfBad, need, obj, pairs, request } from './flow-ut
    - triggers: when another workflow fails, a new database row, a new email (IMAP), a new calendar event;
    - Respond to webhook, Pivot, Text splitter, Key-value store, GraphQL, Spreadsheet file, Redis, Sticky note. */
 
-/* ---- Claude, for the AI helpers ---- */
-async function claude(args, { system, content, maxTokens = 1024 }) {
-  const ai = args.ctx.ai || {};
-  if (!ai.key) throw new FlowError('AI is off on this server (no ANTHROPIC_API_KEY).', 'ai_off');
-  if (!ai.allow()) throw new FlowError('Today’s AI allowance is used up.', 'ai_limit');
-  const r = await request(`${ai.base}/v1/messages`, {
-    method: 'POST', headers: { 'x-api-key': ai.key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-    body: JSON.stringify({ model: ai.model, max_tokens: maxTokens, ...(system ? { system } : {}), messages: [{ role: 'user', content }] }),
-  }, { allowPrivate: true, timeout: 90_000 });
-  const body = failIfBad(r, 'Claude');
-  return (body.content || []).filter(c => c.type === 'text').map(c => c.text).join('').trim();
-}
+/* ---- the server's AI (Claude, or NVIDIA's models), for the AI helpers: flow-ai.js ---- */
+const claude = askAI;
 // The first JSON object in Claude's answer.
 function jsonIn(text) {
   const s = String(text).replace(/^```(?:json)?\s*|\s*```$/g, '');
@@ -45,7 +36,7 @@ export const EXTRA_NODES = {
   'ai.agent': { run: args => each(args, async (p, item) => {
     const task = String(need(p.task, 'the task'));
     const tools = ['workflows', 'nodes', 'files', 'docs'].filter(k => p[`use_${k}`] === true || p[`use_${k}`] === 'true');
-    const r = await args.ctx.runAgent({ agentId: p.agentId || '', inline: { instructions: p.instructions || '', tools }, task });
+    const r = await args.ctx.runAgent({ agentId: p.agentId || '', inline: { instructions: p.instructions || '', tools }, task, model: String(p.model || ''), chatModel: String(args.ctx.ai?.chatModel?.() || '') });
     const j = put(item, p.output || 'answer', r.text);
     if (r.steps.length) setPath(j, `${p.output || 'answer'}Steps`, r.steps);
     return j;

@@ -20,7 +20,8 @@ const app = createApp(store, {
   aiKey: env.ANTHROPIC_API_KEY || '',
   aiModel: env.ANTHROPIC_MODEL || 'claude-sonnet-5-5',
   aiBase: env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com',
-  nvidiaKey: env.NVIDIA_API_KEY || '',
+  // The key alone: a pasted “Bearer …” (from an Authorization header) or quotes are taken off.
+  nvidiaKey: String(env.NVIDIA_API_KEY || '').trim().replace(/^bearer\s+/i, '').replace(/^["']|["']$/g, ''),
   // Whose published apps anyone can run in the WorkLine Apps phone app (/run): the built-in user's.
   storeOwner: env.STORE_OWNER || LOCAL_USER,
   nvidiaModel: env.NVIDIA_MODEL || NVIDIA_MODELS,

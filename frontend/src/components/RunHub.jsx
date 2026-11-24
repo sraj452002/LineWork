@@ -63,6 +63,22 @@ const needsCred = (node, err) => !!node && !!nodeDef(node.type).credential && /c
 // “Fix in editor”: open the workflow at that step (FlowView picks it up), settings showing.
 const focusStep = (fileId, nodeId) => { try { sessionStorage.setItem('linework:focus-node', JSON.stringify({ fileId, nodeId })); } catch (e) { /* opens anyway */ } };
 
+/* A failed step's error, in plain words: what happened and what to do (the raw message under Details). */
+function explain(err, node) {
+  const e = String(err || ''), name = node?.name || 'A step', ai = !!node && /^ai./.test(node.type);
+  const bare = e.replace(/^[^:]{1,60}: /, '');
+  if (/(401|403)|unauthori[sz]ed|invalid api key|was refused/i.test(e)) return ai
+    ? { icon: '🔑', title: 'The AI key wasn’t accepted', text: <>The server’s AI key was refused. In <code>backend/.env</code>, check <code>NVIDIA_API_KEY</code>: just the key (it starts with <code>nvapi-</code>), without “Bearer”. Then restart the server.</> }
+    : { icon: '🔑', title: `${name} wasn’t allowed in`, text: <>The account connected to this step was refused. Reconnect it under <b>Credentials</b> in the editor.</> };
+  if (/410|end of life|no longer available|retired/i.test(e)) return { icon: '⌛', title: 'That AI model has been retired', text: <>Open the step and pick another <b>AI model</b>, or choose another model in the AI chat.</> };
+  if (/isn’t on this server|not on this server/i.test(e)) return { icon: '🧠', title: 'That AI model isn’t available', text: <>Open the step and pick another <b>AI model</b>.</> };
+  if (/429|rate limit|too many|allowance/i.test(e)) return { icon: '⏳', title: 'Too many requests right now', text: <>The service is busy or today’s allowance is used up. Wait a minute and try again.</> };
+  if (/timeout|timed out|took too long/i.test(e)) return { icon: '⏱️', title: `${name} took too long`, text: <>The service didn’t answer in time. Try again in a moment.</> };
+  if (/ENOTFOUND|ECONNREFUSED|fetch failed|network|getaddrinfo/i.test(e)) return { icon: '📡', title: 'Couldn’t reach the service', text: <>Check the internet connection (and the address in the step), then try again.</> };
+  if (/AI is off/i.test(e)) return { icon: '🧠', title: 'AI is off on this server', text: <>Set <code>NVIDIA_API_KEY</code> or <code>ANTHROPIC_API_KEY</code> in <code>backend/.env</code> and restart the server.</> };
+  return { icon: '⚠️', title: `“${name}” couldn’t finish`, text: bare || 'It stopped with an error.' };
+}
+
 /* The dropdown: the chosen workflow's steps, name and last run; opens a searchable list (↑ ↓ Enter Esc). */
 function Picker({ flows, sel, runs, onPick }) {
   const [open, setOpen] = useState(false), [find, setFind] = useState(''), [at, setAt] = useState(0);
@@ -84,13 +100,25 @@ function Picker({ flows, sel, runs, onPick }) {
     else if (e.key === 'Escape') { e.preventDefault(); setOpen(false); }
   };
   const last = sel && runs[sel.id]?.[0];
+  const steps = sel ? chain(sel.flow) : [];
   return (
     <div className={'rs-pick' + (open ? ' open' : '')} ref={box}>
-      <button className="rs-pick-btn" aria-haspopup="listbox" aria-expanded={open} aria-label="Choose a workflow" onClick={() => setOpen(!open)}>
-        <span className="rs-pick-marks" aria-hidden="true">{sel && chain(sel.flow).slice(0, 4).map(n => <Mark key={n.id} type={n.type} size={13} />)}</span>
-        <span className="rs-pick-name"><b>{sel ? sel.title || 'Untitled' : 'Choose a workflow'}</b><small>{sel ? `${startsBy(sel.flow)} · ${plural(sel.flow.nodes.length, 'step')}` : ''}</small></span>
+      <button className={'rs-pick-btn s-' + (last?.status || 'none')} aria-haspopup="listbox" aria-expanded={open} aria-label="Choose a workflow" onClick={() => setOpen(!open)}>
+        {/* The workflow's main step as its icon, with how its last run went as a dot */}
+        <span className="rs-pick-tile" aria-hidden="true">{sel ? <Mark type={(steps.find(n => !nodeDef(n.type).trigger) || steps[0] || { type: 'trigger.manual' }).type} size={22} /> : <Mark type="trigger.manual" size={22} />}<i className="rs-pick-dot" /></span>
+        <span className="rs-pick-name">
+          <b>{sel ? sel.title || 'Untitled' : 'Choose a workflow'}</b>
+          {sel && (
+            // Its steps in order, joined like the canvas draws them.
+            <span className="rs-trail" aria-hidden="true">
+              {steps.slice(0, 6).map((n, i) => <span key={n.id} className="rs-trail-step">{i > 0 && <i className="rs-trail-line" />}<span title={n.name}><Mark type={n.type} size={11} /></span></span>)}
+              {steps.length > 6 && <em>+{steps.length - 6}</em>}
+            </span>
+          )}
+          <small>{sel ? `${startsBy(sel.flow)} · ${plural(sel.flow.nodes.length, 'step')}${last ? ` · ran ${ago(last.started).replace(/^J/, 'j')}` : ''}` : ''}</small>
+        </span>
         {sel && <Chip status={last?.status} />}
-        <svg className="rs-caret" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
+        <span className="rs-caret-wrap" aria-hidden="true"><svg className="rs-caret" width="16" height="16" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" /></svg></span>
       </button>
       {open && (
         <div className="rs-menu">
@@ -212,8 +240,8 @@ export default function RunHub({ files, q = '', onOpen, onUpdate, menuHidden, on
   };
 
   const menuBtn = (
-    <button className="btn rs-menu-btn" onClick={onToggleMenu} aria-pressed={!menuHidden} title={menuHidden ? 'Show the menu panel' : 'Hide the menu panel'}>
-      <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>{menuHidden ? 'Menu' : 'Hide menu'}
+    <button className="rs-ib rs-menu-btn" onClick={onToggleMenu} aria-pressed={!menuHidden} aria-label={menuHidden ? 'Menu' : 'Hide menu'} title={menuHidden ? 'Show the menu panel' : 'Hide the menu panel'}>
+      <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">{menuHidden ? <path d="M4 6h16M4 12h16M4 18h16" /> : <path d="M4 5h16v14H4zM9.5 5v14M16 10l-2 2 2 2" />}</svg>
     </button>
   );
 
@@ -246,15 +274,17 @@ export default function RunHub({ files, q = '', onOpen, onUpdate, menuHidden, on
 
   return (
     <div className="rs ws">
-      <div className="rs-bar">
+      <div className="rs-bar rs-tb">
         {menuBtn}
+        <i className="rs-sep" aria-hidden="true" />
         <Picker flows={flows} sel={sel} runs={runs} onPick={id => { setSelId(id); setTab(null); }} />
         <span className="rs-grow" />
-        <label className={'fv-active rh-active' + (sel.flow.active ? ' on' : '')} title={sel.flow.active ? 'Active: webhooks and schedules start it' : 'Off: it only runs when you press Run'}>
+        <label className={'fv-active rh-active rs-tb-active' + (sel.flow.active ? ' on' : '')} title={sel.flow.active ? 'Active: webhooks and schedules start it' : 'Off: it only runs when you press Run'}>
           <input type="checkbox" checked={!!sel.flow.active} disabled={!server} onChange={() => toggleActive(sel)} aria-label={`Active: ${sel.title}`} /><i /><span>{sel.flow.active ? 'Active' : 'Off'}</span>
         </label>
-        <button className="btn" onClick={() => onOpen(sel.id)}>Open in editor</button>
-        <button className="btn" disabled={!server || !!busy} onClick={() => runIt(sel, true)}>Run with input…</button>
+        <i className="rs-sep" aria-hidden="true" />
+        <button className="btn rs-tb-btn" aria-label="Open in editor" onClick={() => onOpen(sel.id)}><svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4" /></svg><span className="rs-tb-lbl">Open in editor</span></button>
+        <button className="btn rs-tb-btn" aria-label="Run with input…" disabled={!server || !!busy} onClick={() => runIt(sel, true)}><svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5zM9 9h6M9 13h6M9 17h3" /></svg><span className="rs-tb-lbl">Run with input…</span></button>
         <button className="btn primary rs-go" disabled={!server || !!busy} onClick={() => runIt(sel)} aria-label={`Run ${sel.title}`}>{busy === sel.id ? <><i className="spin" />Running</> : <><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4l13 8-13 8z" /></svg>Run</>}</button>
       </div>
       {server === false && <p className="rh-note">Workflows run on the Workline server. Start it with <code>npm run dev</code> (or sign in to a Workline server) to run them here.</p>}
@@ -310,8 +340,17 @@ export default function RunHub({ files, q = '', onOpen, onUpdate, menuHidden, on
                 {CRED_TYPES[credKinds[0]]?.help && <small className="muted rs-fix-help">Where to find it: {CRED_TYPES[credKinds[0]].help}</small>}
               </div>
             ) : shown.status === 'error' ? (
-              <div className="rs-fail"><h4>What went wrong</h4><p className="rh-err">{shown.error}</p>
-                <div className="rs-fix-row"><button className="btn primary" onClick={() => fixInEditor(failed?.id)}>Open “{failed?.name || 'the step'}” in the editor</button></div></div>
+              (() => { const x = explain(shown.error, failed); return (
+                <div className="rs-fail rs-oops" role="alert">
+                  <div className="rs-oops-head"><i aria-hidden="true">{x.icon}</i><div><b>{x.title}</b>{failed && <small>in the step “{failed.name}”</small>}</div></div>
+                  <p className="rs-oops-text">{x.text}</p>
+                  <div className="rs-fix-row">
+                    <button className="btn primary" onClick={() => fixInEditor(failed?.id)}>Open “{failed?.name || 'the step'}” in the editor</button>
+                    <button className="btn" disabled={!server || !!busy} onClick={() => runIt(sel)}>↻ Try again</button>
+                  </div>
+                  <details className="rs-oops-raw"><summary>Technical details</summary><code>{shown.error}</code></details>
+                </div>
+              ); })()
             ) : (
               <ResultView results={resultOf(sel.flow, shown)} onCopy={copy} />
             )}

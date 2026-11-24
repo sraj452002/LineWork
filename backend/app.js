@@ -18,8 +18,8 @@ const MAX_FILE = 4_000_000;
 const ID = /^[\w-]{1,80}$/;
 
 // NVIDIA's models offered by default (NVIDIA_MODEL overrides, comma-separated), and their names in the app.
-export const NVIDIA_MODELS = 'deepseek-ai/deepseek-v4.1-flash,nvidia/nemotron-3.5-lightning-30b-a3b,moonshotai/kimi-k3.1-pro';
-const NVIDIA_NAMES = { 'deepseek-ai/deepseek-v4.1-flash': 'DeepSeek V4.1 Flash', 'z-ai/glm-5.3-flash': 'GLM 5.3 Flash', 'nvidia/nemotron-3.5-lightning-30b-a3b': 'NVIDIA Nemotron', 'moonshotai/kimi-k3.1-pro': 'Kimi K3.1 Pro' };
+export const NVIDIA_MODELS = 'z-ai/glm-5.3-flash,nvidia/nemotron-3.5-lightning-30b-a3b,moonshotai/kimi-k3.1-pro';
+const NVIDIA_NAMES = { 'deepseek-ai/deepseek-v4.1-flash': 'DeepSeek V4.1 Flash', 'z-ai/glm-5.3-flash': 'GLM 5.3 Flash', 'nvidia/nemotron-3.5-lightning-30b-a3b': 'NVIDIA Nemotron', 'moonshotai/kimi-k3.1-pro': 'Kimi K3.1 Pro', 'minimaxai/minimax-m3.1-flash': 'MiniMax M3.1 Flash' };
 export const nvidiaLabel = m => NVIDIA_NAMES[m] || (/nemotron/i.test(m) ? 'NVIDIA Nemotron' : m.split('/').pop().replace(/[-_]+/g, ' ').replace(/\b([a-z])/g, c => c.toUpperCase()).replace(/\bGlm\b/, 'GLM'));
 
 // The one user of a server without accounts.
@@ -44,7 +44,7 @@ export function createApp(store, opts = {}) {
   const api = express.Router();
   // Workflows (flows.js). Their webhooks are called by other services, from anywhere, so they come
   // before the checks below that changes come from this site as JSON.
-  const flows = createFlows({ store, ai: { key: aiKey, base: aiBase, model: aiModel, dailyLimit: aiDailyLimit }, mailer, allowPrivate: dbAllowPrivate, secret: opts.flowSecret || '', storeOwner: opts.storeOwner || '' });
+  const flows = createFlows({ store, ai: { key: aiKey, base: aiBase, model: aiModel, dailyLimit: aiDailyLimit, nvidiaKey, nvidiaBase, nvidiaModels: String(nvidiaModel || '').split(',').map(m => m.trim()).filter(Boolean) }, mailer, allowPrivate: dbAllowPrivate, secret: opts.flowSecret || '', storeOwner: opts.storeOwner || '' });
   api.use('/hook', flows.hooks);
   api.use('/ui', flows.ui); // published custom apps: public pages, like webhooks
   api.use('/p', flows.pages); // pages made of nodes at a name of their own (/p/<name> on the site)
@@ -233,9 +233,10 @@ export function createApp(store, opts = {}) {
     ...(aiKey ? [{ id: 'claude', label: 'Claude', model: aiModel, images: true }] : []),
     ...(nvidiaKey ? nvidiaModels.map(model => ({ id: /nemotron/i.test(model) ? 'nvidia' : `nvidia:${model}`, label: nvidiaLabel(model), model, images: nvidiaSeesImages(model), thinking: true, nvidia: true })) : []),
   ];
-  // The default: DeepSeek V4.1 Flash when NVIDIA is set up (advanced, and it answers fast), else GLM 5.3
-  // Flash if it's still listed, else the first one.
-  const FAST = ['deepseek-ai/deepseek-v4.1-flash', 'z-ai/glm-5.3-flash'];
+  // The default: GLM 5.3 Flash when NVIDIA is set up (it answers fast), else MiniMax M3.1 Flash or DeepSeek
+  // V4.1 Flash if listed, else the first one.
+  // (DeepSeek V4.1 Flash was retired by NVIDIA on 16 Nov 2026; it stays here for servers that still list it.)
+  const FAST = ['z-ai/glm-5.3-flash', 'minimaxai/minimax-m3.1-flash', 'deepseek-ai/deepseek-v4.1-flash'];
   const defaultProvider = FAST.map(m => providers.find(p => p.model === m)).find(Boolean) || providers[0] || null;
   api.get('/ai/status', (req, res) => {
     const used = req.user ? store.aiUsed(req.user.id) : 0;

@@ -173,7 +173,7 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
       if (!c) throw new FlowError('That credential was deleted. Pick another.', 'no_credential');
       try { return unseal(c.data); } catch (e) { throw new FlowError(`The credential “${c.name}” can't be read (did FLOW_SECRET change?). Enter it again.`, 'credential'); }
     },
-    ai: { key: ai.key, base: ai.base, model: ai.model, allow: () => store.useAi(uid, ai.dailyLimit ?? 50) },
+    ai: { key: ai.key, base: ai.base, model: ai.model, nvidiaKey: ai.nvidiaKey, nvidiaBase: ai.nvidiaBase, nvidiaModels: ai.nvidiaModels || [], chatModel: () => m.userdata[uid]?.chatModel || '', allow: () => store.useAi(uid, ai.dailyLimit ?? 50) },
     // One of the account's agents (or one described in the node) doing a task: { text, steps, agent }.
     runAgent(opts) {
       if (!agentRunner) throw new FlowError('Agents aren’t available on this server.', 'no_agents');
@@ -648,6 +648,14 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
       store.touch();
       res.json({ ok: true });
     });
+    // The model picked in the AI chat: AI steps left on “Same as AI chat” use it (flow-ai.js).
+    api.put('/flows/ai-model', signedIn, (req, res) => {
+      const model = String(req.body?.model || '');
+      if (!/^[\w.:/-]{1,120}$/.test(model)) return res.status(400).json({ error: 'bad_model' });
+      const u = (m.userdata[req.user.id] ||= {});
+      if (u.chatModel !== model) { u.chatModel = model; store.touch(); }
+      res.json({ ok: true });
+    });
     api.get('/credentials', signedIn, (req, res) => {
       res.json({ credentials: Object.values(credsOf(req.user.id)).map(publicCred).sort((a, b) => a.name.localeCompare(b.name)) });
     });
@@ -759,14 +767,14 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
       const uid = storeUid();
       if (!uid) return res.status(404).json({ error: 'no_store', message: 'This server has no public apps (set STORE_OWNER on the server to an account’s email).' });
       const files = await store.listFiles(uid);
-      const apps = files.filter(f => f && !f.archived && f.flow && f.flow.app && f.flow.app.published).map(f => appInfo(f.id, f.flow.app));
+      const apps = files.filter(f => f && !f.archived && f.flow && f.flow.app && f.flow.app.published).map(f => ({ ...appInfo(f.id, f.flow.app), updated: f.updated || 0 }));
       // Pages too: active workflows with a Page trigger, at their own link (a name of their own, or the hook).
       const pages = files.filter(f => f && !f.archived && f.flow && f.flow.active).flatMap(f => (f.flow.nodes || [])
         .filter(n => n.type === 'trigger.page' && n.params && /^[\w-]{12,80}$/.test(String(n.params.path || '')))
         .map(n => {
           const p = n.params, own = p.title && p.title !== 'My page' ? String(p.title) : '';
           return { id: `${f.id}:${n.id}`, title: (own || f.title || 'Page').slice(0, 80), description: String(p.description || '').slice(0, 200),
-            url: p.link && PAGE_LINK.test(String(p.link)) ? `/p/${p.link}` : `/api/hook/${p.path}` };
+            url: p.link && PAGE_LINK.test(String(p.link)) ? `/p/${p.link}` : `/api/hook/${p.path}`, updated: f.updated || 0 };
         }));
       res.set('cache-control', 'no-store').json({ name: store.s.userById?.get?.(uid)?.name || null, apps, pages });
     });

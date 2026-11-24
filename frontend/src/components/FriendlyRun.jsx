@@ -20,7 +20,14 @@ export function FriendlyRun({ steps, run, done, title, secs, failed, onReplay, o
   const playedTo = steps.reduce((m, s, i) => (s.st !== 'pending' && s.st !== 'idle' ? i + 1 : m), 0);
   const pct = !run ? 0 : done ? 100 : Math.round((playedTo / Math.max(1, steps.length)) * 100);
   const state = !run ? 'idle' : !done ? 'active' : run.status === 'success' ? 'success' : 'error';
-  const err = failed && run?.nodes?.[failed.id]?.error;
+  // The step's error in words: a service's JSON answer ({"detail": "…"}) comes down to its message.
+  const err = (() => {
+    const e = failed && run?.nodes?.[failed.id]?.error;
+    if (!e) return e;
+    const m = String(e).match(/\{.*\}/s);
+    if (m) { try { const j = JSON.parse(m[0]); const msg = j.detail || j.message || j.error?.message || j.error || j.title; if (typeof msg === 'string') return String(e).replace(m[0], msg).replace(/\s*answered \d{3}:\s*/, ': '); } catch (x) { /* not JSON */ } }
+    return e;
+  })();
   const say = state === 'idle' ? 'Ready when you are'
     : state === 'active' ? (active ? `${active.n.name}…` : 'Getting started…')
     : state === 'success' ? 'All done!' : 'Something needs your attention';

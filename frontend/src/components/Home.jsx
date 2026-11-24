@@ -9,6 +9,7 @@ import { StorageMeter } from './ServerDialogs.jsx';
 import Tools from './Tools.jsx';
 import Templates from './Templates.jsx';
 import Apps from './Apps.jsx';
+import Live from './Live.jsx';
 // Run brings the node icons and app logos: loaded when it's opened.
 const RunHub = lazy(() => import('./RunHub.jsx'));
 import Assistant from './Assistant.jsx';
@@ -35,6 +36,7 @@ const IC = {
   caret: 'M7 10l5 5 5-5',
   sort: 'M8 5v14M5 16l3 3 3-3M14 7h6M14 12h4M14 17h2',
   panel: 'M4 5h16v14H4zM9.5 5v14M15 10l-2 2 2 2',
+  live: 'M12 10.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zM8.5 8.5a5 5 0 0 0 0 7M15.5 8.5a5 5 0 0 1 0 7M5.6 5.6a9 9 0 0 0 0 12.8M18.4 5.6a9 9 0 0 1 0 12.8',
   help: 'M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17h.01',
 };
 const Ico = ({ d, size = 18 }) => (
@@ -245,6 +247,7 @@ Reply with ONLY a JSON object: {"title": "...", "doc": "...", "diagrams": [...]}
       else if (e.key === 'p' || e.key === 'P') setView('templates');
       else if (e.key === 'r' || e.key === 'R') setView('apps');
       else if (e.key === 'w' || e.key === 'W') setView('run');
+      else if (e.key === 'l' || e.key === 'L') setView('live');
       else if (e.key === 'i' || e.key === 'I') setView('assistant');
       else if (e.key === 'g' || e.key === 'G') onGuide('app');
     };
@@ -308,6 +311,9 @@ Reply with ONLY a JSON object: {"title": "...", "doc": "...", "diagrams": [...]}
           <button className="nav" aria-current={view === 'apps' ? 'page' : undefined} onClick={() => setView('apps')}>
             <Ico d={IC.apps} /><span>Apps</span><kbd>R</kbd>
           </button>
+          <button className="nav" aria-current={view === 'live' ? 'page' : undefined} onClick={() => setView('live')}>
+            <Ico d={IC.live} /><span>Live</span><kbd>L</kbd>
+          </button>
           <button className="nav" aria-current={view === 'run' ? 'page' : undefined} onClick={() => setView('run')}>
             <Ico d={IC.play} /><span>Run</span><kbd>W</kbd>
           </button>
@@ -343,21 +349,21 @@ Reply with ONLY a JSON object: {"title": "...", "doc": "...", "diagrams": [...]}
         {view === 'assistant' ? <Assistant user={account} onOpenFile={onOpen} onShowMenu={sideHidden ? toggleMenu : null} /> : <div className="main-in">
           <header className="topbar">
             {sideHidden && view !== 'run' && <button className="side-show" onClick={toggleMenu} aria-label="Show the menu panel" title="Show the menu panel (\)"><Ico d={IC.panel} size={17} /></button>}
-            <div className="tabs" role="tablist" aria-label="Filter files" hidden={view === 'tools' || view === 'templates' || view === 'apps' || view === 'run'}>
+            <div className="tabs" role="tablist" aria-label="Filter files" hidden={view === 'tools' || view === 'templates' || view === 'apps' || view === 'run' || view === 'live'}>
               {[['all', 'All'], ['recent', 'Recents']].map(([k, l]) => (
                 <button key={k} role="tab" aria-selected={tab === k} className="tab-btn" onClick={() => setTab(k)}>{l}</button>
               ))}
             </div>
             <label className="dsearch">
               <Ico d={IC.search} size={17} />
-              <input ref={searchRef} type="search" placeholder={view === 'tools' ? 'Search tools' : view === 'templates' ? 'Search templates' : view === 'apps' ? 'Search apps' : view === 'run' ? 'Search workflows' : 'Search'} aria-label={view === 'tools' ? 'Search tools' : view === 'templates' ? 'Search templates' : view === 'apps' ? 'Search apps' : view === 'run' ? 'Search workflows' : 'Search files'} value={q}
+              <input ref={searchRef} type="search" placeholder={view === 'tools' ? 'Search tools' : view === 'templates' ? 'Search templates' : view === 'apps' ? 'Search apps' : view === 'live' ? 'Search what’s live' : view === 'run' ? 'Search workflows' : 'Search'} aria-label={view === 'tools' ? 'Search tools' : view === 'templates' ? 'Search templates' : view === 'apps' ? 'Search apps' : view === 'live' ? 'Search what’s live' : view === 'run' ? 'Search workflows' : 'Search files'} value={q}
                 onChange={e => setQ(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') { setQ(''); e.currentTarget.blur(); } }} />
               <kbd>/</kbd>
             </label>
             <AccountMenu account={account} who={who} initial={initial} saveState={saveState} storage={storage} onAccount={onAccount} onSignOut={onSignOut} />
           </header>
 
-          {view === 'run' ? <Suspense fallback={<p className="muted">Loading…</p>}><RunHub files={files} q={q} onOpen={onOpen} onUpdate={onUpdate} menuHidden={runMenuHidden} onToggleMenu={toggleRunMenu} /></Suspense> : view === 'apps' ? <Apps files={files} q={q} onEdit={onOpen} onUpdate={onUpdate} /> : view === 'templates' ? <Templates q={q} onCreate={onCreate} /> : view === 'tools' ? <Tools q={q} busy={busy} onCreate={onCreate} onGenerate={generate} /> : (<>
+          {view === 'run' ? <Suspense fallback={<p className="muted">Loading…</p>}><RunHub files={files} q={q} onOpen={onOpen} onUpdate={onUpdate} menuHidden={runMenuHidden} onToggleMenu={toggleRunMenu} /></Suspense> : view === 'apps' ? <Apps files={files} q={q} onEdit={onOpen} onUpdate={onUpdate} /> : view === 'live' ? <Live files={files} q={q} onEdit={onOpen} onUpdate={onUpdate} onApps={() => setView('apps')} /> : view === 'templates' ? <Templates q={q} onCreate={onCreate} /> : view === 'tools' ? <Tools q={q} busy={busy} onCreate={onCreate} onGenerate={generate} /> : (<>
           {view === 'all' && !q && (
             <section className="hero" aria-label="Welcome">
               <div className="hero-art" aria-hidden="true"><i /><i /><i /><svg viewBox="0 0 400 120" preserveAspectRatio="none"><path d="M0 90 C 80 20, 160 120, 240 60 S 360 20, 400 50" /><path d="M0 60 C 90 110, 170 10, 260 70 S 350 100, 400 30" /></svg></div>

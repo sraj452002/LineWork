@@ -556,6 +556,9 @@ export const NODES = {
     fields: [{ k: 'list', label: 'Stories', kind: 'select', options: [['top', 'Top'], ['new', 'New'], ['best', 'Best'], ['ask', 'Ask HN'], ['show', 'Show HN']] }, { k: 'limit', label: 'How many', kind: 'number' }], defaults: () => ({ list: 'top', limit: 10 }) },
   'data.weather': { group: 'Storage & feeds', label: 'Weather', note: 'Current weather anywhere (Open-Meteo)', icon: I.sun, tone: 'sky', fields: [{ k: 'latitude', label: 'Latitude', kind: 'text', hint: '28.61' }, { k: 'longitude', label: 'Longitude', kind: 'text', hint: '77.21' }] },
 };
+// Every step that uses the server's AI can pick its model (blank: Automatic, the server's choice).
+export const AI_STEPS = ['ai.agent', 'ai.claude', 'ai.summarize', 'ai.extract', 'ai.classify', 'ai.rewrite', 'ai.translate', 'ai.vision', 'ai.decide', 'ai.score'];
+for (const k of AI_STEPS) if (NODES[k] && !NODES[k].fields.some(f => f.k === 'model')) NODES[k].fields.unshift({ k: 'model', label: 'AI model', kind: 'aimodel', images: k === 'ai.vision' });
 // The Code block (UI): a part of the page in your own HTML, React or Vue. It runs in a frame of its own,
 // with `items` (what reached the node); a starter for each framework, swapped in when the code is untouched.
 /* The tool nodes (text, numbers, dates, lists… in backend/flow-tools.js) and one-job app actions and

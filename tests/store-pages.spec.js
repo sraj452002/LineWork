@@ -30,7 +30,7 @@ test('/run lists live pages and opens them inside the app', async ({ browser }) 
   try {
     // The store lists the active page (not the inactive one), with its link.
     const s = await (await fetch(`${api}/store`)).json();
-    expect(s.pages).toEqual([{ id: 'fpage1:t', title: 'StarPlay', description: 'Shows to watch tonight', url: '/api/hook/pagepathabc123456' }]);
+    expect(s.pages).toEqual([{ id: 'fpage1:t', title: 'StarPlay', description: 'Shows to watch tonight', url: '/api/hook/pagepathabc123456', updated: now }]);
 
     const url = `http://localhost:${port}`;
     for (let i = 0; i < 60; i++) { try { if ((await fetch(url)).ok) break; } catch (e) {} await new Promise(r => setTimeout(r, 500)); }

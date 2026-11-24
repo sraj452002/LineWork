@@ -7,6 +7,7 @@ import {
   inputPaths, listRuns, newNode, nodeDef, outputsOf, outsOf, runFields, startRun, updateCredential,
 } from '../lib/flows.js';
 import { LOGOS } from '../lib/flowlogos.js';
+import { aiProvider, aiProviders, refreshAI } from '../lib/ai.js';
 import { listFiles } from '../lib/cloud.js';
 import { listAgents } from '../lib/agents.js';
 import { loadConnections } from '../lib/dbclient.js';
@@ -826,7 +827,26 @@ function AgentPick({ value, onChange }) {
   );
 }
 
+/* The AI model for a step: Automatic, or one of the models the server offers (its AI chat's list). */
+function ModelPick({ f, value, onChange }) {
+  const [list, setList] = useState(aiProviders);
+  useEffect(() => { if (!aiProviders.length) refreshAI().then(() => setList(aiProviders), () => {}); }, []);
+  const usable = f.images ? list.filter(p => p.images) : list;
+  const gone = value && !list.some(p => p.id === value);
+  return (
+    <label className="fv-f"><span>{f.label}</span>
+      <select value={value || ''} onChange={e => onChange(e.target.value)}>
+        <option value="">Same as AI chat{aiProvider() ? ` (${aiProvider().label})` : ''}</option>
+        {usable.map(p => <option key={p.id} value={p.id}>{p.label}{p.images && !f.images ? ' · reads pictures' : ''}</option>)}
+        {gone && <option value={value}>{value} (not on this server)</option>}
+      </select>
+      <small className="muted">{!list.length ? 'AI is off on this server: set NVIDIA_API_KEY or ANTHROPIC_API_KEY.' : f.images ? 'Only models that read pictures are listed.' : '“Same as AI chat” follows the model picked in the AI chat; pick one here to fix this step to it.'}</small>
+    </label>
+  );
+}
+
 function Field({ f, value, onChange }) {
+  if (f.kind === 'aimodel') return <ModelPick f={f} value={value} onChange={onChange} />;
   if (f.kind === 'agent') return <label className="fv-f"><span>{f.label}</span><AgentPick value={value} onChange={onChange} /><small className="muted">Make agents in Nemo (home → Nemo AI → Agents), then pick one here.</small></label>;
   if (f.kind === 'workflow') return <label className="fv-f"><span>{f.label}</span><FilePick value={value} onChange={onChange} has="flow" /><small className="muted">{f.help || 'It runs from its trigger with these items; what its last steps give comes back.'}</small></label>;
   if (f.kind === 'file') return <label className="fv-f"><span>{f.label}</span><FilePick value={value} onChange={onChange} has={f.has} /></label>;
