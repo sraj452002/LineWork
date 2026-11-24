@@ -93,7 +93,7 @@ test('the AI assistant chats like Claude and uses the account’s tools: nodes, 
     await page.screenshot({ path: 'test-results/assistant-answer.png' });
     expect(errors).toEqual([]);
     await ctx.close();
-  } finally { try { process.kill(-vite.pid); } catch (e) {} srv.close(); nv.close(); }
+  } finally { try { if (process.platform === 'win32') (await import('node:child_process')).spawnSync('taskkill', ['/pid', String(vite.pid), '/T', '/F']); else process.kill(-vite.pid); } catch (e) {} srv.close(); nv.close(); }
 });
 
 test('the node list the assistant searches is up to date', () => {
@@ -144,7 +144,7 @@ test('Nemo still answers when tools are refused, and on an older server', async 
     await expect(page.locator('.as-msg.ai').last()).toContainText('Hi, I am Nemo!', { timeout: 20_000 });
     await expect(page.locator('.as-err')).toHaveCount(0);
     await ctx.close();
-  } finally { try { process.kill(-vite.pid); } catch (e) {} srv.close(); nv.close(); }
+  } finally { try { if (process.platform === 'win32') (await import('node:child_process')).spawnSync('taskkill', ['/pid', String(vite.pid), '/T', '/F']); else process.kill(-vite.pid); } catch (e) {} srv.close(); nv.close(); }
 });
 
 // No daily limit by default; a busy AI service (429) is asked again by itself; and when the picked model

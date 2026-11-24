@@ -526,7 +526,7 @@ export function svgDoc(ctx, {title=true, margin=36} = {}){
   const b = unionBox(ctx.m.count ? ctx.E.bounds(ctx) : null, shapeBounds(sh)); if(!b) return null;
   const T = title && ctx.m.title ? 34 : 0, w = Math.ceil(b.w + 2*margin), h = Math.ceil(b.h + 2*margin + T);
   const tt = T ? `<text x="${margin}" y="${margin+8}" font-size="18" font-weight="700" fill="${C.ink}">${esc(ctx.m.title)}</text>` : '';
-  return {w, h, text:`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" font-family="Bricolage Grotesque, system-ui, -apple-system, Segoe UI, sans-serif"><rect width="100%" height="100%" fill="${C.paper}"/>${tt}<g transform="translate(${margin-b.x} ${margin+T-b.y})">${L.under}${ctx.E.markup(ctx, null)}${L.over}</g></svg>`};
+  return {w, h, text:`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" font-family="Inter, system-ui, -apple-system, Segoe UI, sans-serif"><rect width="100%" height="100%" fill="${C.paper}"/>${tt}<g transform="translate(${margin-b.x} ${margin+T-b.y})">${L.under}${ctx.E.markup(ctx, null)}${L.over}</g></svg>`};
 }
 export function thumb(d){
   if(!d) return '<span class="blank-thumb">+</span>';

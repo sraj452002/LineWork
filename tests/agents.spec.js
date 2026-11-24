@@ -90,5 +90,5 @@ test('make agents, chat with them, and use one in a workflow', async ({ browser 
     expect(seen.at(-1).messages[0].content).toContain('Answer briefly and kindly.');
     expect(errors).toEqual([]);
     await ctx.close();
-  } finally { try { process.kill(-vite.pid); } catch (e) {} srv.close(); nv.close(); }
+  } finally { try { if (process.platform === 'win32') (await import('node:child_process')).spawnSync('taskkill', ['/pid', String(vite.pid), '/T', '/F']); else process.kill(-vite.pid); } catch (e) {} srv.close(); nv.close(); }
 });

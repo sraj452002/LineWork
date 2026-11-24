@@ -198,7 +198,8 @@ function Workspace({ session, onSignOut, onUser }) {
   }, [cloud, uid, attempt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cloud: files changed elsewhere (by a workflow, or on another device) come in when this tab is back in
-  // view or a workflow run ends, unless this browser has changes to them it hasn't saved yet.
+  // view, its window gets the focus back (from another app, which doesn't hide the tab), or a workflow run
+  // ends, unless this browser has changes to them it hasn't saved yet.
   const pull = useCallback(async () => {
     if (!cloud || !loaded.current) return;
     let remote;
@@ -221,9 +222,13 @@ function Workspace({ session, onSignOut, onUser }) {
   useEffect(() => {
     if (!cloud) return undefined;
     const seen = () => { if (!document.hidden) pull(); };
+    // Focus can come back often (clicking between windows): at most one look every few seconds.
+    let last = 0;
+    const focused = () => { if (Date.now() - last > 4000) { last = Date.now(); pull(); } };
     document.addEventListener('visibilitychange', seen);
+    addEventListener('focus', focused);
     addEventListener('workline:pull', pull);
-    return () => { document.removeEventListener('visibilitychange', seen); removeEventListener('workline:pull', pull); };
+    return () => { document.removeEventListener('visibilitychange', seen); removeEventListener('focus', focused); removeEventListener('workline:pull', pull); };
   }, [cloud, pull]);
 
   // Folders live on the account (cloud) or in this browser (local).

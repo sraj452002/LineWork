@@ -684,7 +684,7 @@ export function shapesDoc(shapes, margin = 24){
   const list = (shapes || []).filter(s => s.t !== 'comment'), b = shapeBounds(list);
   if(!b) return null;
   const L = shapesMarkup(list), w = Math.ceil(b.w + 2 * margin), h = Math.ceil(b.h + 2 * margin);
-  return {w, h, text:`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" font-family="Bricolage Grotesque, system-ui, -apple-system, Segoe UI, sans-serif"><rect width="100%" height="100%" fill="${C.paper}"/><g transform="translate(${margin - b.x} ${margin - b.y})">${L.under}${L.over}</g></svg>`};
+  return {w, h, text:`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" font-family="Inter, system-ui, -apple-system, Segoe UI, sans-serif"><rect width="100%" height="100%" fill="${C.paper}"/><g transform="translate(${margin - b.x} ${margin - b.y})">${L.under}${L.over}</g></svg>`};
 }
 
 // Frames draw under the diagram; everything else draws over it, in list order.

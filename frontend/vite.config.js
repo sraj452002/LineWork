@@ -9,6 +9,10 @@ const ISOLATION = { 'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-E
 // first-party. On Netlify, BACKEND_URL (e.g. https://linework-api.onrender.com) becomes a proxy rule in
 // dist/_redirects (netlify.toml can't read environment variables).
 const API = (process.env.BACKEND_URL || '').replace(/\/+$/, '');
+// In development, where /api goes: LINEWORK_API (set by `npm run dev` at the top), or, for `npm run dev`
+// here in frontend/ (next to `npm run dev` in backend/), the backend on this machine. Plain `npx vite`
+// (the tests) has no API, so the app works on its own, in the browser.
+const DEV_API = process.env.LINEWORK_API || (process.env.npm_lifecycle_event === 'dev' ? `http://localhost:${process.env.PORT || 8787}` : '');
 let outDir;
 const apiProxy = {
   name: 'linework-api-proxy',
@@ -30,8 +34,8 @@ export default defineConfig({
   // The app's own entry chunk is about 400 KB.
   build: { chunkSizeWarningLimit: 7500 },
   // Same cross-origin isolation headers as netlify.toml, so running code works in development too.
-  // With LINEWORK_API set (e.g. http://localhost:8787, from `npm run dev` at the top), /api goes to the
-  // Linework API. The Host header is kept, so the API sees requests as coming from this page.
-  server: { headers: ISOLATION, proxy: process.env.LINEWORK_API ? { '/api': { target: process.env.LINEWORK_API, changeOrigin: false }, '/p/': { target: process.env.LINEWORK_API, changeOrigin: false, rewrite: p => '/api' + p } } : undefined },
+  // With an API (DEV_API above), /api goes to the Linework API. The Host header is kept, so the API sees
+  // requests as coming from this page. If it isn't running, /api answers 500 and the app works on its own.
+  server: { headers: ISOLATION, proxy: DEV_API ? { '/api': { target: DEV_API, changeOrigin: false }, '/p/': { target: DEV_API, changeOrigin: false, rewrite: p => '/api' + p } } : undefined },
   preview: { headers: ISOLATION },
 });

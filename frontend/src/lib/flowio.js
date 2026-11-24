@@ -1,7 +1,10 @@
 import { rid } from './utils.js';
 import { NODES, inputsOf, nodeDef, outputsOf, secretPath } from './flows.js';
+import { appNode, copyParams, readForeign } from './flowimport.js';
+import { usedBy } from './customnodes.js';
 
-/* Workflows in and out of Workline: a .json file of our own, and n8n's exported workflows coming in.
+/* Workflows in and out of Workline: a .json file of our own, and n8n's exported workflows coming in (and,
+   through flowimport.js, Make, Zapier, Node-RED and Power Automate / Logic Apps ones).
    An export carries no credentials (only which kind each node needs); an import gets fresh ids. */
 
 // A workflow as a file to keep or share.
@@ -13,6 +16,8 @@ export function exportFlow(file) {
       nodes: flow.nodes.map(({ credential, ...n }) => ({ ...n, params: bare(n), ...(credential ? { credentialType: nodeDef(n.type).credential?.[0] } : {}) })),
       edges: flow.edges,
     },
+    // Copies of the custom nodes (My nodes) it uses, so it runs where they aren't saved.
+    ...(Object.keys(usedBy(flow)).length ? { customNodes: usedBy(flow) } : {}),
   }, null, 2);
 }
 // A node's params without its secrets: signing secrets, and a webhook's URL (a new one is made on import).
@@ -55,9 +60,9 @@ const N8N = {
   stripeTrigger: { type: 'trigger.stripe' },
   shopifyTrigger: { type: 'trigger.shopify' },
   telegramTrigger: { type: 'trigger.telegram' },
-  if: { type: 'core.if' },
+  if: { type: 'core.if', params: p => n8nCondition(p) },
   switch: { type: 'core.switch' },
-  filter: { type: 'core.filter' },
+  filter: { type: 'core.filter', params: p => n8nCondition(p) },
   merge: { type: 'core.merge' },
   splitOut: { type: 'core.split', params: p => ({ field: p.fieldToSplitOut || '' }) },
   itemLists: { type: 'core.split' },
@@ -124,7 +129,19 @@ const N8N = {
   pushover: { type: 'pushover' },
 };
 // n8n writes expressions as ={{ $json.x }}; ours are the same without the leading "=".
-const n8nExpr = v => (typeof v === 'string' && v.startsWith('=') ? v.slice(1) : v);
+// $('Name').item.json (and .first() / .last()) is another node's item: $node["Name"].json here.
+const n8nExpr = v => (typeof v === 'string'
+  ? (v.startsWith('=') ? v.slice(1) : v).replace(/\$\(\s*(['"])(.+?)\1\s*\)\.(?:item|first\(\)|last\(\))\.json/g, (_, q, name) => `$node["${name}"].json`)
+  : v);
+// An IF or Filter's first condition (n8n 1.x: conditions.conditions[]; older: conditions.string/number[]).
+const N8N_OPS = { equals: 'equals', notEquals: 'notEquals', equal: 'equals', notEqual: 'notEquals', contains: 'contains', notContains: 'notContains', gt: 'gt', gte: 'gte', lt: 'lt', lte: 'lte', larger: 'gt', largerEqual: 'gte', smaller: 'lt', smallerEqual: 'lte', empty: 'isEmpty', isEmpty: 'isEmpty', notEmpty: 'isNotEmpty', isNotEmpty: 'isNotEmpty', true: 'isTrue', false: 'isFalse', exists: 'isNotEmpty', notExists: 'isEmpty' };
+function n8nCondition(p) {
+  const c = p.conditions?.conditions?.[0];
+  if (c) return { left: String(n8nExpr(c.leftValue ?? '')), op: N8N_OPS[c.operator?.operation] || 'equals', right: String(n8nExpr(c.rightValue ?? '')) };
+  const old = ['string', 'number', 'boolean'].map(k => p.conditions?.[k]?.[0]).find(Boolean);
+  if (old) return { left: String(n8nExpr(old.value1 ?? '')), op: N8N_OPS[old.operation] || 'equals', right: String(n8nExpr(old.value2 ?? '')) };
+  return {};
+}
 // n8n's Code node reads $input.all() (items with .json); ours gets the json objects themselves.
 const n8nCode = code => `// Imported from n8n: \`items\` here are the items' JSON (n8n's $input.all().map(i => i.json)).\nconst $input = { all: () => items.map(json => ({ json })), first: () => ({ json: items[0] }) };\n${code}`;
 
@@ -134,21 +151,35 @@ const n8nPython = code => `# Imported from n8n: \`items\` here are the items' JS
 export function importFlow(text) {
   let data;
   try { data = JSON.parse(text); } catch (e) { throw new Error('That file isn’t JSON.'); }
+  // n8n's API and some exports wrap the workflow ({data: …}, or a list of them): the first one.
+  let more = '';
+  if (data && data.data && typeof data.data === 'object' && (data.data.nodes || Array.isArray(data.data))) data = data.data;
+  if (Array.isArray(data) && data.length && data.every(w => w && Array.isArray(w.nodes) && w.connections)) {
+    if (data.length > 1) more = `${data.length} workflows in the file: this is the first.`;
+    data = data[0];
+  }
   if (data && data.workline === 'workflow' && data.flow) {
     const ids = new Map();
-    const nodes = (data.flow.nodes || []).filter(n => NODES[n.type]).map(({ credentialType, ...n }) => { const id = rid('n'); ids.set(n.id, id); return rekey({ ...n, id, params: n.params || {} }); });
+    const brought = data.customNodes && typeof data.customNodes === 'object' ? data.customNodes : {};
+    const nodes = (data.flow.nodes || []).filter(n => NODES[n.type] || (String(n.type).startsWith('custom.') && brought[n.type.slice(7)])).map(({ credentialType, ...n }) => { const id = rid('n'); ids.set(n.id, id); return rekey({ ...n, id, params: n.params || {} }); });
     const edges = (data.flow.edges || []).filter(e => ids.has(e.from) && ids.has(e.to)).map(e => ({ ...e, id: rid('e'), from: ids.get(e.from), to: ids.get(e.to) }));
-    return { flow: { active: false, nodes, edges }, name: data.name, skipped: [] };
+    return { flow: { active: false, nodes, edges }, name: data.name, app: 'Workline', skipped: [], customNodes: brought };
   }
   if (data && Array.isArray(data.nodes) && data.connections) {
     const skipped = [], byName = new Map();
     const nodes = data.nodes.filter(n => !/stickyNote/i.test(n.type || '')).map(n => {
       const short = String(n.type || '').split('.').pop();
-      const m = N8N[short];
+      const trigger = /trigger$/i.test(short), app = short.replace(/trigger$/i, '');
+      // Our node for it: from the list above, else by the app's name (slackTrigger → Slack trigger, a Slack node…).
+      const m = N8N[short] || (appNode(app, trigger) ? { type: appNode(app, trigger), copy: true } : null);
       const [x = 0, y = 0] = Array.isArray(n.position) ? n.position : [];
+      const settings = JSON.stringify(n.parameters || {}).slice(0, 1500);
       const node = m && NODES[m.type]
-        ? { id: rid('n'), type: m.type, name: n.name, x, y, params: { ...(NODES[m.type].defaults ? NODES[m.type].defaults() : {}), ...(m.params ? m.params(n.parameters || {}) : {}) } }
-        : (skipped.push(n.type), { id: rid('n'), type: 'core.noop', name: n.name, x, y, params: {}, note: `From n8n: ${n.type}` });
+        ? { id: rid('n'), type: m.type, name: n.name, x, y, note: `From n8n: ${n.type}`,
+          params: { ...(NODES[m.type].defaults ? NODES[m.type].defaults() : {}), ...copyParams(m.type, n.parameters || {}, n8nExpr), ...(m.params ? m.params(n.parameters || {}) : {}) } }
+        : (skipped.push(n.type), trigger
+          ? { id: rid('n'), type: 'trigger.manual', name: n.name, x, y, params: {}, note: `From n8n: ${n.type}, a trigger Workline doesn’t have. Run it by hand, or swap in a Webhook or Schedule trigger. Its settings: ${settings}` }
+          : { id: rid('n'), type: 'core.noop', name: n.name, x, y, params: {}, note: `From n8n: ${n.type}, which Workline has no node for: put one in its place. Its settings: ${settings}` });
       byName.set(n.name, node);
       return node;
     });
@@ -167,9 +198,11 @@ export function importFlow(text) {
     // n8n's canvas is larger: bring it nearer our scale.
     const minX = Math.min(...nodes.map(n => n.x)), minY = Math.min(...nodes.map(n => n.y));
     for (const n of nodes) { n.x = Math.round((n.x - minX) * .8 + 80); n.y = Math.round((n.y - minY) * .8 + 120); }
-    return { flow: { active: false, nodes, edges }, name: data.name, skipped: [...new Set(skipped)] };
+    return { flow: { active: false, nodes, edges }, name: data.name, app: 'n8n', skipped: [...new Set(skipped)], more };
   }
-  throw new Error('That isn’t a Workline or n8n workflow file.');
+  const foreign = readForeign(data);
+  if (foreign) return foreign;
+  throw new Error('That isn’t a workflow file Workline can read. It reads workflows (.json) from Workline, n8n, Make, Zapier, Node-RED and Power Automate / Logic Apps.');
 }
 
 // A flow ready to sit beside (not on top of) the nodes already there.

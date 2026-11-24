@@ -2,7 +2,7 @@ import vm from 'node:vm';
 import { createHash, createHmac, randomBytes, randomUUID } from 'node:crypto';
 import { FlowError, getPath, items, setPath } from './flow-engine.js';
 import { handle as dbHandle } from './dbconnect.js';
-import { cred, each, failIfBad, json, need, obj, pairs, request } from './flow-util.js';
+import { attachments, cred, each, failIfBad, json, need, obj, pairs, request } from './flow-util.js';
 import { LOCAL_LANGS, runLocal, runRemote } from './flow-code.js';
 
 /* What each kind of workflow node does. A node gets its input items and returns {port: items}; most
@@ -173,8 +173,10 @@ export const NODE_TYPES = {
     } else if (args.ctx.mailer?.configured) send = m => args.ctx.mailer.send(m);
     else throw new FlowError('Pick an email (SMTP) credential: this server has no email set up.', 'no_credential');
     return each(args, async p => {
-      await send({ to: need(p.to, 'who it goes to'), subject: String(p.subject || ''), text: String(p.text || ''), html: p.html ? String(p.html) : undefined });
-      return { sent: true, to: p.to };
+      const files = attachments(p.attachments);
+      await send({ to: need(p.to, 'who it goes to'), subject: String(p.subject || ''), text: String(p.text || ''), html: p.html ? String(p.html) : undefined,
+        ...(files.length ? { attachments: files.map(f => ({ filename: f.filename, contentType: f.contentType, content: Buffer.from(f.base64, 'base64') })) } : {}) });
+      return { sent: true, to: p.to, ...(files.length ? { attached: files.map(f => f.filename) } : {}) };
     });
   } },
   'app.database': { run: async args => {

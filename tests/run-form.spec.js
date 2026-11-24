@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { openStore } from '../backend/store.js';
 import { memoryBackend } from '../backend/storage.js';
 import { createApp } from '../backend/app.js';
-import { runFields, runValues } from '../frontend/src/lib/flows.js';
+import { inputPaths, itemRows, rowsItem, runFields, runValues, typedValue } from '../frontend/src/lib/flows.js';
 
 // Run workflow with input: a Run by hand trigger's fields become a form before the run, and what's filled
 // in is the first item; any workflow can also be run with an item written as JSON.
@@ -15,13 +15,32 @@ test('the fields a Run by hand trigger asks for', () => {
   expect(runValues(f, { amount: '' }).amount).toBe(null);
 });
 
+test('a node’s input form: the fields it reads, typed values, and rows to an item and back', () => {
+  const flow = { edges: [{ from: 't', to: 'a' }, { from: 't', to: 'b' }], nodes: [
+    { id: 't', type: 'trigger.webhook', params: {} },
+    { id: 'a', type: 'app.email', params: { to: '{{ $json.email }}', subject: 'Order {{ $json.order.id }}', text: '{{ $json["first name"] }} {{ $json.email }}' } },
+    { id: 'b', type: 'core.if', params: { left: '{{ $json.total * 2 }}', op: 'gt', right: '10' } }] };
+  // A node: what its own settings read, once each, nested paths whole.
+  expect(inputPaths(flow, 'a')).toEqual(['email', 'order.id', 'first name']);
+  // A trigger passes its item on: what the nodes after it read.
+  expect(inputPaths(flow, 't')).toEqual(['email', 'order.id', 'first name', 'total']);
+  expect(inputPaths(flow, 'nope')).toEqual([]);
+  // Typed values: numbers, true/false, null and JSON as such; phone numbers and 0123 stay text.
+  expect([typedValue('12'), typedValue('1.5'), typedValue('-3'), typedValue('true'), typedValue('null'), typedValue('{"a":1}'), typedValue('[1,2]')]).toEqual([12, 1.5, -3, true, null, { a: 1 }, [1, 2]]);
+  expect([typedValue('0123'), typedValue('919876543210123456'), typedValue('Asha'), typedValue('{oops'), typedValue('')]).toEqual(['0123', '919876543210123456', 'Asha', '{oops', '']);
+  // Rows → item (dots nest; nameless rows are skipped) → rows.
+  const item = rowsItem([{ name: 'email', value: 'a@x.in' }, { name: 'order.id', value: '42' }, { name: 'order.paid', value: 'true' }, { name: '', value: 'x' }]);
+  expect(item).toEqual({ email: 'a@x.in', order: { id: 42, paid: true } });
+  expect(itemRows(item)).toEqual([{ name: 'email', value: 'a@x.in' }, { name: 'order.id', value: '42' }, { name: 'order.paid', value: 'true' }]);
+});
+
 test('Run workflow opens the form, and the workflow gets what was filled in', async ({ browser }) => {
   test.setTimeout(120_000);
   const { spawn } = await import('node:child_process');
   const app = createApp(await openStore(memoryBackend()), { noAccounts: true });
   const srv = app.listen(0);
   const port = 5241;
-  const vite = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--port', String(port), '--strictPort'], { cwd: 'frontend', env: { ...process.env, LINEWORK_API: `http://localhost:${srv.address().port}` }, stdio: 'ignore', detached: true });
+  const vite = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--port', String(port), '--strictPort'], { cwd: 'frontend', env: { ...process.env, LINEWORK_API: `http://localhost:${srv.address().port}` }, stdio: 'ignore', detached: process.platform !== 'win32' });
   try {
     const url = `http://localhost:${port}`;
     for (let i = 0; i < 60; i++) { try { if ((await fetch(url)).ok) break; } catch (e) {} await new Promise(r => setTimeout(r, 500)); }
@@ -70,8 +89,40 @@ test('Run workflow opens the form, and the workflow gets what was filled in', as
     await form.getByLabel('Input as JSON').fill('{"name": "Ravi", "amount": 50, "plan": "Free"}');
     await form.getByRole('button', { name: 'Run' }).click();
     await expect(form).toHaveCount(0);
+
+    // Run from here on a node: a form with a box for each field it reads, and fields can be added.
+    const runsBefore = (await page.evaluate(() => fetch('/api/flows/wf1/runs').then(r => r.json()))).runs.length;
+    await page.locator('.fv-node').filter({ hasText: 'Greeting' }).click();
+    await page.getByRole('button', { name: 'Run from here' }).click();
+    await expect(form.getByRole('heading')).toHaveText('Run from “Greeting”');
+    await expect(form.getByRole('tab', { name: 'Form' })).toHaveAttribute('aria-selected', 'true');
+    await form.getByLabel(/^name/).fill('Meera');
+    await form.getByLabel(/^plan/).fill('Team');
+    await form.getByLabel(/^amount/).fill('25');
+    await form.getByRole('button', { name: '+ Add a field' }).click();
+    await form.getByLabel('Field 4 name').fill('customer.city');
+    await form.getByLabel('Field 4 value').fill('Pune');
+    await form.screenshot({ path: 'test-results/run-from-here.png' });
+    // The JSON tab shows the same item, typed and nested, and back.
+    await form.getByRole('tab', { name: 'JSON' }).click();
+    expect(JSON.parse(await form.getByLabel('Input as JSON').inputValue())).toEqual({ name: 'Meera', plan: 'Team', amount: 25, customer: { city: 'Pune' } });
+    await form.getByRole('tab', { name: 'Form' }).click();
+    await expect(form.getByLabel('Field 4 name')).toHaveValue('customer.city');
+    await form.getByRole('button', { name: 'Run' }).click();
+    await expect(form).toHaveCount(0);
+    await expect.poll(async () => {
+      const list = (await page.evaluate(() => fetch('/api/flows/wf1/runs').then(r => r.json()))).runs || [];
+      if (list.length <= runsBefore) return null;
+      const { run } = await page.evaluate(id => fetch(`/api/runs/${id}`).then(r => r.json()), list[0].id);
+      const out = run?.nodes?.s?.output?.main?.[0];
+      return out ? [run.startId, out.message, out.customer?.city] : null;
+    }, { timeout: 20_000 }).toEqual(['s', 'Hi Meera, Team costs 50', 'Pune']);
+    // Next time, what was entered is there again.
+    await page.getByRole('button', { name: 'Run from here' }).click();
+    await expect(form.getByLabel(/^name/)).toHaveValue('Meera');
+    await expect(form.getByLabel('Field 4 value')).toHaveValue('Pune');
     expect(errors).toEqual([]);
-  } finally { try { process.kill(-vite.pid); } catch (e) {} srv.close(); app.flows.close(); }
+  } finally { try { if (process.platform === 'win32') (await import('node:child_process')).spawnSync('taskkill', ['/pid', String(vite.pid), '/T', '/F']); else process.kill(-vite.pid); } catch (e) {} srv.close(); app.flows.close(); }
 });
 
 // The ready-made "GST invoice calculator": its form's answers in, the invoice out.

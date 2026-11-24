@@ -117,7 +117,7 @@ test('export leaves out credentials and secrets; import reads it back, and n8n w
   expect(n8n.flow.nodes[2].params.text).toBe('{{ $json.body.msg }}');
   expect(n8n.skipped).toEqual(['n8n-nodes-base.somethingRare']);
   expect(n8n.flow.edges.map(e => e.fromPort)).toEqual(['main', 'true', 'false']);
-  expect(() => importFlow('{"hello": 1}')).toThrow(/isn’t a Workline or n8n/);
+  expect(() => importFlow('{"hello": 1}')).toThrow(/isn’t a workflow file Workline can read/);
 });
 
 test('web nodes: a page’s text, links, tables, selectors and fields; the browser through Browserless', async () => {

@@ -13,6 +13,7 @@ import { UI_NODES, renderPage, codeBlock } from './flow-ui.js';
 import { installRoutes } from './app-install.js';
 import { TOOL_NODES } from './flow-tools.js';
 import { ACTION_NODES } from './flow-actions.js';
+import { customTypes } from './flow-custom.js';
 
 const TYPES = { ...NODE_TYPES, ...APP_NODES, ...WORKLINE_NODES, ...TRIGGER_TYPES, ...MORE_TRIGGERS, ...EVENT_TRIGGERS, ...WEB_NODES, ...EXTRA_NODES, ...UI_NODES, ...TOOL_NODES, ...ACTION_NODES };
 import { DUMMY, checkPassword, hashPassword, limiter, newToken, tokenHash } from './auth.js';
@@ -88,6 +89,13 @@ export const PAGE_LINK = /^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$/;
 
 export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secret = '', storeOwner = '' }) {
   const m = store.meta;
+  // The node types a run of `flow` can use: ours, and the account's custom nodes (My nodes), the latest
+  // version of each; copies a workflow file carries (flow.customNodes) fill in ones the account hasn't got.
+  const typesFor = (uid, flow) => {
+    const mine = m.userdata?.[uid]?.customNodes;
+    const defs = { ...(flow?.customNodes && typeof flow.customNodes === 'object' ? flow.customNodes : {}), ...(mine && typeof mine === 'object' ? mine : {}) };
+    return Object.keys(defs).length ? { ...TYPES, ...customTypes(defs) } : TYPES;
+  };
 
   /* ---- credentials ---- */
   if (!secret && !m.flowKey) { m.flowKey = randomBytes(32).toString('base64url'); store.touch(); }
@@ -155,7 +163,7 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
       if (!flow) throw new FlowError('That workflow file wasn’t found (save it first).', 'not_found');
       const start = flow.nodes.find(n => n.type === 'trigger.workflow') || flow.nodes.find(n => n.type === 'trigger.manual') || flow.nodes.find(n => String(n.type).startsWith('trigger.'));
       if (!start) throw new FlowError('That workflow has no trigger to start from.', 'no_start');
-      const r = await runFlow(flow, { startId: start.id, input, types: TYPES, ctx: ctxFor(uid, depth + 1) });
+      const r = await runFlow(flow, { startId: start.id, input, types: typesFor(uid, flow), ctx: ctxFor(uid, depth + 1) });
       if (r.status !== 'success') throw new FlowError(`The other workflow failed: ${r.error}`, 'subflow');
       const ends = flow.nodes.filter(n => r.nodes[n.id]?.status === 'success' && !flow.edges.some(e => e.from === n.id));
       return ends.flatMap(n => (r.nodes[n.id].output?.main || []).map(json => ({ json })));
@@ -187,8 +195,16 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
 
   /* ---- runs ---- */
   const live = new Map(); // run id → {uid, run}, while it runs and for a while after
+  // A file in an item (a form's (file) field: {name, size, data}) is kept in the run's record by its name and
+  // size only: its contents would fill the history. The run itself had the whole file.
+  const lean = (v, depth = 0) => {
+    if (!v || typeof v !== 'object' || depth > 4) return v;
+    if (Array.isArray(v)) return v.map(x => lean(x, depth + 1));
+    if (typeof v.data === 'string' && v.data.length > 2000 && ('name' in v || 'size' in v)) return { ...v, data: `(file contents, ${Math.round(v.data.length * 3 / 4 / 1024)} KB, not kept in the run's record)` };
+    return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, lean(x, depth + 1)]));
+  };
   const trim = r => {
-    const out = r.output && Object.fromEntries(Object.entries(r.output).map(([p, list]) => [p, list.slice(0, SAMPLE)]));
+    const out = r.output && Object.fromEntries(Object.entries(r.output).map(([p, list]) => [p, list.slice(0, SAMPLE).map(x => lean(x))]));
     return { ...r, ...(out ? { output: out, more: Object.values(r.output).some(l => l.length > SAMPLE) } : {}) };
   };
   const save = async (uid, run) => {
@@ -219,7 +235,7 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
     Object.defineProperty(run, 'done', { value: (async () => {
       let r = null;
       try {
-        r = await runFlow(flow, { startId, input, types: TYPES, ctx, onStep: (id, res) => { run.nodes[id] = trim(res); } });
+        r = await runFlow(flow, { startId, input, types: typesFor(uid, flow), ctx, onStep: (id, res) => { run.nodes[id] = trim(res); } });
         Object.assign(run, { status: r.status, error: r.error, failed: r.failed });
       } catch (e) { Object.assign(run, { status: 'error', error: e.message }); }
       run.finished = Date.now();
@@ -493,7 +509,10 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
      is the UI nodes' blocks, drawn as HTML with no scripts and served as a sandbox. */
   // allow-scripts is only for the browser's own video controls (Safari's are scripts, and a sandbox without
   // it leaves a video that won't play); script-src 'none' still keeps every script on the page from running.
-  const PAGE_HEADERS = { 'content-security-policy': "sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox; default-src 'none'; script-src 'none'; frame-src 'self' https: http:; img-src https: http: data:; media-src https: http:; style-src 'unsafe-inline'; form-action 'self'", 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'cache-control': 'no-store' };
+  const PAGE_HEADERS = { 'content-security-policy': "sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox; default-src 'none'; script-src 'none'; frame-src 'self' https: http:; img-src https: http: data:; media-src https: http:; style-src 'unsafe-inline'; form-action 'self'", 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'cache-control': 'no-store',
+    // The app itself is cross-origin isolated (COEP, for running code in the browser): a page opts in too, so
+    // it can be shown inside the app (WorkLine Apps on a phone, the Run section) and not just on its own.
+    'cross-origin-embedder-policy': 'credentialless', 'cross-origin-resource-policy': 'same-origin' };
   const pageInput = req => {
     const body = req.method === 'POST' && req.body && typeof req.body === 'object' ? req.body : {};
     const form = Object.fromEntries(Object.entries(body).filter(([k]) => k !== '_action').map(([k, v]) => [k, String(v ?? '').slice(0, 10_000)]).slice(0, 50));
@@ -741,7 +760,15 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
       if (!uid) return res.status(404).json({ error: 'no_store', message: 'This server has no public apps (set STORE_OWNER on the server to an account’s email).' });
       const files = await store.listFiles(uid);
       const apps = files.filter(f => f && !f.archived && f.flow && f.flow.app && f.flow.app.published).map(f => appInfo(f.id, f.flow.app));
-      res.set('cache-control', 'no-store').json({ name: store.s.userById?.get?.(uid)?.name || null, apps });
+      // Pages too: active workflows with a Page trigger, at their own link (a name of their own, or the hook).
+      const pages = files.filter(f => f && !f.archived && f.flow && f.flow.active).flatMap(f => (f.flow.nodes || [])
+        .filter(n => n.type === 'trigger.page' && n.params && /^[\w-]{12,80}$/.test(String(n.params.path || '')))
+        .map(n => {
+          const p = n.params, own = p.title && p.title !== 'My page' ? String(p.title) : '';
+          return { id: `${f.id}:${n.id}`, title: (own || f.title || 'Page').slice(0, 80), description: String(p.description || '').slice(0, 200),
+            url: p.link && PAGE_LINK.test(String(p.link)) ? `/p/${p.link}` : `/api/hook/${p.path}` };
+        }));
+      res.set('cache-control', 'no-store').json({ name: store.s.userById?.get?.(uid)?.name || null, apps, pages });
     });
     api.post('/store/:fileId/run', async (req, res) => {
       const uid = storeUid();

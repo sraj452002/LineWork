@@ -138,7 +138,7 @@ export function copyFor(code){
     cancelled:'Stopped.',
     signed_out:'Your session ended. Sign in again to use AI.',
     empty:'The reply had no usable diagram. Try describing it differently.',
-    image_unsupported: aiProvider() && aiProvider().images === false ? `${aiProvider().label} doesn’t read pictures. Pick Claude at the top of the AI chat for that.` : 'That picture couldn’t be read. Try a PNG or JPEG screenshot.'
+    image_unsupported: aiProvider() && aiProvider().images === false ? `${aiProvider().label} doesn’t read pictures. Pick Claude or Kimi K3.1 Pro at the top of the AI chat for that.` : 'That picture couldn’t be read. Try a PNG or JPEG screenshot.'
   })[code] || 'That didn\u2019t work. Try rephrasing your request.';
 }
 

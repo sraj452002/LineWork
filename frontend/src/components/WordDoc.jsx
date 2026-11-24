@@ -254,7 +254,7 @@ export default function WordDoc({ file, update }) {
       @page{size:${sz};margin:${layout.margin}in}
       body{margin:0;font:12pt/1.5 "Source Serif 4",Georgia,serif;color:#111}
       h1{font-size:22pt}h2{font-size:17pt}h3{font-size:14pt}h4{font-size:12pt}
-      h1,h2,h3,h4{font-family:"Bricolage Grotesque",Arial,sans-serif;margin:14pt 0 6pt;break-after:avoid}
+      h1,h2,h3,h4{font-family:Inter,Arial,sans-serif;margin:14pt 0 6pt;break-after:avoid}
       p{margin:0 0 8pt}table{border-collapse:collapse;width:100%;margin:6pt 0}td,th{border:1px solid #999;padding:4pt 6pt;vertical-align:top}th{background:#f2f2f2}
       img{max-width:100%}img[data-align=center]{display:block;margin:auto}img[data-align=right]{display:block;margin-left:auto}
       blockquote{margin:0 0 8pt;padding-left:12pt;border-left:3pt solid #ccc;color:#444}pre{font:10pt "Courier New",monospace;background:#f5f5f5;padding:6pt;white-space:pre-wrap}

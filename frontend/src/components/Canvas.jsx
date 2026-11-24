@@ -1477,7 +1477,7 @@ export default function Canvas({ file, d, visible, updateDiagram, updateFile, hi
       }}>
       <div id="stage" ref={stageRef} style={stageStyle}>
         <svg id="svg" ref={svgRef} className={(grabbing ? 'grabbing' : '') + (tool === 'hand' || space ? ' panning' : tool !== 'select' ? ' drawing' : '')} xmlns="http://www.w3.org/2000/svg"
-          fontFamily="Bricolage Grotesque, system-ui, -apple-system, Segoe UI, sans-serif" aria-label="Diagram canvas"
+          fontFamily="Inter, system-ui, -apple-system, Segoe UI, sans-serif" aria-label="Diagram canvas"
           onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerEnd} onPointerCancel={onPointerEnd}
           onPointerLeave={() => { if (!drag.current) { setTarget(null); setHover(null); } }}>
           <g transform={`translate(${view.x} ${view.y}) scale(${view.k})`} dangerouslySetInnerHTML={{ __html: layers.under + markup + layers.over + overlay }} />

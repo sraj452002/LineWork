@@ -61,6 +61,17 @@ function StoreApp() {
     return () => { document.removeEventListener('visibilitychange', again); removeEventListener('focus', again); };
   }, []);
   const apps = store ? store.apps : [];
+  // Pages (active workflows with a Page trigger) open here too, full screen, with a way back.
+  const pages = store ? store.pages || [] : [];
+  const [page, setPage] = useState(null);
+  // An open page is a step back in history, so the phone's back button returns to the list (not out of the app).
+  useEffect(() => {
+    if (!page) return undefined;
+    history.pushState({ mPage: page.id }, '');
+    const back = () => setPage(null);
+    addEventListener('popstate', back);
+    return () => removeEventListener('popstate', back);
+  }, [page?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const open = apps.find(a => a.id === openId);
   // Runs it on the server; a long one is asked about again until it's done.
   const runner = async form => {
@@ -74,6 +85,12 @@ function StoreApp() {
     if (j.status === 'success') return { status: 'success', items: j.items || [] };
     return { status: 'error', error: j.error || j.message || 'It couldn’t run.' };
   };
+  if (page) return (
+    <div className="m-page-view">
+      <div className="m-page-bar"><button className="btn" onClick={() => (history.state?.mPage ? history.back() : setPage(null))}>← Workflows</button><b>{page.title}</b></div>
+      <iframe title={page.title} src={page.url} credentialless="" />
+    </div>
+  );
   if (open) return (
     <div className="m-shell m-run">
       <AppRunner file={{ id: open.id, flow: { nodes: [], edges: [], app: open } }} server runner={runner} backLabel="← Workflows" onBack={() => setOpenId(null)} />
@@ -84,8 +101,11 @@ function StoreApp() {
       <MobileBar onRefresh={load} busy={busy} title="Workflows" hello={(store && store.name) || greeting()} />
       {error && <p className="m-note err">{error} <button className="link" onClick={load}>Try again</button></p>}
       {!store && !error && <Skeleton />}
-      {store && (!apps.length ? <Empty text="No workflows here yet. Pull back in a little while." />
-        : <Workflows items={apps.map(a => ({ key: a.id, name: a.name, description: a.description, icon: a.icon, tone: a.tone, label: `Run ${a.name}`, onClick: () => setOpenId(a.id) }))} />)}
+      {store && (!apps.length && !pages.length ? <Empty text="No workflows here yet. Pull back in a little while." />
+        : <Workflows items={[
+          ...apps.map(a => ({ key: a.id, name: a.name, description: a.description, icon: a.icon, tone: a.tone, label: `Run ${a.name}`, onClick: () => setOpenId(a.id) })),
+          ...pages.map(pg => ({ key: pg.id, name: pg.title, description: pg.description, icon: '🌐', tone: 'sky', web: true, label: `Open ${pg.title}`, onClick: () => setPage(pg) })),
+        ]} />)}
     </div>
   );
 }
@@ -210,7 +230,7 @@ function AppsHome({ session, onSignOut }) {
   if (page) return (
     <div className="m-page-view">
       <div className="m-page-bar"><button className="btn" onClick={() => setPage(null)}>← Workflows</button><b>{page.title}</b></div>
-      <iframe title={page.title} src={page.url} />
+      <iframe title={page.title} src={page.url} credentialless="" />
     </div>
   );
   return (

@@ -2,6 +2,10 @@ import { test, expect } from '@playwright/test';
 import { NODES } from '../frontend/src/lib/flows.js';
 import { CRED_SETUP, NODE_GUIDE, NODE_SETUP } from '../frontend/src/lib/flowguide.js';
 import { CRED_TYPES } from '../frontend/src/lib/flows.js';
+import { NODE_EXAMPLE, exampleOf } from '../frontend/src/lib/nodeexamples.js';
+import { runFlow } from '../backend/flow-engine.js';
+import { NODE_TYPES } from '../backend/flow-nodes.js';
+import { EXTRA_NODES } from '../backend/flow-extra.js';
 
 // The Workflows guide explains every node the editor has, and nothing it doesn't.
 test('every node has a guide entry: what it does, an example and what it gives', () => {
@@ -13,6 +17,47 @@ test('every node has a guide entry: what it does, an example and what it gives',
     expect(g.out, k).toBeTruthy();
     for (const f of Object.keys(g.fields || {})) expect(NODES[k].fields.map(x => x.k), `${k} explains ${f}`).toContain(f);
   }
+});
+
+// Every node shows how it's set up for real: a value for each setting it shows.
+test('every node has a filled-in example: a real value for every setting it shows', () => {
+  const missing = [], wrong = [];
+  for (const [k, d] of Object.entries(NODES)) {
+    const ex = exampleOf(k, d);
+    if (ex.missing.length) missing.push(`${k}: ${ex.missing.join(', ')}`);
+    for (const { f, v } of ex.rows) if (f.kind === 'select' && !f.options.some(o => String(o[0]) === String(v))) wrong.push(`${k}.${f.k} = ${v}`);
+  }
+  expect(missing).toEqual([]);
+  expect(wrong, 'a choice the node doesn’t have').toEqual([]);
+  // Examples only name nodes and settings that exist.
+  for (const [k, ex] of Object.entries(NODE_EXAMPLE)) {
+    expect(NODES[k], k).toBeTruthy();
+    for (const f of Object.keys(ex)) if (!f.startsWith('$')) expect(NODES[k].fields.map(x => x.k), `${k} has ${f}`).toContain(f);
+  }
+});
+
+// The Flow and Data examples that show items in and out give exactly that when run.
+test('the examples that show items in and out give exactly that', async () => {
+  const TYPES = { ...NODE_TYPES, ...EXTRA_NODES, 'trigger.manual': { run: a => ({ main: a.items }) } };
+  const ran = [];
+  for (const [k, ex] of Object.entries(NODE_EXAMPLE)) {
+    if (!ex.$in || !ex.$out) continue;
+    const params = Object.fromEntries(exampleOf(k, NODES[k]).rows.map(r => [r.f.k, r.v]));
+    const ins = Array.isArray(ex.$in) ? { main: ex.$in } : ex.$in;
+    const want = Array.isArray(ex.$out) ? { main: ex.$out } : ex.$out;
+    let out;
+    if (Object.keys(ins).length === 1) {
+      const flow = { nodes: [{ id: 's', type: 'trigger.manual', name: 'Start' }, { id: 'n', type: k, name: 'Node', params }], edges: [{ from: 's', to: 'n' }] };
+      out = (await runFlow(flow, { startId: 's', input: Object.values(ins)[0].map(json => ({ json })), types: TYPES })).nodes.n.output;
+    } else {
+      // Several inputs (Merge): run the node on them directly, since a run has one start.
+      const got = await TYPES[k].run({ node: { params }, items: [], inputs: Object.fromEntries(Object.entries(ins).map(([p, l]) => [p, l.map(json => ({ json }))])), params: () => params, ctx: {} });
+      out = Object.fromEntries(Object.entries(got).map(([p, l]) => [p, l.map(x => x.json)]));
+    }
+    expect(Object.fromEntries(Object.keys(want).map(p => [p, out?.[p] ?? []])), k).toEqual(want);
+    ran.push(k);
+  }
+  expect(ran.length).toBeGreaterThan(10);
 });
 
 test('a node’s ? explains it in a popup, which opens the full guide at that node; the guide finds nodes by name', async ({ page }) => {
@@ -35,6 +80,9 @@ test('a node’s ? explains it in a popup, which opens the full guide at that no
   const pop = page.getByRole('dialog', { name: 'How Form works' });
   await expect(pop).toContainText('End the name with *');
   await expect(pop.locator('.gn-steps')).toContainText('Turn the workflow Active');
+  // …and shows it filled in.
+  await expect(pop.locator('.gn-example')).toContainText('Example setup');
+  await expect(pop.locator('.gn-ex-set')).toContainText('Name*');
   await page.keyboard.press('Escape');
   await expect(pop).toHaveCount(0);
   // From it, the full guide opens at that node.

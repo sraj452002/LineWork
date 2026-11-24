@@ -1,6 +1,6 @@
 import { createSign } from 'node:crypto';
 import { FlowError } from './flow-engine.js';
-import { api, cred, each, failIfBad, need, obj, request } from './flow-util.js';
+import { api, attachments, cred, each, failIfBad, need, obj, request } from './flow-util.js';
 
 /* Workflow nodes for other apps, each reached with a credential (an API key or token; Google with a
    service account the sheet or calendar is shared with). Every node has an `operation`; params are
@@ -9,6 +9,8 @@ import { api, cred, each, failIfBad, need, obj, request } from './flow-util.js';
 const ok = (r, service) => failIfBad(r, service);
 const q = s => encodeURIComponent(String(s));
 const op = (p, d) => p.operation || d;
+// An email's attachments (its Attachments setting), as the service wants them; nothing when there are none.
+const withFiles = (p, shape) => { const f = attachments(p.attachments); return f.length ? shape(f) : {}; };
 const strip = s => String(s || '').replace(/\/+$/, '');
 
 // Google: a service account's key → an access token for some scopes (an hour, cached).
@@ -163,13 +165,13 @@ export const APP_NODES = {
   sendgrid: { run: async args => {
     const c = await cred(args);
     return each(args, async p => {
-      ok(await api(args, 'https://api.sendgrid.com/v3/mail/send', { method: 'POST', bearer: c.apiKey, body: { personalizations: [{ to: [{ email: need(p.to, 'who it goes to') }] }], from: { email: p.from || need(c.from, 'the sender') }, subject: p.subject || '', content: [{ type: p.html ? 'text/html' : 'text/plain', value: String(p.html || p.text || ' ') }] } }), 'SendGrid');
+      ok(await api(args, 'https://api.sendgrid.com/v3/mail/send', { method: 'POST', bearer: c.apiKey, body: { personalizations: [{ to: [{ email: need(p.to, 'who it goes to') }] }], from: { email: p.from || need(c.from, 'the sender') }, subject: p.subject || '', content: [{ type: p.html ? 'text/html' : 'text/plain', value: String(p.html || p.text || ' ') }], ...withFiles(p, f => ({ attachments: f.map(a => ({ content: a.base64, filename: a.filename, type: a.contentType, disposition: 'attachment' })) })) } }), 'SendGrid');
       return { sent: true, to: p.to };
     });
   } },
   resend: { run: async args => {
     const c = await cred(args);
-    return each(args, async p => ok(await api(args, 'https://api.resend.com/emails', { method: 'POST', bearer: c.apiKey, body: { from: p.from || need(c.from, 'the sender'), to: [need(p.to, 'who it goes to')], subject: p.subject || '', ...(p.html ? { html: p.html } : { text: p.text || '' }) } }), 'Resend'));
+    return each(args, async p => ok(await api(args, 'https://api.resend.com/emails', { method: 'POST', bearer: c.apiKey, body: { from: p.from || need(c.from, 'the sender'), to: [need(p.to, 'who it goes to')], subject: p.subject || '', ...(p.html ? { html: p.html } : { text: p.text || '' }), ...withFiles(p, f => ({ attachments: f.map(a => ({ filename: a.filename, content: a.base64, content_type: a.contentType })) })) } }), 'Resend'));
   } },
   mailchimp: { run: async args => {
     const c = await cred(args), dc = String(c.apiKey || '').split('-')[1];
@@ -270,7 +272,7 @@ export const APP_NODES = {
   postmark: { run: async args => {
     const c = await cred(args);
     return each(args, async p => {
-      const b = ok(await api(args, 'https://api.postmarkapp.com/email', { method: 'POST', headers: { 'x-postmark-server-token': c.serverToken }, body: { From: p.from || need(c.from, 'the sender'), To: need(p.to, 'who it goes to'), Subject: p.subject || '', ...(p.html ? { HtmlBody: p.html } : { TextBody: p.text || '' }) } }), 'Postmark');
+      const b = ok(await api(args, 'https://api.postmarkapp.com/email', { method: 'POST', headers: { 'x-postmark-server-token': c.serverToken }, body: { From: p.from || need(c.from, 'the sender'), To: need(p.to, 'who it goes to'), Subject: p.subject || '', ...(p.html ? { HtmlBody: p.html } : { TextBody: p.text || '' }), ...withFiles(p, f => ({ Attachments: f.map(a => ({ Name: a.filename, Content: a.base64, ContentType: a.contentType })) })) } }), 'Postmark');
       return { id: b.MessageID, to: b.To, submittedAt: b.SubmittedAt };
     });
   } },
@@ -278,7 +280,7 @@ export const APP_NODES = {
     const c = await cred(args);
     const person = v => { const m = /^\s*(.*?)\s*<([^>]+)>\s*$/.exec(String(v)); return m ? { name: m[1] || undefined, email: m[2] } : { email: String(v).trim() }; };
     return each(args, async p => {
-      const b = ok(await api(args, 'https://api.brevo.com/v3/smtp/email', { method: 'POST', headers: { 'api-key': c.apiKey }, body: { sender: person(p.from || need(c.from, 'the sender')), to: String(need(p.to, 'who it goes to')).split(',').map(person), subject: p.subject || '(no subject)', ...(p.html ? { htmlContent: p.html } : { textContent: p.text || ' ' }) } }), 'Brevo');
+      const b = ok(await api(args, 'https://api.brevo.com/v3/smtp/email', { method: 'POST', headers: { 'api-key': c.apiKey }, body: { sender: person(p.from || need(c.from, 'the sender')), to: String(need(p.to, 'who it goes to')).split(',').map(person), subject: p.subject || '(no subject)', ...(p.html ? { htmlContent: p.html } : { textContent: p.text || ' ' }), ...withFiles(p, f => ({ attachment: f.map(a => ({ name: a.filename, content: a.base64 })) })) } }), 'Brevo');
       return { id: b.messageId };
     });
   } },

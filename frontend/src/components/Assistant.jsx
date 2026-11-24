@@ -157,7 +157,7 @@ function AgentEditor({ agent, onSave, onDelete, onClose }) {
   );
 }
 
-export default function Assistant({ user, compact = false, onOpenFile }) {
+export default function Assistant({ user, compact = false, onOpenFile, onShowMenu }) {
   const uid = user && (user.id || user.email);
   const [chats, setChats] = useState(() => loadChats(uid));
   const [id, setId] = useState(null);
@@ -300,7 +300,8 @@ export default function Assistant({ user, compact = false, onOpenFile }) {
       )}
       <section className="as-main" aria-label="Nemo, the AI assistant">
         <header className="as-top">
-          <button className="as-ib" aria-label={side ? 'Hide chats' : 'Show chats'} title="Chats" onClick={() => setSide(s => !s)}><Ico d={IC.clock} /></button>
+          {onShowMenu && <button className="as-ib" aria-label="Show the menu panel" title="Show the menu panel (\)" onClick={onShowMenu}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg></button>}
+          <button className="as-ib" aria-label={side ? 'Hide chats' : 'Show chats'} title={side ? 'Hide chats' : 'Show chats'} aria-pressed={side} onClick={() => setSide(s => !s)}>{compact ? <Ico d={IC.clock} /> : <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM9.5 5v14" /></svg>}</button>
           <b className="as-title">{chat ? `${agent ? `${agent.icon} ${agent.name} · ` : ''}${chat.title}` : agent ? `${agent.icon} ${agent.name}` : ''}</b>
           {(chat || agent) && <button className="as-ib" aria-label="New chat" title="New chat" onClick={() => fresh()}><Ico d={IC.plus} /></button>}
         </header>

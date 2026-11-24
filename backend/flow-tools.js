@@ -36,6 +36,20 @@ const exOf = (t, f) => {
   return `${lead} → ${typeof want === 'function' ? 'e.g. ' + show(want.example) : show(want)}`;
 };
 
+// A test case as settings, input item and output item. The value is read from the item the way its
+// expression says ({{ $json.text }} → the item's text; {{ $json }} → the item itself).
+const exampleOf = ([v, want, p], defaults, nv, out) => {
+  const set = { ...defaults, ...(p || {}) };
+  const got = typeof want === 'function' ? want.example : want;
+  if (nv) return { set, in: {}, out: { [out]: got } };
+  const path = /^\{\{\s*\$json(?:\.([\w.]+))?\s*\}\}$/.exec(String(set.value ?? ''));
+  let input;
+  if (path && !path[1] && v && typeof v === 'object' && !Array.isArray(v)) input = v;
+  else if (path && path[1]) input = path[1].split('.').reduceRight((acc, k) => ({ [k]: acc }), v);
+  else { set.value = v; input = {}; }
+  return { set, in: input, out: { ...structuredClone(input), [set.output || out]: got } };
+};
+
 function T(group, key, label, note, fn, o = {}) {
   const g = GROUP[group], type = key, out = o.out || 'result';
   const fields = [
@@ -48,6 +62,9 @@ function T(group, key, label, note, fn, o = {}) {
   TOOL_META[type] = {
     group, label, note, icon: o.icon || g.icon, tone: g.tone,
     fields: fields.map(({ d, ...f }) => f), defaults,
+    // The guide's filled-in example, from the first test case: the settings, the item that goes in, and
+    // what comes out (tests/flow-tools.spec.js checks the case, so the example is right).
+    ...(tests[0] ? { example: exampleOf(tests[0], defaults, o.nv, out) } : {}),
     guide: { what: `${note}.`, ex: o.ex || (tests[0] ? exOf(tests[0], fields) : `${label} on ${o.dv || g.dv}`), out: `Each item as it came, with the result in “${out}” (or the field you name).` },
   };
   TOOL_NODES[type] = { run: args => each(args, (p, item) => {

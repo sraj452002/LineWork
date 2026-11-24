@@ -3,6 +3,7 @@ import { CRED_TYPES } from '../lib/flows.js';
 import { nodeVideos, nodeVideoUrl } from '../lib/nodevideos.js';
 import { CRED_SETUP, NODE_GUIDE, NODE_SETUP } from '../lib/flowguide.js';
 import { LOGOS } from '../lib/flowlogos.js';
+import { exampleOf, showValue } from '../lib/nodeexamples.js';
 
 /* One workflow node explained: what it does, its settings, where its credential comes from, an
    example and what it gives. Shown in the Workflows guide and as a popup from the editor. */
@@ -55,6 +56,32 @@ function Setup({ type, d }) {
   return <><h5>Set it up</h5><ol className="gn-steps">{steps.map((t, i) => <li key={i}>{t}</li>)}</ol></>;
 }
 
+// The node set up for real: each setting with an example value, then the item going in and what comes out.
+const json = v => JSON.stringify(v, null, 2);
+function ExampleSetup({ type, d }) {
+  const ex = exampleOf(type, d);
+  if (!ex.rows.length && !ex.output) return null;
+  const ports = ex.output && !Array.isArray(ex.output) ? Object.entries(ex.output) : null;
+  return (
+    <div className="gn-example">
+      <h5>Example setup</h5>
+      {ex.rows.length > 0 && (
+        <table className="gtable gn-fields gn-ex-set"><tbody>
+          {ex.rows.map(({ f, v }) => <tr key={f.k}><td>{f.label}</td><td><code>{showValue(f, v)}</code></td></tr>)}
+        </tbody></table>
+      )}
+      {ex.input && (Array.isArray(ex.input) ? ex.input.length > 0 && Object.keys(ex.input[0]).length > 0 : true) && <>
+        <div className="gn-ex-label">Items in</div>
+        {Array.isArray(ex.input) ? <X>{json(ex.input)}</X> : Object.entries(ex.input).map(([p, l]) => <X key={p}>{`input ${p.toUpperCase()}: ${json(l)}`}</X>)}
+      </>}
+      {ex.output && <>
+        <div className="gn-ex-label">Items out</div>
+        {ports ? <X>{ports.map(([p, l]) => `${p === 'other' ? 'other' : /^\d+$/.test(p) ? `dot ${Number(p) + 1}` : p}: ${JSON.stringify(l)}`).join('\n')}</X> : <X>{json(ex.output)}</X>}
+      </>}
+    </div>
+  );
+}
+
 // The node's video (set up with an example, run, and its output), when there is one: a button, then the video.
 function NodeVideo({ type, d }) {
   const [secs, setSecs] = useState(0), [open, setOpen] = useState(false);
@@ -80,6 +107,7 @@ export function NodeCard({ type, d, lit }) {
       {g.what && <p>{g.what}</p>}
       <NodeVideo type={type} d={d} />
       <Setup type={type} d={d} />
+      <ExampleSetup type={type} d={d} />
       {(fields.length > 0 || d.credential) && <h5>Settings</h5>}
       {(fields.length > 0 || d.credential) && (
         <table className="gtable gn-fields"><tbody>

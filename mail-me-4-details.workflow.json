@@ -1,0 +1,44 @@
+{
+  "workline": "workflow",
+  "version": 1,
+  "name": "Mail me 4 details",
+  "exported": "2026-11-24T13:21:44.327Z",
+  "flow": {
+    "nodes": [
+      {
+        "id": "n_details",
+        "type": "trigger.manual",
+        "name": "Enter the details",
+        "x": 80,
+        "y": 160,
+        "params": {
+          "fields": "Name*\nEmail* (email)\nPhone (tel)\nMessage* (long)\nAttachment (file)"
+        }
+      },
+      {
+        "id": "n_mail",
+        "type": "app.email",
+        "name": "Mail them to me",
+        "x": 380,
+        "y": 160,
+        "params": {
+          "to": "sraj04307@gmail.com",
+          "subject": "New details from {{ $json.name }}",
+          "text": "You have new details:\n\nName: {{ $json.name }}\nEmail: {{ $json.email }}\nPhone: {{ $json.phone }}\n\nMessage:\n{{ $json.message }}\n\nAttachment: {{ $json.attachment ? $json.attachment.name : \"none\" }}\n",
+          "html": "",
+          "attachments": "{{ $json.attachment }}"
+        },
+        "credentialType": "smtp"
+      }
+    ],
+    "edges": [
+      {
+        "id": "e_1",
+        "from": "n_details",
+        "fromPort": "main",
+        "to": "n_mail",
+        "toPort": "main"
+      }
+    ]
+  }
+}

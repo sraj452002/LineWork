@@ -4,7 +4,7 @@ import { api, serverInfo } from '../lib/backend.js';
 import { clone, rid } from '../lib/utils.js';
 import {
   CRED_TYPES, GROUPS, ICON, NODES, shelfOf, shelves, createCredential, deleteCredential, emptyFlow, getRun, inputsOf, listCredentials,
-  listRuns, newNode, nodeDef, outputsOf, outsOf, runFields, runValues, startRun, updateCredential,
+  inputPaths, listRuns, newNode, nodeDef, outputsOf, outsOf, runFields, startRun, updateCredential,
 } from '../lib/flows.js';
 import { LOGOS } from '../lib/flowlogos.js';
 import { listFiles } from '../lib/cloud.js';
@@ -14,6 +14,9 @@ import { besides, download, exportFlow, exportRun, importFlow, templateOf } from
 import { getData, setData } from '../lib/userdata.js';
 import { confetti } from '../lib/confetti.js';
 import { NodeCard } from './NodeGuide.jsx';
+import CustomNodes from './CustomNodes.jsx';
+import RunForm from './RunForm.jsx';
+import { addMissing, loadCustomNodes, onCustomNodes } from '../lib/customnodes.js';
 import { APP_ICONS, INPUT_KINDS, SHOW, emptyApp, keyOf } from '../lib/apps.js';
 
 /* The Workflow view: an n8n-style editor for file.flow. Nodes sit on a canvas you can pan (drag the
@@ -36,15 +39,44 @@ function Mark({ d, size = 18 }) {
   return <svg className="fv-logo" width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" style={{ fill: dim(logo.color) ? 'var(--ink)' : logo.color }}><path d={logo.d} /></svg>;
 }
 const badge = d => 'fv-badge' + (d.logo && LOGOS[d.logo] ? ' logo' : '');
-const curve = (x1, y1, x2, y2) => { const dx = Math.max(40, Math.abs(x2 - x1) / 2); return `M${x1} ${y1}C${x1 + dx} ${y1} ${x2 - dx} ${y2} ${x2} ${y2}`; };
+// A string going back (to a node on the left) would cut through both nodes and their names: it loops out
+// to the right, runs below them (and their names), and comes into the input from the left.
+const LOOP = 84, BACK = 30; // how far below the lower port it runs; how far out it swings
+const backwards = (x1, x2) => x2 < x1 + BACK;
+const LANE = 16; // strings going back along the same stretch run this far apart
+const loopY = (y1, y2, lane = 0) => Math.max(y1, y2) + LOOP + lane * LANE;
+const curve = (x1, y1, x2, y2, lane = 0) => {
+  if (backwards(x1, x2)) {
+    const low = loopY(y1, y2, lane), r = 36;
+    return `M${x1} ${y1}C${x1 + r} ${y1} ${x1 + r} ${low} ${x1} ${low}L${x2} ${low}C${x2 - r} ${low} ${x2 - r} ${y2} ${x2} ${y2}`;
+  }
+  const dx = Math.max(40, Math.abs(x2 - x1) / 2);
+  return `M${x1} ${y1}C${x1 + dx} ${y1} ${x2 - dx} ${y2} ${x2} ${y2}`;
+};
 // A string bent by hand: it passes through its middle moved by bend {x, y}, smoothly (level there).
-const bendAt = (x1, y1, x2, y2, bend) => ({ x: (x1 + x2) / 2 + (bend?.x || 0), y: (y1 + y2) / 2 + (bend?.y || 0) });
-const bentCurve = (x1, y1, x2, y2, bend) => {
-  if (!bend || (!bend.x && !bend.y)) return curve(x1, y1, x2, y2);
+// A string going back, not bent, has its middle on its low run.
+const bendAt = (x1, y1, x2, y2, bend, lane = 0) => (!bend?.x && !bend?.y && backwards(x1, x2)
+  ? { x: (x1 + x2) / 2, y: loopY(y1, y2, lane) }
+  : { x: (x1 + x2) / 2 + (bend?.x || 0), y: (y1 + y2) / 2 + (bend?.y || 0) });
+const bentCurve = (x1, y1, x2, y2, bend, lane = 0) => {
+  if (!bend || (!bend.x && !bend.y)) return curve(x1, y1, x2, y2, lane);
   const m = bendAt(x1, y1, x2, y2, bend);
   const a = Math.max(30, Math.abs(m.x - x1) / 2), b = Math.max(30, Math.abs(x2 - m.x) / 2), h = Math.max(24, Math.abs(x2 - x1) / 5);
   return `M${x1} ${y1}C${x1 + a} ${y1} ${m.x - h} ${m.y} ${m.x} ${m.y}C${m.x + h} ${m.y} ${x2 - b} ${y2} ${x2} ${y2}`;
 };
+// Lanes for the strings going back: ones whose low runs would lie on each other (about the same height,
+// overlapping across) get different lanes. geo: [{id, x1, y1, x2, y2, bent}] → Map id → lane.
+function backLanes(geo) {
+  const runs = geo.filter(g => !g.bent && backwards(g.x1, g.x2)).map(g => ({ id: g.id, a: g.x2 - 40, b: g.x1 + 40, y: loopY(g.y1, g.y2) }))
+    .sort((p, q) => (q.b - q.a) - (p.b - p.a));
+  const out = new Map(), placed = [];
+  for (const r of runs) {
+    let lane = 0;
+    while (placed.some(o => o.lane === lane && Math.abs(o.y - r.y) < LANE && o.a < r.b && r.a < o.b)) lane++;
+    placed.push({ ...r, lane }); out.set(r.id, lane);
+  }
+  return out;
+}
 const typing = e => /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.target.isContentEditable;
 const ago = t => { const s = Math.round((Date.now() - t) / 1000); return s < 60 ? `${s}s ago` : s < 3600 ? `${Math.round(s / 60)} min ago` : s < 86400 ? `${Math.round(s / 3600)} h ago` : new Date(t).toLocaleDateString(); };
 
@@ -74,6 +106,11 @@ export default function FlowView({ file, update, visible, saveState = 'Saved', o
   const [tab, setTab] = useState('settings');
   const [credDlg, setCredDlg] = useState(null); // {types, pick?: id => void}
   const [help, setHelp] = useState(null);       // a node type explained in a popup
+  const lanesRef = useRef(new Map()); // strings going back: their lanes (backLanes), worked out as they're drawn
+  const [customDlg, setCustomDlg] = useState(null); // My nodes: {id} of the node to open, or {}
+  // The account's custom nodes are nodes like any other: loaded once, and the editor redraws when they change.
+  const [, setCustomVersion] = useState(0);
+  useEffect(() => { loadCustomNodes(); return onCustomNodes(() => setCustomVersion(v => v + 1)); }, []);
   const [runAsk, setRunAsk] = useState(null);   // the input form before a run: {startId, mode: 'form' | 'json'}
   const [publish, setPublish] = useState(false);
   const [webPub, setWebPub] = useState(false);
@@ -93,6 +130,14 @@ export default function FlowView({ file, update, visible, saveState = 'Saved', o
   const [sideOpen, setSideOpenS] = useState(() => pref('side', true));
   const setLibOpen = v => { setLibOpenS(v); try { localStorage.setItem('linework:flow-lib', v ? '1' : '0'); } catch (e) {} };
   const setSideOpen = v => { setSideOpenS(v); try { localStorage.setItem('linework:flow-side', v ? '1' : '0'); } catch (e) {} };
+  // Opened to fix a step (Home › Run's “Fix in editor”): that step, selected, with its settings open.
+  useEffect(() => {
+    let want;
+    try { want = JSON.parse(sessionStorage.getItem('linework:focus-node') || 'null'); } catch (e) { want = null; }
+    if (!want || want.fileId !== file.id) return;
+    sessionStorage.removeItem('linework:focus-node');
+    if ((file.flow?.nodes || []).some(n => n.id === want.nodeId)) { setSel({ kind: 'node', id: want.nodeId }); setTab('settings'); setSideOpen(true); }
+  }, [file.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const nodes = flow.nodes || [], edges = flow.edges || [];
   const pos = n => (drag && drag.id === n.id ? drag : n);
@@ -188,8 +233,10 @@ export default function FlowView({ file, update, visible, saveState = 'Saved', o
   const fit = () => {
     if (!nodes.length || !stage.current) return;
     const r = stage.current.getBoundingClientRect();
-    const minX = Math.min(...nodes.map(n => n.x)), minY = Math.min(...nodes.map(n => n.y));
-    const maxX = Math.max(...nodes.map(n => n.x + W)), maxY = Math.max(...nodes.map(n => n.y + H));
+    // The names under the nodes count too: 170 px wide, centred, about 40 px tall.
+    const LW = (170 - W) / 2, LH = 44;
+    const minX = Math.min(...nodes.map(n => n.x)) - LW, minY = Math.min(...nodes.map(n => n.y));
+    const maxX = Math.max(...nodes.map(n => n.x + W)) + LW, maxY = Math.max(...nodes.map(n => n.y + heightOf(n))) + LH;
     const k = Math.min(1, Math.max(.3, Math.min((r.width - 80) / (maxX - minX || 1), (r.height - 80) / (maxY - minY || 1))));
     setView({ k, x: (r.width - (maxX - minX) * k) / 2 - minX * k, y: (r.height - (maxY - minY) * k) / 2 - minY * k });
   };
@@ -197,10 +244,12 @@ export default function FlowView({ file, update, visible, saveState = 'Saved', o
 
   /* ---- running ---- */
   const firstOf = startId => startId || nodes.find(n => n.type === 'trigger.manual')?.id || nodes.find(n => nodeDef(n.type).trigger)?.id;
-  // Run workflow: a Run by hand trigger with fields asks for them first; anything else runs at once.
+  // Run workflow: a Run by hand trigger with fields asks for them first, and so does Run from here on a
+  // node that reads the item's fields ({{ $json.x }}); anything else runs at once.
   const askRun = startId => {
     const first = firstOf(startId), n = nodes.find(x => x.id === first);
     if (n && n.type === 'trigger.manual' && runFields(n.params?.fields).length) setRunAsk({ startId: first, mode: 'form' });
+    else if (startId && n && !nodeDef(n.type).trigger && inputPaths(flow, first).length) setRunAsk({ startId: first, mode: 'form' });
     else go(startId);
   };
   // input: the items to start with (from the run form), else the trigger's own empty item.
@@ -267,8 +316,14 @@ export default function FlowView({ file, update, visible, saveState = 'Saved', o
       setSel(null);
       fitSoon.current = true;
       const creds = placed.nodes.filter(n => nodeDef(n.type).credential && !nodeDef(n.type).optionalCredential).length;
-      toast(got.skipped.length ? `Imported. ${got.skipped.length} kind${got.skipped.length === 1 ? '' : 's'} of n8n node became placeholders: ${got.skipped.slice(0, 3).map(t => t.split('.').pop()).join(', ')}${got.skipped.length > 3 ? '…' : ''}`
-        : creds ? `Imported. Pick credentials for ${creds} node${creds === 1 ? '' : 's'}.` : 'Imported');
+      const addedNodes = addMissing(got.customNodes);
+      const from = got.app && got.app !== 'Workline' ? ` from ${got.app}` : '';
+      toast([
+        got.skipped.length ? `Imported${from}. ${got.skipped.length} kind${got.skipped.length === 1 ? '' : 's'} of step became placeholders (click one to see what it was): ${got.skipped.slice(0, 3).map(t => String(t).split('.').pop()).join(', ')}${got.skipped.length > 3 ? '…' : ''}`
+          : creds ? `Imported${from}. Pick credentials for ${creds} node${creds === 1 ? '' : 's'}.` : `Imported${from}.`,
+        got.more || '',
+        addedNodes ? `${addedNodes} custom node${addedNodes === 1 ? '' : 's'} added to My nodes.` : '',
+      ].filter(Boolean).join(' '));
     } catch (e) { toast(e.message || 'Couldn’t read that file.'); }
   };
   const fitSoon = useRef(false);
@@ -410,7 +465,7 @@ ${more}`;
       {server === false && <p className="fv-note">Workflows run on the Workline server, so running, webhooks and schedules need you signed in to it. You can still build one here.</p>}
 
       <div className="fv-body">
-        <Library open={libOpen} onToggle={() => setLibOpen(!libOpen)}
+        <Library open={libOpen} onToggle={() => setLibOpen(!libOpen)} onCustom={() => setCustomDlg({})}
           onPick={type => addNode(type, center(), selected && outputsOf(selected.type).length && inputsOf(type).length ? { id: selected.id, port: outputsOf(selected.type)[0] } : null)} />
         <div className={'fv-stage' + (pan ? ' panning' : '')} ref={stage} onWheel={onWheel}
           onDragOver={e => { if (e.dataTransfer.types.includes('application/x-workline-node')) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } }}
@@ -420,6 +475,17 @@ ${more}`;
           <div className="fv-bg" />
           <div className="fv-layer" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.k})` }}>
             <svg className="fv-edges" width="1" height="1">
+              {(() => {
+                const geo = edges.map(e => {
+                  const a = byId.get(e.from), b = byId.get(e.to);
+                  if (!a || !b) return null;
+                  const pa = pos(a), pb = pos(b), outs = outsOf(a), ins = inputsOf(b.type);
+                  const bend = bending && bending.id === e.id ? bending : e.bend;
+                  return { id: e.id, x1: pa.x + W, y1: pa.y + portY(outs, Math.max(0, outs.indexOf(e.fromPort)), heightOf(a)), x2: pb.x, y2: pb.y + portY(ins, Math.max(0, ins.indexOf(e.toPort)), heightOf(b)), bent: !!(bend && (bend.x || bend.y)) };
+                }).filter(Boolean);
+                lanesRef.current = backLanes(geo);
+                return null;
+              })()}
               {edges.map(e => {
                 const a = byId.get(e.from), b = byId.get(e.to);
                 if (!a || !b) return null;
@@ -427,7 +493,8 @@ ${more}`;
                 const outs = outsOf(a), ins = inputsOf(b.type);
                 const x1 = pa.x + W, y1 = pa.y + portY(outs, Math.max(0, outs.indexOf(e.fromPort)), heightOf(a)), x2 = pb.x, y2 = pb.y + portY(ins, Math.max(0, ins.indexOf(e.toPort)), heightOf(b));
                 const bend = bending && bending.id === e.id ? bending : e.bend;
-                const d = bentCurve(x1, y1, x2, y2, bend), mid = bendAt(x1, y1, x2, y2, bend);
+                const lane = lanesRef.current.get(e.id) || 0;
+                const d = bentCurve(x1, y1, x2, y2, bend, lane), mid = bendAt(x1, y1, x2, y2, bend, lane);
                 const on = sel && sel.kind === 'edge' && sel.id === e.id;
                 const lit = status(e.from)?.status === 'success' && (status(e.from).output?.[e.fromPort]?.length ?? 1) > 0 && status(e.to)?.status === 'success';
                 // Data on its way: the node it feeds is the one running now, so beads run along the string.
@@ -500,7 +567,7 @@ ${more}`;
         {sideOpen && <aside className="fv-panel">
           {selected ? (
             <NodePanel key={selected.id} node={selected} flow={flow} change={change} creds={creds} tab={tab} setTab={setTab} result={status(selected.id)} active={!!flow.active}
-              onHelp={setHelp} onCred={(types, pick) => setCredDlg({ types, pick })} onRun={() => askRun(selected.id)} onDelete={() => remove({ kind: 'node', id: selected.id })} canRun={!!server && !busy}
+              onHelp={setHelp} onEditCustom={id => setCustomDlg({ id })} onCred={(types, pick) => setCredDlg({ types, pick })} onRun={() => askRun(selected.id)} onDelete={() => remove({ kind: 'node', id: selected.id })} canRun={!!server && !busy}
               onPreview={server ? () => previewPage(selected.id) : null} />
           ) : (
             <div className="fv-over">
@@ -538,10 +605,11 @@ ${more}`;
           </div>
         </div>
       )}
-      {runAsk && <RunForm fileId={file.id} node={nodes.find(n => n.id === runAsk.startId)} onClose={() => setRunAsk(null)}
+      {runAsk && <RunForm fileId={file.id} flow={flow} node={nodes.find(n => n.id === runAsk.startId)} onClose={() => setRunAsk(null)}
         onRun={input => { const at = runAsk.startId; setRunAsk(null); go(at, input); }} />}
       {publish && <PublishDialog file={file} flow={flow} change={change} onClose={() => setPublish(false)} />}
       {webPub && pageNode && <WebPublishDialog fileId={file.id} flow={flow} node={pageNode} server={server} change={change} onForm={() => { setWebPub(false); setPublish(true); }} onClose={() => setWebPub(false)} />}
+      {customDlg && <CustomNodes startId={customDlg.id} onClose={() => setCustomDlg(null)} toast={toast} ask={ask} />}
       {credDlg && <Credentials types={credDlg.types} creds={creds} onChanged={loadCreds} onPick={credDlg.pick} onClose={() => setCredDlg(null)} ask={ask} toast={toast} />}
     </div>
   );
@@ -554,7 +622,7 @@ const matches = needle => ([k, d]) => !needle || `${d.label} ${d.note} ${d.group
 // In an app's own group, “GitHub: Comment on an issue” reads as “Comment on an issue”.
 // The app's trigger and its main node (both named after the app) say which is which.
 const shortLabel = (d, group) => (d.label.startsWith(`${group}: `) ? d.label.slice(group.length + 2) : d.trigger ? 'New event (trigger)' : d.label === group && d.fields?.some(f => f.k === 'operation') ? `${group} (pick an action)` : d.label);
-function Library({ open, onToggle, onPick }) {
+function Library({ open, onToggle, onPick, onCustom }) {
   const [q, setQ] = useState('');
   // Start, Build and Advanced start open; the tools, the apps and the data sources folded.
   const [shut, setShut] = useState(() => Object.fromEntries(shelves(Object.entries(NODES)).flatMap(s => s.groups.map(g => [`${s.section}/${g.name}`, !OPEN_SECTIONS.has(s.section)]))));
@@ -565,6 +633,7 @@ function Library({ open, onToggle, onPick }) {
     <aside className="fv-lib" aria-label="Nodes">
       <div className="fv-lib-head">
         <b>Nodes</b><small>{Object.keys(NODES).length}</small>
+        <button className="btn fv-lib-mine" onClick={onCustom} title="Make your own nodes, with their own settings and code">My nodes</button>
         <button className="btn icon-only" aria-label="Hide the nodes" title="Hide" onClick={onToggle}><Ico d="M15 6l-6 6 6 6" size={16} /></button>
       </div>
       <label className="fv-lib-search"><Ico d="M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4" size={14} /><input className="fv-lib-q" type="search" placeholder="Search nodes or apps" value={q} onChange={e => setQ(e.target.value)} /></label>
@@ -625,7 +694,7 @@ function Palette({ at, view, onPick, onClose }) {
 const BEADS = [{ r: 4.4, o: 1, at: 0 }, { r: 3.2, o: .55, at: .09 }, { r: 2.2, o: .3, at: .17 }];
 
 // Settings for one node, and what it produced in the last run.
-function NodePanel({ node, flow, change, creds, tab, setTab, result, active, onCred, onRun, onDelete, canRun, onHelp, onPreview }) {
+function NodePanel({ node, flow, change, creds, tab, setTab, result, active, onCred, onRun, onDelete, canRun, onHelp, onPreview, onEditCustom }) {
   const d = nodeDef(node.type);
   const set = (k, v) => change(f => {
     const n = f.nodes.find(x => x.id === node.id), before = { ...(n.params || {}) };
@@ -653,6 +722,21 @@ function NodePanel({ node, flow, change, creds, tab, setTab, result, active, onC
       </div>
       {tab === 'settings' ? (
         <div className="fv-fields">
+          {d.custom && (
+            <div className="fv-custom"><span>A node you made{d.language ? ` (${d.language === 'python' ? 'Python' : 'JavaScript'})` : ''}.</span>
+              <button type="button" className="btn" onClick={() => onEditCustom(d.custom)}>Edit node</button></div>
+          )}
+          {String(node.type).startsWith('custom.') && !d.custom && (
+            <div className="fv-origin todo"><p>This custom node isn’t in My nodes (it was deleted, or came from someone else), so it won’t run. Make it again in My nodes, or import a workflow file that carries it.</p></div>
+          )}
+          {node.note && (
+            // Where an imported node came from: for a placeholder, the original step and its settings to redo here.
+            <div className={'fv-origin' + (node.type === 'core.noop' || /doesn’t have|no node for/.test(node.note) ? ' todo' : '')}>
+              <p>{node.note.length > 260 ? node.note.slice(0, 260) + '…' : node.note}</p>
+              {node.note.length > 260 && <details><summary>All of it</summary><pre>{node.note}</pre></details>}
+              <button type="button" className="fv-origin-x" onClick={() => change(f => { delete f.nodes.find(x => x.id === node.id).note; })}>Dismiss</button>
+            </div>
+          )}
           {d.credential && (
             <label className="fv-f"><span>Credential{d.optionalCredential ? ' (optional)' : ''}</span>
               <div className="fv-row">
@@ -956,62 +1040,3 @@ function Credentials({ types, creds, onChanged, onPick, onClose, ask, toast }) {
   );
 }
 
-/* The form before a run: the fields a Run by hand trigger asks for, or (for any trigger, or "Run with
-   input…") the first item as JSON. What was entered last time is filled in again (kept in this browser). */
-function RunForm({ fileId, node, onRun, onClose }) {
-  const fields = node && node.type === 'trigger.manual' ? runFields(node.params?.fields) : [];
-  const store = `linework:run-input:${fileId}:${node ? node.id : ''}`;
-  const saved = (() => { try { return JSON.parse(localStorage.getItem(store) || 'null') || {}; } catch (e) { return {}; } })();
-  const [mode, setMode] = useState(fields.length ? 'form' : 'json');
-  const [vals, setVals] = useState(() => Object.fromEntries(fields.map(f => [f.key, saved.vals?.[f.key] ?? (f.kind === 'yesno' ? false : f.kind === 'choice' ? f.options[0] || '' : '')])));
-  const [json, setJson] = useState(saved.json || '{\n  \n}');
-  const [err, setErr] = useState('');
-  const set = (k, v) => { setVals(x => ({ ...x, [k]: v })); setErr(''); };
-  const submit = e => {
-    e.preventDefault();
-    let input;
-    if (mode === 'form') {
-      const missing = fields.filter(f => f.required && f.kind !== 'yesno' && !String(vals[f.key] ?? '').trim());
-      if (missing.length) { setErr(`Fill in ${missing.map(f => f.name).join(', ')}.`); return; }
-      input = [runValues(fields, vals)];
-    } else {
-      try { const v = JSON.parse(json || '{}'); input = Array.isArray(v) ? v : [v]; } catch (x) { setErr('That isn’t valid JSON. Example: {"name": "Asha", "amount": 1200}'); return; }
-      if (input.some(x => !x || typeof x !== 'object' || Array.isArray(x))) { setErr('Give an object, or a list of objects (one item each).'); return; }
-    }
-    try { localStorage.setItem(store, JSON.stringify({ vals, json })); } catch (x) { /* only a convenience */ }
-    onRun(input);
-  };
-  const box = f => {
-    const common = { id: `rf-${f.key}`, value: vals[f.key] ?? '', onChange: e => set(f.key, e.target.value), required: f.required };
-    if (f.kind === 'long') return <textarea {...common} rows={3} />;
-    if (f.kind === 'choice') return <select {...common}>{f.options.map(o => <option key={o} value={o}>{o}</option>)}</select>;
-    if (f.kind === 'yesno') return <label className="fv-rf-check"><input type="checkbox" id={`rf-${f.key}`} checked={!!vals[f.key]} onChange={e => set(f.key, e.target.checked)} /> Yes</label>;
-    return <input {...common} type={f.kind === 'text' ? 'text' : f.kind} inputMode={f.kind === 'number' ? 'decimal' : undefined} step={f.kind === 'number' ? 'any' : undefined} />;
-  };
-  return (
-    <div className="modal" onPointerDown={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <form className="mbox fv-runform" role="dialog" aria-modal="true" aria-label="Run with input" noValidate onSubmit={submit} onKeyDown={e => { if (e.key === 'Escape') onClose(); }}>
-        <h3>Run {node ? `from “${node.name}”` : 'the workflow'}</h3>
-        <p>{mode === 'form' ? 'What you fill in is the first item the workflow gets.' : 'The first item, as JSON: an object, or a list of objects for one item each.'}</p>
-        {fields.length > 0 && (
-          <div className="seg fv-rf-tabs" role="tablist">
-            <button type="button" role="tab" aria-selected={mode === 'form'} onClick={() => { setMode('form'); setErr(''); }}>Form</button>
-            <button type="button" role="tab" aria-selected={mode === 'json'} onClick={() => { setMode('json'); setErr(''); setJson(JSON.stringify(runValues(fields, vals), null, 2)); }}>JSON</button>
-          </div>
-        )}
-        {mode === 'form'
-          ? fields.map((f, i) => (
-            <div className="fv-rf-field" key={f.key + i}>
-              <label htmlFor={`rf-${f.key}`}>{f.name}{f.required && <b aria-hidden="true"> *</b>}<code>{`{{ $json.${f.key} }}`}</code></label>
-              {box(f)}
-            </div>))
-          : <textarea className="fv-rf-json" aria-label="Input as JSON" spellCheck={false} rows={8} value={json} onChange={e => setJson(e.target.value)} />}
-        {err && <p className="fv-rf-err" role="alert">{err}</p>}
-        <footer className="fv-rf-foot">
-          <button type="button" className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn primary" autoFocus={!fields.length}><Ico d={ICON.play} size={13} />Run</button>
-        </footer>
-      </form>
-    </div>
-  );
-}

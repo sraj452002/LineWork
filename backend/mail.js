@@ -7,11 +7,11 @@ export function createMailer({ resendKey = '', smtpUrl = '', from = '' } = {}) {
   if (resendKey) {
     return {
       configured: true,
-      async send({ to, subject, text, html }) {
+      async send({ to, subject, text, html, attachments = [] }) {
         const r = await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: { authorization: `Bearer ${resendKey}`, 'content-type': 'application/json' },
-          body: JSON.stringify({ from: from || 'Workline <onboarding@resend.dev>', to: [to], subject, text, html }),
+          body: JSON.stringify({ from: from || 'Workline <onboarding@resend.dev>', to: [to], subject, text, html, ...(attachments.length ? { attachments: attachments.map(a => ({ filename: a.filename, content: Buffer.from(a.content).toString('base64') })) } : {}) }),
         });
         if (!r.ok) throw new Error(`Resend ${r.status}: ${await r.text().catch(() => '')}`);
       },
@@ -21,9 +21,9 @@ export function createMailer({ resendKey = '', smtpUrl = '', from = '' } = {}) {
     let transport;
     return {
       configured: true,
-      async send({ to, subject, text, html }) {
+      async send({ to, subject, text, html, attachments }) {
         if (!transport) transport = (await import('nodemailer')).default.createTransport(smtpUrl);
-        await transport.sendMail({ from: from || 'Workline <no-reply@localhost>', to, subject, text, html });
+        await transport.sendMail({ from: from || 'Workline <no-reply@localhost>', to, subject, text, html, ...(attachments?.length ? { attachments } : {}) });
       },
     };
   }

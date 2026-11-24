@@ -41,11 +41,12 @@ test('NVIDIA models (DeepSeek V4.1 Flash, Nemotron): the API streams its answer 
     await page.getByLabel('Email').fill('nv@example.com');
     await page.getByLabel('Password').fill('a long password');
     await page.getByRole('button', { name: 'Create account' }).click();
+    await expect(page.getByRole('button', { name: 'Create a Blank File' })).toBeVisible({ timeout: 20_000 }); // signed in
 
     // The API: both models offered; an NVIDIA request becomes a chat completion with thinking on.
     const status = await page.evaluate(() => fetch('/api/ai/status').then(r => r.json()));
     expect(status.default).toBe('nvidia:deepseek-ai/deepseek-v4.1-flash'); // the fast one, unless someone picks another
-    expect(status.providers.map(p => [p.id, p.label])).toEqual([['claude', 'Claude'], ['nvidia:deepseek-ai/deepseek-v4.1-flash', 'DeepSeek V4.1 Flash'], ['nvidia', 'NVIDIA Nemotron']]);
+    expect(status.providers.map(p => [p.id, p.label])).toEqual([['claude', 'Claude'], ['nvidia:deepseek-ai/deepseek-v4.1-flash', 'DeepSeek V4.1 Flash'], ['nvidia', 'NVIDIA Nemotron'], ['nvidia:moonshotai/kimi-k3.1-pro', 'Kimi K3.1 Pro']]);
     // DeepSeek V4.1 Flash: the same API, with NVIDIA's suggested settings for it.
     const fast = await page.evaluate(() => fetch('/api/ai', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ prompt: 'Which is larger, 9.11 or 9.8?', provider: 'nvidia:deepseek-ai/deepseek-v4.1-flash' }) }).then(r => r.text()));
     expect(fast).toContain('"type":"text_delta","text":"# Rate limiter');
@@ -58,6 +59,11 @@ test('NVIDIA models (DeepSeek V4.1 Flash, Nemotron): the API streams its answer 
     // Pictures are Claude's job.
     const pic = await page.evaluate(() => fetch('/api/ai', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ prompt: 'Read', provider: 'nvidia', images: [{ media_type: 'image/png', data: 'AAAA' }] }) }).then(r => r.status));
     expect(pic).toBe(400);
+    // …and Kimi K3.1 Pro's, which reads them: the picture goes as an image_url part, with Kimi's settings.
+    const kimi = await page.evaluate(() => fetch('/api/ai', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ prompt: 'What is in this image?', provider: 'nvidia:moonshotai/kimi-k3.1-pro', images: [{ media_type: 'image/png', data: 'AAAA' }] }) }).then(r => r.status));
+    expect(kimi).toBe(200);
+    expect(calls.at(-1).body).toMatchObject({ model: 'moonshotai/kimi-k3.1-pro', max_tokens: 16384, seed: 0, reasoning_effort: 'low', stream: true,
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'What is in this image?' }, { type: 'image_url', image_url: { url: 'data:image/png;base64,AAAA' } }] }] });
 
     // The chat: pick NVIDIA, ask for a doc, watch it think, get the doc.
     await page.getByRole('button', { name: 'Create a Blank File' }).click();
@@ -77,7 +83,7 @@ test('NVIDIA models (DeepSeek V4.1 Flash, Nemotron): the API streams its answer 
     await expect(page.getByRole('complementary', { name: 'AI chat' }).getByLabel('AI model')).toHaveValue('nvidia');
     await ctx.close();
   } finally {
-    try { process.kill(-vite.pid); } catch (e) {}
+    try { if (process.platform === 'win32') (await import('node:child_process')).spawnSync('taskkill', ['/pid', String(vite.pid), '/T', '/F']); else process.kill(-vite.pid); } catch (e) {}
     srv.close(); nv.close();
   }
 });

@@ -7,6 +7,7 @@ import { DbError, handle as dbHandle } from './dbconnect.js';
 import { createFlows } from './flows.js';
 import { electronRoute } from './app-install.js';
 import { createAgent, fetchRetry } from './agent.js';
+import { nvidiaContent, nvidiaParams, nvidiaSeesImages } from './nvidia.js';
 
 /* The Workline API: accounts, files with version history, folders, share links, live databases and the
    AI proxy with a daily allowance, all under /api. The frontend (../frontend) is hosted on its own and
@@ -17,8 +18,8 @@ const MAX_FILE = 4_000_000;
 const ID = /^[\w-]{1,80}$/;
 
 // NVIDIA's models offered by default (NVIDIA_MODEL overrides, comma-separated), and their names in the app.
-export const NVIDIA_MODELS = 'deepseek-ai/deepseek-v4.1-flash,nvidia/nemotron-3.5-lightning-30b-a3b';
-const NVIDIA_NAMES = { 'deepseek-ai/deepseek-v4.1-flash': 'DeepSeek V4.1 Flash', 'z-ai/glm-5.3-flash': 'GLM 5.3 Flash', 'nvidia/nemotron-3.5-lightning-30b-a3b': 'NVIDIA Nemotron' };
+export const NVIDIA_MODELS = 'deepseek-ai/deepseek-v4.1-flash,nvidia/nemotron-3.5-lightning-30b-a3b,moonshotai/kimi-k3.1-pro';
+const NVIDIA_NAMES = { 'deepseek-ai/deepseek-v4.1-flash': 'DeepSeek V4.1 Flash', 'z-ai/glm-5.3-flash': 'GLM 5.3 Flash', 'nvidia/nemotron-3.5-lightning-30b-a3b': 'NVIDIA Nemotron', 'moonshotai/kimi-k3.1-pro': 'Kimi K3.1 Pro' };
 export const nvidiaLabel = m => NVIDIA_NAMES[m] || (/nemotron/i.test(m) ? 'NVIDIA Nemotron' : m.split('/').pop().replace(/[-_]+/g, ' ').replace(/\b([a-z])/g, c => c.toUpperCase()).replace(/\bGlm\b/, 'GLM'));
 
 // The one user of a server without accounts.
@@ -230,7 +231,7 @@ export function createApp(store, opts = {}) {
   const nvidiaModels = String(nvidiaModel || '').split(',').map(m => m.trim()).filter(Boolean);
   const providers = [
     ...(aiKey ? [{ id: 'claude', label: 'Claude', model: aiModel, images: true }] : []),
-    ...(nvidiaKey ? nvidiaModels.map(model => ({ id: /nemotron/i.test(model) ? 'nvidia' : `nvidia:${model}`, label: nvidiaLabel(model), model, images: false, thinking: true, nvidia: true })) : []),
+    ...(nvidiaKey ? nvidiaModels.map(model => ({ id: /nemotron/i.test(model) ? 'nvidia' : `nvidia:${model}`, label: nvidiaLabel(model), model, images: nvidiaSeesImages(model), thinking: true, nvidia: true })) : []),
   ];
   // The default: DeepSeek V4.1 Flash when NVIDIA is set up (advanced, and it answers fast), else GLM 5.3
   // Flash if it's still listed, else the first one.
@@ -265,7 +266,7 @@ export function createApp(store, opts = {}) {
     if (images.length > 4) return res.status(413).json({ error: 'too_many_images' });
     if (images.some(im => !TYPES.includes(im?.media_type) || typeof im?.data !== 'string')) return res.status(400).json({ error: 'bad_image' });
     if (images.some(im => im.data.length > 6_000_000)) return res.status(413).json({ error: 'too_large' });
-    if (images.length && !provider.images) return res.status(400).json({ error: 'bad_image', message: `${provider.label} doesn't read pictures. Pick Claude for that.` });
+    if (images.length && !provider.images) return res.status(400).json({ error: 'bad_image', message: `${provider.label} doesn't read pictures. Pick Claude or Kimi for that.` });
     if (!store.useAi(req.user.id, aiDailyLimit)) return res.status(429).json({ error: 'daily_limit', limit: aiDailyLimit });
 
     const content = images.length
@@ -273,7 +274,7 @@ export function createApp(store, opts = {}) {
       : prompt;
     const ctl = new AbortController();
     res.on('close', () => ctl.abort());
-    if (provider.nvidia) return nvidiaStream(provider.model, prompt, res, ctl);
+    if (provider.nvidia) return nvidiaStream(provider.model, prompt, res, ctl, images);
     let up;
     try {
       up = await fetchRetry(`${aiBase}/v1/messages`, {
@@ -295,18 +296,16 @@ export function createApp(store, opts = {}) {
   // NVIDIA (OpenAI-style chat completions, streamed). Its chunks carry the answer in delta.content and
   // the model's reasoning in delta.reasoning_content; they're passed on as Anthropic-style text_delta and
   // thinking_delta events.
-  async function nvidiaStream(model, prompt, res, ctl) {
+  async function nvidiaStream(model, prompt, res, ctl, images = []) {
     let up;
     try {
       up = await fetchRetry(`${nvidiaBase.replace(/\/+$/, '')}/chat/completions`, {
         method: 'POST', signal: ctl.signal,
         headers: { authorization: `Bearer ${nvidiaKey}`, 'content-type': 'application/json', accept: 'text/event-stream' },
         body: JSON.stringify({
-          model, messages: [{ role: 'user', content: prompt }], stream: true,
-          // Nemotron thinks first, with its own settings; the others (DeepSeek…) take NVIDIA's suggested ones.
-          ...(/nemotron/i.test(model)
-            ? { temperature: 1, top_p: 0.95, max_tokens: 16384, reasoning_budget: 16384, chat_template_kwargs: { enable_thinking: true } }
-            : { temperature: 0.5, top_p: 1, max_tokens: 8192 }),
+          model, messages: [{ role: 'user', content: nvidiaContent(prompt, images) }], stream: true,
+          // Nemotron and Kimi think first, with their own settings; the others (DeepSeek…) take NVIDIA's suggested ones.
+          ...nvidiaParams(model),
         }),
       });
     } catch (e) {

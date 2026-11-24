@@ -54,3 +54,33 @@ export function obj(v, what) {
   if (v === undefined || v === null || String(v).trim() === '') return {};
   try { return JSON.parse(String(v)); } catch (e) { throw new FlowError(`${what} must be JSON, e.g. {"name": "Ada"}.`, 'bad_param'); }
 }
+
+/* Files to attach to an email, from the node's Attachments setting: a file from a form's (file) field
+   ({name, type, size, data} with data in base64), a list of them ({{ [$json.a, $json.b] }}), or a data: URL.
+   Blank: none. → [{filename, contentType, base64}]. Up to 10 files and 20 MB together. */
+export const ATTACH_MAX = 20 * 2 ** 20;
+export function attachments(v) {
+  if (v === undefined || v === null || v === '') return [];
+  let list = Array.isArray(v) ? v : [v];
+  if (typeof v === 'string') {
+    const s = v.trim();
+    if (s.startsWith('[') || s.startsWith('{')) { try { const j = JSON.parse(s); list = Array.isArray(j) ? j : [j]; } catch (e) { /* a data: URL, or wrong */ } }
+  }
+  const out = [];
+  for (const f of list.filter(x => x !== null && x !== '' && x !== undefined)) {
+    let file;
+    if (typeof f === 'string') {
+      const m = /^data:([^;,]*)(?:;[^,]*)?;base64,(.*)$/s.exec(f.trim());
+      if (!m) throw new FlowError('Attachments takes a file from a form’s file field, like {{ $json.resume }} (or a list of them), not text or a link.', 'bad_param');
+      file = { filename: `attachment-${out.length + 1}`, contentType: m[1] || 'application/octet-stream', base64: m[2] };
+    } else if (f && typeof f === 'object' && typeof f.data === 'string') {
+      file = { filename: String(f.name || `attachment-${out.length + 1}`).replace(/[\/\r\n]+/g, '_').slice(0, 200), contentType: String(f.type || 'application/octet-stream'), base64: f.data.replace(/^data:[^,]*,/, '') };
+    } else throw new FlowError('Attachments takes a file from a form’s file field, like {{ $json.resume }} (or a list of them).', 'bad_param');
+    if (!/^[A-Za-z0-9+/=\s]*$/.test(file.base64)) throw new FlowError(`“${file.filename}” isn’t a file Workline can attach.`, 'bad_param');
+    out.push(file);
+  }
+  if (out.length > 10) throw new FlowError('At most 10 attachments per email.', 'bad_param');
+  const bytes = out.reduce((n, f) => n + Math.floor(f.base64.replace(/\s/g, '').length * 3 / 4), 0);
+  if (bytes > ATTACH_MAX) throw new FlowError(`The attachments come to ${(bytes / 2 ** 20).toFixed(1)} MB: at most 20 MB per email.`, 'too_large');
+  return out;
+}

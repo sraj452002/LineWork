@@ -50,6 +50,18 @@ test('every tool does what its example says', async () => {
   expect(cases).toBeGreaterThan(300);
 });
 
+test('every tool’s filled-in example in the guide gives what it shows', async () => {
+  const failed = [];
+  for (const [type, tests] of Object.entries(TOOL_TESTS)) {
+    const ex = TOOL_META[type].example, want = tests[0][1];
+    expect(ex, `${type} has a filled-in example`).toBeTruthy();
+    const [out] = await run(type, ex.set, structuredClone(ex.in));
+    const key = ex.set.output;
+    if (typeof want === 'function' ? !want(out[key]) || !isDeepStrictEqual({ ...out, [key]: ex.out[key] }, ex.out) : !isDeepStrictEqual(out, ex.out)) failed.push(`${type}: ${JSON.stringify(out)}, not ${JSON.stringify(ex.out)}`);
+  }
+  expect(failed).toEqual([]);
+});
+
 test('tools put the result where they’re told and explain bad input', async () => {
   const [a] = await run('text.upper', { value: '{{ $json.name }}', output: 'user.shout' }, { name: 'ada' });
   expect(a).toEqual({ name: 'ada', user: { shout: 'ADA' } });

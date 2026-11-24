@@ -109,6 +109,8 @@ const EXTRACT = [
   { k: 'fields', label: 'Fields: name and CSS selector', kind: 'pairs', hint: 'name → h2 · price → .price · link → a @href', when: ['extract', 'fields'] },
   { k: 'limit', label: 'At most', kind: 'number', when: ['extract', 'links', 'tables', 'selector', 'fields'] },
 ];
+// Files to attach: a form's file field ({{ $json.resume }}), or several ({{ [$json.a, $json.b] }}).
+const ATTACH = { k: 'attachments', label: 'Attachments (optional)', kind: 'text', hint: '{{ $json.attachment }}' };
 const EMAIL = [{ k: 'to', label: 'To', kind: 'text' }, { k: 'subject', label: 'Subject', kind: 'text' }, { k: 'text', label: 'Text', kind: 'textarea' }, { k: 'html', label: 'HTML (optional)', kind: 'textarea' }, { k: 'from', label: 'From (blank: the credential’s)', kind: 'text' }];
 const LANGS = [['EN-US', 'English (US)'], ['EN-GB', 'English (UK)'], ['HI', 'Hindi'], ['DE', 'German'], ['FR', 'French'], ['ES', 'Spanish'], ['IT', 'Italian'], ['PT-BR', 'Portuguese (Brazil)'], ['NL', 'Dutch'], ['PL', 'Polish'], ['RU', 'Russian'], ['JA', 'Japanese'], ['KO', 'Korean'], ['ZH', 'Chinese'], ['AR', 'Arabic'], ['TR', 'Turkish'], ['ID', 'Indonesian'], ['UK', 'Ukrainian']];
 
@@ -420,11 +422,11 @@ export const NODES = {
   'app.googlechat': { group: 'Communication', label: 'Google Chat', note: 'Posts to a space (webhook)', logo: 'googlechat', icon: I.chat, tone: 'green', credential: ['chatWebhook'], fields: [{ k: 'text', label: 'Message', kind: 'textarea' }] },
   'app.mattermost': { group: 'Communication', label: 'Mattermost', note: 'Posts to a channel (webhook)', logo: 'mattermost', icon: I.chat, tone: 'blue', credential: ['chatWebhook'], fields: [{ k: 'text', label: 'Message', kind: 'textarea' }] },
   'app.email': { group: 'Communication', label: 'Email (SMTP)', note: 'Sends an email', logo: 'gmail', icon: I.mail, tone: 'blue', credential: ['smtp'], optionalCredential: true,
-    fields: [{ k: 'to', label: 'To', kind: 'text' }, { k: 'subject', label: 'Subject', kind: 'text' }, { k: 'text', label: 'Text', kind: 'textarea' }, { k: 'html', label: 'HTML (optional)', kind: 'textarea' }] },
+    fields: [{ k: 'to', label: 'To', kind: 'text' }, { k: 'subject', label: 'Subject', kind: 'text' }, { k: 'text', label: 'Text', kind: 'textarea' }, { k: 'html', label: 'HTML (optional)', kind: 'textarea' }, ATTACH] },
   sendgrid: { group: 'Communication', label: 'SendGrid', note: 'Sends an email', icon: I.mail, tone: 'sky', credential: ['sendgrid'],
-    fields: [{ k: 'to', label: 'To', kind: 'text' }, { k: 'subject', label: 'Subject', kind: 'text' }, { k: 'text', label: 'Text', kind: 'textarea' }, { k: 'html', label: 'HTML (optional)', kind: 'textarea' }] },
+    fields: [{ k: 'to', label: 'To', kind: 'text' }, { k: 'subject', label: 'Subject', kind: 'text' }, { k: 'text', label: 'Text', kind: 'textarea' }, { k: 'html', label: 'HTML (optional)', kind: 'textarea' }, ATTACH] },
   resend: { group: 'Communication', label: 'Resend', note: 'Sends an email', logo: 'resend', icon: I.mail, tone: 'slate', credential: ['resend'],
-    fields: [{ k: 'to', label: 'To', kind: 'text' }, { k: 'subject', label: 'Subject', kind: 'text' }, { k: 'text', label: 'Text', kind: 'textarea' }, { k: 'html', label: 'HTML (optional)', kind: 'textarea' }] },
+    fields: [{ k: 'to', label: 'To', kind: 'text' }, { k: 'subject', label: 'Subject', kind: 'text' }, { k: 'text', label: 'Text', kind: 'textarea' }, { k: 'html', label: 'HTML (optional)', kind: 'textarea' }, ATTACH] },
   twilio: { group: 'Communication', label: 'Twilio SMS', note: 'Sends a text message', icon: I.sms, tone: 'pink', credential: ['twilio'],
     fields: [{ k: 'to', label: 'To', kind: 'text', hint: '+919876543210' }, { k: 'body', label: 'Message', kind: 'textarea' }, { k: 'from', label: 'From (optional)', kind: 'text' }] },
   mailchimp: { group: 'Communication', label: 'Mailchimp', note: 'Adds someone to an audience', logo: 'mailchimp', icon: I.mail, tone: 'amber', credential: ['mailchimp'],
@@ -433,8 +435,8 @@ export const NODES = {
     fields: [{ k: 'topic', label: 'Topic', kind: 'text' }, { k: 'title', label: 'Title', kind: 'text' }, { k: 'message', label: 'Message', kind: 'textarea' }, { k: 'priority', label: 'Priority (1-5)', kind: 'number' }, { k: 'click', label: 'Opens (URL)', kind: 'text' }] },
 
   mailgun: { group: 'Communication', label: 'Mailgun', note: 'Sends an email', logo: 'mailgun', icon: I.mail, tone: 'red', credential: ['mailgun'], fields: EMAIL },
-  postmark: { group: 'Communication', label: 'Postmark', note: 'Sends an email', icon: I.mail, tone: 'amber', credential: ['postmark'], fields: EMAIL },
-  brevo: { group: 'Communication', label: 'Brevo', note: 'Sends an email (Sendinblue)', logo: 'brevo', icon: I.mail, tone: 'teal', credential: ['brevo'], fields: EMAIL },
+  postmark: { group: 'Communication', label: 'Postmark', note: 'Sends an email', icon: I.mail, tone: 'amber', credential: ['postmark'], fields: [...EMAIL, ATTACH] },
+  brevo: { group: 'Communication', label: 'Brevo', note: 'Sends an email (Sendinblue)', logo: 'brevo', icon: I.mail, tone: 'teal', credential: ['brevo'], fields: [...EMAIL, ATTACH] },
   pushover: { group: 'Communication', label: 'Pushover', note: 'Push notification to your phone', icon: I.bell, tone: 'sky', credential: ['pushover'],
     fields: [{ k: 'title', label: 'Title', kind: 'text' }, { k: 'message', label: 'Message', kind: 'textarea' }, { k: 'url', label: 'Link (optional)', kind: 'text' }, { k: 'priority', label: 'Priority', kind: 'select', options: [['0', 'Normal'], ['1', 'High'], ['-1', 'Quiet']] }] },
 
@@ -568,7 +570,7 @@ for (const [k, { defaults, icon, guide, ...d }] of Object.entries(MORE.nodes)) {
 export const ADVANCED = new Set(['ai.agent', 'ai.summarize', 'ai.extract', 'ai.classify', 'ai.rewrite', 'ai.translate', 'ai.vision', 'ai.decide', 'ai.score', 'ai.mcp',
   'core.respond', 'core.pivot', 'core.textsplit', 'core.kv', 'core.graphql', 'file.spreadsheet', 'app.redis', 'core.note',
   'trigger.error', 'trigger.dbrow', 'trigger.email', 'trigger.calendar', 'trigger.workflow', 'trigger.file']);
-export const SECTIONS = ['Start', 'Build', 'Advanced', 'Tools', 'Apps', 'Data sources'];
+export const SECTIONS = ['My nodes', 'Start', 'Build', 'Advanced', 'Tools', 'Apps', 'Data sources'];
 const APP_NAME = { 'trigger.github': 'GitHub', 'trigger.stripe': 'Stripe', 'trigger.shopify': 'Shopify', 'trigger.slack': 'Slack', 'trigger.typeform': 'Typeform', 'trigger.calendly': 'Calendly', 'trigger.telegram': 'Telegram',
   'trigger.whatsapp': 'WhatsApp', 'trigger.discord': 'Discord', 'trigger.gitlab': 'GitLab', 'trigger.jira': 'Jira', 'trigger.linear': 'Linear', 'trigger.razorpay': 'Razorpay', 'trigger.woocommerce': 'WooCommerce',
   'trigger.drive': 'Google Drive', 'trigger.youtube': 'YouTube', 'trigger.reddit': 'Reddit', 'trigger.ghrelease': 'GitHub',
@@ -588,6 +590,7 @@ export function appOf(type, d = nodeDef(type)) {
 }
 // Where a node sits in the library: {section, group}.
 export function shelfOf(type, d = nodeDef(type)) {
+  if (d.custom) return { section: 'My nodes', group: 'My nodes' };
   if (ADVANCED.has(type)) return { section: 'Advanced', group: d.trigger ? 'Triggers' : d.group === 'AI' ? 'AI' : 'Flow & data' };
   const app = appOf(type, d);
   if (app) return { section: 'Apps', group: app };
@@ -756,11 +759,12 @@ export const deleteCredential = id => api(`/credentials/${encodeURIComponent(id)
 export const startRun = (fileId, flow, startId, input) => api(`/flows/${encodeURIComponent(fileId)}/run`, { method: 'POST', body: { flow, startId, ...(input !== undefined ? { input } : {}) } }).then(r => r.runId);
 
 /* The form a Run by hand trigger asks for when it runs: one field a line. "Email*" is required; (long),
-   (email), (number), (date), (time), (tel), (url), (yes/no) or (choice: A, B, C) set its kind. Each field's
+   (email), (number), (date), (time), (tel), (url), (file), (yes/no) or (choice: A, B, C) set its kind. A (file)
+   field's answer is the file: {name, type, size, data} with data in base64 (an Email node can attach it). Each field's
    key is its name in camelCase ("First name" → firstName), which is what the workflow reads ({{ $json.firstName }}). */
 export function runFields(text) {
   return String(text || '').split('\n').map(l => l.trim()).filter(Boolean).slice(0, 40).map(l => {
-    const m = /\((long|email|number|date|time|tel|url|yes\/no|yesno|choice\s*:[^)]*)\)/i.exec(l);
+    const m = /\((long|email|number|date|time|tel|url|file|yes\/no|yesno|choice\s*:[^)]*)\)/i.exec(l);
     let kind = m ? m[1].toLowerCase().replace(/\s+/g, '') : 'text', options = [];
     if (kind.startsWith('choice:')) { options = m[1].replace(/^choice\s*:/i, '').split(',').map(x => x.trim()).filter(Boolean); kind = 'choice'; }
     if (kind === 'yes/no') kind = 'yesno';
@@ -773,7 +777,52 @@ export function runFields(text) {
 // The answers as the workflow gets them: numbers as numbers, yes/no as true/false.
 export const runValues = (fields, v) => Object.fromEntries(fields.map(f => {
   const x = v[f.key];
-  return [f.key, f.kind === 'number' ? (x === '' || x == null ? null : Number(x)) : f.kind === 'yesno' ? x === true : String(x ?? '')];
+  return [f.key, f.kind === 'number' ? (x === '' || x == null ? null : Number(x)) : f.kind === 'yesno' ? x === true : f.kind === 'file' ? (x && typeof x === 'object' ? x : null) : String(x ?? '')];
 }));
+
+/* The item fields a run starting at `startId` reads: every {{ $json.x }} (or $json["x"]) in that node's
+   settings, or, for a trigger (which only passes its item on), in the settings of the nodes right after
+   it. Nested paths stay whole ("customer.email"). Run with input's form gets a box for each. */
+export function inputPaths(flow, startId) {
+  const nodes = flow?.nodes || [], start = nodes.find(n => n.id === startId);
+  if (!start) return [];
+  const readers = nodeDef(start.type).trigger
+    ? (flow.edges || []).filter(e => e.from === startId).map(e => nodes.find(n => n.id === e.to)).filter(Boolean)
+    : [start];
+  const seen = new Set();
+  const text = readers.map(n => JSON.stringify(n.params || {})).join('\n');
+  const re = /\$json(?:\.([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)|\[\\?["']([^"'\\\]]+)\\?["']\])/g;
+  for (let m; (m = re.exec(text));) seen.add(m[1] || m[2]);
+  return [...seen].slice(0, 40);
+}
+// What's typed in a box, as the item gets it: 12 and 1.5 as numbers, true/false, null, and {…} or […]
+// as JSON when it reads as such; anything else (including 0123 and long digit strings like phone numbers) as text.
+export function typedValue(s) {
+  const t = String(s ?? '').trim();
+  if (/^-?(0|[1-9]\d{0,14})(\.\d+)?$/.test(t)) return Number(t);
+  if (t === 'true' || t === 'false') return t === 'true';
+  if (t === 'null') return null;
+  if (/^[[{]/.test(t)) { try { return JSON.parse(t); } catch (e) { /* text */ } }
+  return String(s ?? '');
+}
+// Rows of {name, value} as one item; a name with dots makes nested objects ("customer.email").
+export function rowsItem(rows) {
+  const out = {};
+  for (const r of rows) {
+    const name = String(r.name || '').trim();
+    if (!name) continue;
+    const keys = name.split('.').filter(Boolean);
+    let o = out;
+    keys.slice(0, -1).forEach(k => { if (!o[k] || typeof o[k] !== 'object' || Array.isArray(o[k])) o[k] = {}; o = o[k]; });
+    o[keys[keys.length - 1]] = typedValue(r.value);
+  }
+  return out;
+}
+// …and back: an item as rows (nested objects by their dotted path, other values as they'd be typed).
+export function itemRows(item, prefix = '') {
+  return Object.entries(item && typeof item === 'object' ? item : {}).flatMap(([k, v]) => (v && typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length
+    ? itemRows(v, prefix + k + '.')
+    : [{ name: prefix + k, value: typeof v === 'string' ? v : JSON.stringify(v) }]));
+}
 export const getRun = id => api(`/runs/${encodeURIComponent(id)}`).then(r => r.run);
 export const listRuns = fileId => api(`/flows/${encodeURIComponent(fileId)}/runs`).then(r => r.runs);

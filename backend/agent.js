@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import { nvidiaContent, nvidiaParams } from './nvidia.js';
 
 /* The AI assistant (POST /api/ai/chat): a conversation with a model that can use the account's own
    WorkLine tools: list and run its workflows, find and run any of the 650 nodes (with its saved
@@ -145,7 +146,7 @@ export function createAgent({ store, flows, providers, defaultProvider, dailyLim
     const up = await fetchRetry(`${nvidiaBase.replace(/\/+$/, '')}/chat/completions`, {
       method: 'POST', signal,
       headers: { authorization: `Bearer ${nvidiaKey}`, 'content-type': 'application/json', accept: 'text/event-stream' },
-      body: JSON.stringify({ model, messages, stream: true, temperature: 0.5, top_p: 1, max_tokens: 8192, ...(withTools ? { tools: toolList.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.input_schema } })), tool_choice: 'auto' } : {}) }),
+      body: JSON.stringify({ model, messages, stream: true, ...nvidiaParams(model), ...(withTools ? { tools: toolList.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.input_schema } })), tool_choice: 'auto' } : {}) }),
     });
     if (!up.ok || !up.body) throw Object.assign(new Error(`The AI service answered ${up.status}.`), { status: up.status, detail: await up.text().catch(() => ''), toolsRefused: withTools && [400, 404, 422, 500].includes(up.status) });
     let text = '';
@@ -192,7 +193,8 @@ export function createAgent({ store, flows, providers, defaultProvider, dailyLim
   /* ---- one answer: the model, and the tools it asks for, round after round ---- */
   async function answer({ uid, pick, system, history, images = [], send, signal, toolList, agent }) {
     if (pick.nvidia) {
-      const messages = [{ role: 'system', content: system }, ...history.map(m => ({ role: m.role, content: m.text }))];
+      const last = history.length - 1;
+      const messages = [{ role: 'system', content: system }, ...history.map((m, i) => ({ role: m.role, content: i === last && pick.images ? nvidiaContent(m.text, images) : m.text }))];
       let tools = true;
       for (let turn = 0; turn < MAX_TURNS; turn++) {
         let r;
