@@ -199,6 +199,7 @@ export const NODE_EXAMPLE = {
   'web.page': { extract: 'fields', each: '.product', fields: [{ name: 'name', value: 'h2' }, { name: 'price', value: '.price' }, { name: 'link', value: 'a @href' }], limit: 20 },
   'web.browser': { url: 'https://example.com/search', waitFor: '.price' },
   'core.graphql': { path: 'user', headers: [{ name: 'Authorization', value: 'Bearer {{ $json.token }}' }] },
+  'file.create': { name: 'output.py', content: '{{ $json.text }}', encoding: 'text', unfence: true, output: 'file' },
   'file.spreadsheet': { sheet: 'Sheet1' },
   'app.redis': { operation: 'set', value: '{{ $json }}', ttl: 3600 },
   supabase: { table: 'signups', limit: 50 },
@@ -329,6 +330,8 @@ export function exampleOf(type, d) {
       BY_KEY[f.k],
       f.options?.[0]?.[0],
       f.kind === 'bool' ? false : undefined,
+      // An AI step's model, blank: “Same as AI chat”, a real choice (not listed, like other blanks).
+      f.kind === 'aimodel' ? '' : undefined,
     ];
     p[f.k] = f.k in hand ? hand[f.k] : pick.find(v => v !== undefined);
   }

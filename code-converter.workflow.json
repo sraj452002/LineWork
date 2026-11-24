@@ -1,0 +1,53 @@
+{
+  "workline": "workflow",
+  "version": 1,
+  "name": "code converter",
+  "exported": "2026-11-24T18:00:00.000Z",
+  "flow": {
+    "nodes": [
+      {
+        "id": "ncc1start",
+        "type": "trigger.manual",
+        "name": "Start",
+        "x": 340,
+        "y": 160,
+        "params": {
+          "fields": "Code* (long)\nFile name"
+        }
+      },
+      {
+        "id": "ncc2convert",
+        "type": "ai.rewrite",
+        "name": "Convert",
+        "x": 600,
+        "y": 160,
+        "params": {
+          "model": "",
+          "style": "custom",
+          "text": "{{ $json.code }}",
+          "instructions": "Convert the following JavaScript code to Python. Return only the Python code, no markdown, no explanations.",
+          "output": "text"
+        }
+      },
+      {
+        "id": "ncc3file",
+        "type": "file.create",
+        "name": "Save as Python File",
+        "x": 860,
+        "y": 160,
+        "params": {
+          "name": "{{ $node[\"Start\"].json.fileName || 'output' }}.py",
+          "content": "{{ $json.text }}",
+          "type": "",
+          "encoding": "text",
+          "unfence": true,
+          "output": "file"
+        }
+      }
+    ],
+    "edges": [
+      { "id": "ecc1", "from": "ncc1start", "fromPort": "main", "to": "ncc2convert", "toPort": "main" },
+      { "id": "ecc2", "from": "ncc2convert", "fromPort": "main", "to": "ncc3file", "toPort": "main" }
+    ]
+  }
+}

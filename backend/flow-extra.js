@@ -19,6 +19,9 @@ function jsonIn(text) {
   try { return JSON.parse(i >= 0 && j > i ? s.slice(i, j + 1) : s); } catch (e) { throw new FlowError(`The AI didn’t answer in the expected form: ${String(text).slice(0, 200)}`, 'ai_format'); }
 }
 const ONLY_JSON = 'Answer with one JSON object only, no other text.';
+// File types by extension, for Create file (anything else is plain text unless the step names a type).
+const FILE_TYPES = { txt: 'text/plain', md: 'text/markdown', csv: 'text/csv', json: 'application/json', html: 'text/html', htm: 'text/html', css: 'text/css', xml: 'application/xml', svg: 'image/svg+xml',
+  js: 'text/javascript', mjs: 'text/javascript', ts: 'text/plain', jsx: 'text/plain', tsx: 'text/plain', py: 'text/x-python', java: 'text/x-java', c: 'text/x-c', cpp: 'text/x-c++', cs: 'text/plain', go: 'text/plain', rs: 'text/plain', rb: 'text/plain', php: 'text/plain', sh: 'text/x-shellscript', sql: 'application/sql', yaml: 'text/yaml', yml: 'text/yaml', ics: 'text/calendar', pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', zip: 'application/zip' };
 const list = v => (Array.isArray(v) ? v : String(v ?? '').split(/[,\n]/)).map(s => String(s).trim()).filter(Boolean);
 // The item, with the result put at `output` (dot paths allowed).
 const put = (item, out, value) => { const j = structuredClone(item.json); setPath(j, out, value); return j; };
@@ -215,6 +218,23 @@ export const EXTRA_NODES = {
       return at ?? {};
     });
   } },
+  // Create file: text (or base64) → a file { name, type, size, data (base64) }, which the Result panel and
+  // Apps offer as a download and the email steps send as an attachment.
+  'file.create': { run: args => each(args, async (p, item) => {
+    const name = String(need(p.name, 'the file name')).trim().replace(/[\\/:*?"<>|]+/g, '_').slice(0, 120);
+    const raw = p.content === undefined || p.content === null ? '' : typeof p.content === 'string' ? p.content : JSON.stringify(p.content, null, 2);
+    let buf;
+    if (p.encoding === 'base64') { buf = Buffer.from(raw.replace(/^data:[^,]*,/, ''), 'base64'); }
+    else {
+      // Code that an AI wrapped in a markdown fence (```python … ```) is unwrapped, unless asked to keep it.
+      const text = p.unfence === false ? raw : raw.replace(/^\s*```[\w+-]*[ \t]*\r?\n([\s\S]*?)\r?\n?```\s*$/, '$1');
+      buf = Buffer.from(text, 'utf8');
+    }
+    if (buf.length > 5_000_000) throw new FlowError('That file is over 5 MB: too big to make here.', 'too_large');
+    const ext = (name.match(/\.([a-z0-9]+)$/i) || [])[1]?.toLowerCase() || '';
+    const type = String(p.type || '').trim() || FILE_TYPES[ext] || 'text/plain';
+    return put(item, p.output || 'file', { name, type, size: buf.length, data: buf.toString('base64') });
+  }) },
   // An .xlsx or .csv file at a URL → one item per row (the first row names the fields).
   'file.spreadsheet': { run: args => each(args, async p => {
     const url = String(need(p.url, 'the file URL'));

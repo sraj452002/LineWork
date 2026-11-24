@@ -202,7 +202,7 @@ test('a step whose credential is gone: the fix card offers a saved one and runs 
     await card.getByRole('button', { name: 'Use it & run again' }).click();
     await expect(page.getByText(/Using “My Gmail”/)).toBeVisible();
     await expect(page.locator('.rs-fail')).toBeVisible({ timeout: 30_000 });
-    await expect(page.locator('.rs-fail .rh-err')).not.toContainText('credential');
+    await expect(page.locator('.rs-fail .rs-oops-raw code')).not.toContainText('credential');
     // Fix in editor opens the workflow at that step, its settings showing.
     await page.locator('.rs-fail').getByRole('button', { name: /^Open “Mail them to me” in the editor/ }).click();
     await expect(page.getByLabel('Node name')).toHaveValue('Mail them to me');

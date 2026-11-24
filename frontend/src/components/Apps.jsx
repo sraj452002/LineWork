@@ -5,6 +5,7 @@ import { isImage, isLink, mainText, publishedApps, resultOf, runApp, shapeOf, to
 import { download } from '../lib/flowio.js';
 import { confetti } from '../lib/confetti.js';
 import { useUI } from './ui.jsx';
+import { FileCard, filesOf, slim } from './ResultView.jsx';
 
 /* Home → Apps: workflows published as apps, for people who just want to use them. Each opens as a form
    with a Run button; the result shows as words, a table or cards, and earlier runs are listed. Nothing
@@ -168,6 +169,12 @@ function Result({ items, show, name, toast }) {
         {(shape === 'table' || shape === 'cards') && <button className="link" onClick={saveCSV}>Download CSV</button>}
         {items.length > 0 && <button className="link" onClick={() => download(name, JSON.stringify(items, null, 2), 'result')}>Download JSON</button>}
       </div>
+      {filesOf(items).length > 0 && (
+        <section className="rv-files" aria-label="Files">
+          <h4>{filesOf(items).length === 1 ? 'Your file is ready' : `${filesOf(items).length} files are ready`}</h4>
+          {filesOf(items).slice(0, 10).map((f, i) => <FileCard key={i} f={f} big />)}
+        </section>
+      )}
       {shape === 'empty' && <p className="muted">It finished, with nothing to show.</p>}
       {shape === 'text' && <div className="app-text">{mainText(items[0])}</div>}
       {shape === 'table' && (
@@ -177,7 +184,7 @@ function Result({ items, show, name, toast }) {
       {shape === 'cards' && <div className="app-cards">{items.map((i, n) => (
         <dl key={n} className="app-item">{keys.filter(k => i[k] !== undefined).map(k => <div key={k}><dt>{label(k)}</dt><dd><Value v={i[k]} /></dd></div>)}</dl>
       ))}</div>}
-      {shape === 'json' && <pre className="app-json">{JSON.stringify(items, null, 2)}</pre>}
+      {shape === 'json' && !(filesOf(items).length && items.length === 1) && <pre className="app-json">{JSON.stringify(items, slim, 2)}</pre>}
       {items.length >= 20 && <p className="muted">Showing the first 20. Download for everything the run kept.</p>}
     </div>
   );

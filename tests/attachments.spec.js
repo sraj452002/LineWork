@@ -146,14 +146,14 @@ test('a big file is kept out of the run’s record, by name and size', async () 
   const srv = app.listen(0);
   const base = `http://localhost:${srv.address().port}/api`;
   try {
-    const big = { name: 'scan.pdf', type: 'application/pdf', size: 300000, data: 'A'.repeat(400000) };
+    const big = { name: 'scan.pdf', type: 'application/pdf', size: 700000, data: 'A'.repeat(940000) };
     const flow = { nodes: [{ id: 't', type: 'trigger.manual', name: 'Start', params: {} }], edges: [] };
     const { runId } = await fetch(base + '/flows/wf9/run', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ flow, startId: 't', input: [{ name: 'Asha', doc: big }] }) }).then(r => r.json());
     let run;
     for (let i = 0; i < 30; i++) { ({ run } = await fetch(base + '/runs/' + runId).then(r => r.json())); if (run.status !== 'running') break; await new Promise(r => setTimeout(r, 100)); }
     const item = run.nodes.t.output.main[0];
     expect(item.name).toBe('Asha');
-    expect(item.doc).toMatchObject({ name: 'scan.pdf', size: 300000 });
+    expect(item.doc).toMatchObject({ name: 'scan.pdf', size: 700000 });
     expect(item.doc.data).toMatch(/file contents, \d+ KB, not kept/);
   } finally { srv.close(); app.flows.close(); }
 });

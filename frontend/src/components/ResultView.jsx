@@ -12,6 +12,40 @@ const isUrl = v => typeof v === 'string' && /^https?:\/\/\S+$/i.test(v);
 const isImg = v => isUrl(v) && /\.(png|jpe?g|gif|webp|svg|avif)(\?|#|$)/i.test(v) || (typeof v === 'string' && /^data:image\//.test(v));
 const isFile = v => v && typeof v === 'object' && typeof v.name === 'string' && 'data' in v && ('size' in v || 'type' in v);
 const size = n => (n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024)} KB` : `${(n / 1048576).toFixed(1)} MB`);
+// A file's bytes, from its base64 (a run keeps files up to ~450 KB; bigger ones only say they were there).
+const kept = f => typeof f.data === 'string' && !f.data.startsWith('(file contents');
+const bytesOf = f => Uint8Array.from(atob(String(f.data).replace(/^data:[^,]*,/, '')), c => c.charCodeAt(0));
+const isText = f => /^text\/|json|xml|javascript|sql|yaml|csv|svg/.test(f.type || '') || /\.(txt|md|csv|json|py|js|ts|jsx|tsx|html|css|sql|ya?ml|sh|java|c|cpp|go|rs|rb|php|xml)$/i.test(f.name || '');
+function saveFile(f) {
+  const url = URL.createObjectURL(new Blob([bytesOf(f)], { type: f.type || 'application/octet-stream' }));
+  const a = document.createElement('a'); a.href = url; a.download = f.name || 'file'; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+const fileIcon = f => (/^image\//.test(f.type || '') ? '🖼️' : /pdf/.test(f.type || '') ? '📕' : /csv|sheet|excel/.test(f.type || '') ? '📊' : isText(f) ? '📄' : '📦');
+// A file: its name and size, Download, and a peek inside for text.
+export function FileCard({ f, big }) {
+  const [peek, setPeek] = useState(false);
+  const ok = kept(f);
+  let text = '';
+  if (peek && ok) { try { text = new TextDecoder().decode(bytesOf(f)); } catch (e) { text = '(couldn’t read it as text)'; } }
+  return (
+    <div className={'rv-file' + (big ? ' big' : '')}>
+      <div className="rv-file-row">
+        <i aria-hidden="true">{fileIcon(f)}</i>
+        <span className="rv-file-name"><b>{f.name}</b><small>{[f.size ? size(f.size) : '', f.type || ''].filter(Boolean).join(' · ')}</small></span>
+        {ok && isText(f) && <button className="btn" onClick={() => setPeek(!peek)} aria-expanded={peek}>{peek ? 'Hide' : 'Preview'}</button>}
+        {ok ? <button className="btn primary" onClick={() => saveFile(f)} aria-label={`Download ${f.name}`}>⬇ Download</button> : <small className="rv-file-gone">Too big to keep in the run: send it by email or save it to Drive instead.</small>}
+      </div>
+      {peek && <pre className="rv-file-peek">{text.length > 20000 ? text.slice(0, 20000) + '\n…' : text}</pre>}
+    </div>
+  );
+}
+// Every file in the results (on the items, or one level down), for the strip at the top.
+export const filesOf = items => items.flatMap(it => (it && typeof it === 'object' ? Object.values(it) : []).flatMap(v => (isFile(v) ? [v] : Array.isArray(v) ? v.filter(isFile) : [])));
+const filesIn = results => results.flatMap(r => filesOf(r.items));
+// JSON without the files' base64 (it would fill the screen).
+export const slim = (k, v) => (isFile(v) && typeof v.data === 'string' && v.data.length > 120 ? { ...v, data: `(base64, ${size(Math.round(v.data.length * 3 / 4))})` } : v);
+
 // The item's title: a name-like field, else its first short text.
 function titleOf(it) {
   if (!it || typeof it !== 'object') return null;
@@ -29,7 +63,7 @@ function Value({ v, depth = 0 }) {
   if (isImg(v)) return <a className="rv-v-img" href={v} target="_blank" rel="noreferrer"><img src={v} alt="" loading="lazy" /></a>;
   if (isUrl(v)) return <a className="rv-v-link" href={v} target="_blank" rel="noreferrer">{v.replace(/^https?:\/\/(www\.)?/, '').slice(0, 60)}{v.length > 70 ? '…' : ''} ↗</a>;
   if (typeof v === 'string') return <span className="rv-v-text">{v.length > 280 && !open ? <>{v.slice(0, 280)}… <button className="link" onClick={() => setOpen(true)}>more</button></> : v}</span>;
-  if (isFile(v)) return <span className="rv-v-file">📎 {v.name}{v.size ? <small> · {size(v.size)}</small> : null}</span>;
+  if (isFile(v)) return <FileCard f={v} />;
   if (Array.isArray(v)) {
     if (!v.length) return <span className="rv-v-empty">none</span>;
     if (v.every(x => x === null || typeof x !== 'object')) return <span className="rv-v-chips">{v.slice(0, 12).map((x, i) => <em key={i}>{String(x)}</em>)}{v.length > 12 && <small>+{v.length - 12}</small>}</span>;
@@ -89,8 +123,14 @@ export function ResultView({ results, onCopy }) {
         <button role="tab" aria-selected={mode === 'json'} className={mode === 'json' ? 'on' : ''} onClick={() => setMode('json')}>JSON</button>
       </div>
       {!results.length && <p className="ws-empty">It finished without passing anything on.</p>}
+      {(() => { const files = filesIn(results); return files.length > 0 && (
+        <section className="rv-files" aria-label="Files from this run">
+          <h4>{files.length === 1 ? 'Your file is ready' : `${files.length} files are ready`}</h4>
+          {files.slice(0, 10).map((f, i) => <FileCard key={i} f={f} big />)}
+        </section>
+      ); })()}
       {results.map(r => {
-        const text = JSON.stringify(r.items.length === 1 ? r.items[0] : r.items, null, 2);
+        const text = JSON.stringify(r.items.length === 1 ? r.items[0] : r.items, slim, 2);
         return (
           <section key={r.id} className="rv-res">
             <header className="rv-res-head"><Mark type={r.type} size={12} /><b>{r.name}</b><small>{r.items.length} item{r.items.length === 1 ? '' : 's'}</small><button className="rh-copy" onClick={() => onCopy(JSON.stringify(r.items, null, 2))}>Copy JSON</button></header>

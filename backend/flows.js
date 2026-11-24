@@ -200,7 +200,8 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
   const lean = (v, depth = 0) => {
     if (!v || typeof v !== 'object' || depth > 4) return v;
     if (Array.isArray(v)) return v.map(x => lean(x, depth + 1));
-    if (typeof v.data === 'string' && v.data.length > 2000 && ('name' in v || 'size' in v)) return { ...v, data: `(file contents, ${Math.round(v.data.length * 3 / 4 / 1024)} KB, not kept in the run's record)` };
+    // Files up to ~450 KB stay in the record (the Result panel offers them as a download); bigger ones don't.
+    if (typeof v.data === 'string' && v.data.length > 600_000 && ('name' in v || 'size' in v)) return { ...v, data: `(file contents, ${Math.round(v.data.length * 3 / 4 / 1024)} KB, not kept in the run's record)` };
     return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, lean(x, depth + 1)]));
   };
   const trim = r => {

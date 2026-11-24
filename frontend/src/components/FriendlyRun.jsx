@@ -19,6 +19,9 @@ export function FriendlyRun({ steps, run, done, title, secs, failed, onReplay, o
   const seen = steps.filter(s => s.st !== 'skipped' && s.st !== 'unreached');
   const playedTo = steps.reduce((m, s, i) => (s.st !== 'pending' && s.st !== 'idle' ? i + 1 : m), 0);
   const pct = !run ? 0 : done ? 100 : Math.round((playedTo / Math.max(1, steps.length)) * 100);
+  // Step numbers: each step's place in the run (1, 2, 3…), counting only the ones that run.
+  const no = new Map(seen.map((s, i) => [s.n.id, i + 1]));
+  const total = seen.length, at = active ? no.get(active.n.id) || doneSteps.length + 1 : 0;
   const state = !run ? 'idle' : !done ? 'active' : run.status === 'success' ? 'success' : 'error';
   // The step's error in words: a service's JSON answer ({"detail": "…"}) comes down to its message.
   const err = (() => {
@@ -32,7 +35,7 @@ export function FriendlyRun({ steps, run, done, title, secs, failed, onReplay, o
     : state === 'active' ? (active ? `${active.n.name}…` : 'Getting started…')
     : state === 'success' ? 'All done!' : 'Something needs your attention';
   const sub = state === 'idle' ? <>Press <b>Run</b> to start “{title}”.{wantsInput ? ' It asks a few questions first.' : ''}</>
-    : state === 'active' ? <>Working on it · {doneSteps.length} {word(doneSteps.length)} finished</>
+    : state === 'active' ? <><b className="fr-of">Step {at || doneSteps.length + 1} of {total}</b> · {doneSteps.length} finished</>
     : state === 'success' ? <>Finished {doneSteps.length} {word(doneSteps.length)}{took(secs)}.</>
     : <>“{failed?.name || 'A step'}” couldn’t finish{err ? `: ${err.replace(/^[^:]+: /, '')}` : '.'}</>;
   return (
@@ -42,6 +45,7 @@ export function FriendlyRun({ steps, run, done, title, secs, failed, onReplay, o
           <i className="fr-ring r1" /><i className="fr-ring r2" /><i className="fr-ring r3" />
           <span className="fr-orbit"><i /><i /><i /></span>
           {state === 'active' && <span className="fr-arc" />}
+          {state === 'active' && at > 0 && <em className="fr-stepno" key={'n' + at}>{at}<small>/{total}</small></em>}
           {/* a happy end: sparks flying out from the tick */}
           {state === 'success' && <span className="fr-burst" key={'b' + run?.id}>{Array.from({ length: 10 }, (_, k) => <i key={k} style={{ '--a': `${k * 36}deg`, '--d': `${(k % 3) * 40}ms` }} />)}</span>}
           <span className="fr-core" key={state + (active?.n.id || '')}>
@@ -59,7 +63,7 @@ export function FriendlyRun({ steps, run, done, title, secs, failed, onReplay, o
         {state === 'active' ? (
           // While it runs: one line of finished steps, the newest sliding in on the right, the oldest fading out.
           <div className="fr-ticker" aria-label="Finished steps"><ul>
-            {doneSteps.slice(-8).map(s => <li key={s.n.id} className="fr-tick"><Mark type={s.n.type} size={11} /><span>{s.n.name}</span><b>✓</b></li>)}
+            {doneSteps.slice(-8).map(s => <li key={s.n.id} className="fr-tick"><i className="fr-no">{no.get(s.n.id)}</i><Mark type={s.n.type} size={11} /><span>{s.n.name}</span><b>✓</b></li>)}
           </ul></div>
         ) : (state === 'success' || state === 'error') && doneSteps.length > 0 ? (
           // Over: one tidy summary of what finished; it opens the full list.
@@ -80,7 +84,7 @@ export function FriendlyRun({ steps, run, done, title, secs, failed, onReplay, o
       {state === 'idle' && <button className="fr-all link" onClick={() => setAll(!all)} aria-expanded={all}>{all ? 'Hide the steps' : `Show all ${seen.length} ${word(seen.length)}`}</button>}
       {all && (
         <ol className="fr-list">
-          {seen.map(s => <li key={s.n.id} className={'st-' + s.st}><Mark type={s.n.type} size={12} /><span>{s.n.name}</span><small>{nodeDef(s.n.type).label}</small><b>{s.st === 'success' ? '✓' : s.st === 'error' ? '!' : s.st === 'active' ? '…' : ''}</b></li>)}
+          {seen.map(s => <li key={s.n.id} className={'st-' + s.st}><i className="fr-no">{no.get(s.n.id)}</i><Mark type={s.n.type} size={12} /><span>{s.n.name}</span><small>{nodeDef(s.n.type).label}</small><b>{s.st === 'success' ? '✓' : s.st === 'error' ? '!' : s.st === 'active' ? '…' : ''}</b></li>)}
         </ol>
       )}
     </div>

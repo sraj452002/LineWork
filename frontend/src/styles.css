@@ -4307,3 +4307,30 @@ button.rv-line:hover{background:rgba(255,255,255,.04)}
   .fr-sub{font-size:13.5px}
   .rs-oops .rs-fix-row .btn{flex:1 1 auto;justify-content:center;text-align:center;white-space:normal}
 }
+
+/* Result › files: a strip at the top ("Your file is ready") and a card wherever a file shows */
+.rv-files{display:flex;flex-direction:column;gap:8px;padding:12px;border:1px solid color-mix(in srgb,var(--c-green) 35%,var(--line));border-radius:14px;background:linear-gradient(160deg,color-mix(in srgb,var(--c-green) 10%,var(--surface)),var(--surface) 70%)}
+.rv-files h4{margin:0;font-size:13.5px;color:var(--c-green)}
+.rv-file{display:flex;flex-direction:column;gap:8px;min-width:0}
+.rv-file-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.rv-file-row>i{flex:none;display:grid;place-items:center;width:34px;height:34px;border-radius:10px;background:color-mix(in srgb,var(--ink) 7%,transparent);font-style:normal;font-size:17px}
+.rv-file.big .rv-file-row>i{width:42px;height:42px;font-size:21px;border-radius:12px}
+.rv-file-name{flex:1;min-width:120px;display:flex;flex-direction:column}
+.rv-file-name b{font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rv-file-name small{font-size:11.5px;color:var(--ink2)}
+.rv-file-row .btn{padding:6px 12px;font-size:12.5px}
+.rv-file-gone{color:var(--ink2);font-size:11.5px}
+.rv-file-peek{margin:0;max-height:260px;overflow:auto;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:color-mix(in srgb,var(--ink) 5%,var(--panel));font-family:var(--mono);font-size:12px;line-height:1.55;white-space:pre}
+/* The toolbar's frosted glass makes a layer of its own: lift it (and its workflow list) above the panels below */
+.rs-tb{position:relative;z-index:40}
+.rs-tb .rs-menu{z-index:50;box-shadow:0 24px 60px -12px rgba(0,0,0,.6),0 0 0 1px var(--line)}
+
+/* Friendly run › step numbers: a "2/3" badge on the orb, "Step 2 of 3", numbered chips and list */
+.fr-orb .fr-stepno{position:absolute;z-index:3;top:4%;right:4%;display:inline-flex;align-items:baseline;gap:1px;padding:4px 9px;border-radius:999px;background:var(--c-blue);color:#fff;font-style:normal;font-size:14px;font-weight:800;box-shadow:0 6px 16px -6px color-mix(in srgb,var(--c-blue) 80%,transparent),0 0 0 3px var(--panel);animation:fr-pop .35s var(--ease) both}
+.fr-orb .fr-stepno small{font-size:11px;font-weight:700;opacity:.8}
+@keyframes fr-pop{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}
+.fr-of{color:var(--c-blue);font-weight:700}
+.fr-no{flex:none;display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 4px;border-radius:999px;background:color-mix(in srgb,var(--ink) 10%,transparent);color:var(--ink2);font-style:normal;font-size:10.5px;font-weight:800}
+.fr-list li .fr-no{margin-right:2px}
+@media (prefers-reduced-motion:reduce){.fr-orb .fr-stepno{animation:none}}
+
