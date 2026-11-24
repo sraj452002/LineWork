@@ -4347,3 +4347,6 @@ button.rv-line:hover{background:rgba(255,255,255,.04)}
 .apps-sec{margin:28px 0 4px;font-size:16px;display:flex;align-items:baseline;gap:8px}
 .apps-sec small{color:var(--ink2);font-weight:500}
 .apps-sec-note{margin:0 0 12px;color:var(--ink2);font-size:13px}
+
+/* A word as an app's icon: small, kept inside its box. */
+.app-txt-icon { font-size: .34em; font-weight: 700; letter-spacing: -.02em; line-height: 1; max-width: 100%; overflow: hidden; display: inline-block; }

@@ -4,7 +4,10 @@ import { APP_ICONS, iconImage, isImageIcon } from '../lib/apps.js';
 /* An app's or page's icon: an emoji, or a picture of your own (a small PNG kept as a data: URL). */
 export function AppIcon({ icon, fallback = '✨', className, alt = '' }) {
   if (isImageIcon(icon)) return <img className={'app-img-icon' + (className ? ' ' + className : '')} src={icon} alt={alt} draggable="false" />;
-  return <>{icon || fallback}</>;
+  const text = icon || fallback;
+  // A word typed as the icon ("code") is drawn small enough to stay inside its box.
+  if ([...new Intl.Segmenter().segment(text)].length > 2) return <span className="app-txt-icon">{text.slice(0, 6)}</span>;
+  return <>{text}</>;
 }
 
 /* Choosing it: one of the ready emoji, any emoji you type, or a picture you upload (made square and
