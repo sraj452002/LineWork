@@ -296,7 +296,34 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
       if (f.required && (v === undefined || v === null || String(v).trim() === '')) return { status: 400, error: { error: 'missing', message: `Fill in ${f.label || key}.` } };
       input[key] = f.kind === 'number' ? (v === '' || v == null ? null : Number(v)) : f.kind === 'yesno' ? v === true || v === 'true' : String(v ?? '').slice(0, 20_000);
     }
-    return { from, input };
+    return { from, input: matchNames(flow, from, input) };
+  };
+  // The app's questions and the names its workflow reads can differ ("Js code" → jsCode, but the
+  // workflow reads {{ $json.code }}): each name read that no answer has gets the answer whose key
+  // contains it (or the other way round), else the one answer left over. The answers stay as they are too.
+  const matchNames = (flow, from, input) => {
+    const want = new Set(), next = new Set(flow.edges.filter(e => e.from === from.id).map(e => e.to));
+    const esc = String(from.name || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const byNode = new RegExp(`\\$node\\[\\\\?["']${esc}\\\\?["']\\]\\.json\\.([A-Za-z_]\\w*)`, 'g');
+    for (const n of flow.nodes) {
+      const text = JSON.stringify(n.params || {});
+      if (next.has(n.id)) for (const m of text.matchAll(/\$json\.([A-Za-z_]\w*)/g)) want.add(m[1]);
+      for (const m of text.matchAll(byNode)) want.add(m[1]);
+    }
+    if (from.type === 'trigger.manual') for (const line of String(from.params?.fields || '').split('\n')) {
+      const name = line.replace(/\(.*?\)|\*/g, '').trim();
+      if (name) want.add(name.replace(/[^\w ]+/g, '').trim().split(/\s+/).map((w, i) => (i ? w[0].toUpperCase() + w.slice(1).toLowerCase() : w.toLowerCase())).join(''));
+    }
+    const out = { ...input }, used = new Set(Object.keys(input).filter(k => want.has(k)));
+    const missing = [...want].filter(k => !(k in input));
+    for (const k of missing) {
+      const lk = k.toLowerCase();
+      const hit = Object.keys(input).find(a => !used.has(a) && (a.toLowerCase().includes(lk) || lk.includes(a.toLowerCase())));
+      if (hit) { out[k] = input[hit]; used.add(hit); }
+    }
+    const left = Object.keys(input).filter(a => !used.has(a)), still = missing.filter(k => !(k in out));
+    if (left.length === 1 && still.length === 1) out[still[0]] = input[left[0]];
+    return out;
   };
   const savedFlow = async (uid, fileId) => {
     const text = await store.readFile(uid, fileId);
