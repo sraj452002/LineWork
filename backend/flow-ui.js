@@ -8,6 +8,8 @@
    anyone, and it's served as a sandbox (flows.js) on top of that. */
 import { FlowError } from './flow-engine.js';
 import { formFields } from './flow-triggers.js';
+import { COL, extent, fileOf, rid, sheetOf } from './flow-workline.js';
+import { cellValue, csvRows } from './flow-extra.js';
 import { randomBytes } from 'node:crypto';
 
 const MAX_BLOCKS = 60, MAX_ROWS = 500;
@@ -113,6 +115,82 @@ function chart({ kind, rows, label, value }) {
   return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img">${body}</svg>`;
 }
 
+/* ---- the Editor node's helpers ---- */
+// What a Workline file is, from what it holds and how it was last shown.
+const KIND_WORD = { doc: 'Doc', sheet: 'Sheet', diagram: 'Diagram', code: 'Code' };
+function kindOf(f) {
+  const hasDoc = !!String(f.doc || '').trim();
+  const hasSheet = (f.sheets || []).some(s => Object.values(s.cells || {}).some(v => v !== ''));
+  const hasDiagram = (f.diagrams || []).some(d => String(d.code || '').trim());
+  const hasCode = Array.isArray(f.code?.files) && f.code.files.length > 0;
+  if (f.view === 'code' && hasCode) return 'code';
+  if (f.view === 'sheet' && (f.sheets || []).length) return 'sheet';
+  if ((f.view === 'canvas' || f.view === 'diagram') && (f.diagrams || []).length) return 'diagram';
+  if (hasDoc) return 'doc';
+  if (hasSheet) return 'sheet';
+  if (hasCode) return 'code';
+  if (hasDiagram) return 'diagram';
+  return 'doc';
+}
+// A whole file, as the next steps (an email attachment, a Drive upload) take it.
+const asFile = (name, type, text) => { const buf = Buffer.from(String(text ?? ''), 'utf8'); return { name: String(name).replace(/[\\/:*?"<>|]+/g, '-').slice(0, 120), type, size: buf.length, data: buf.toString('base64') }; };
+const bufFile = (name, type, buf) => ({ name: String(name).replace(/[\\/:*?"<>|]+/g, '-').slice(0, 120), type, size: buf.length, data: buf.toString('base64') });
+/* A file uploaded on the page (Editor, “A file you upload here”): it becomes a Workline file to edit
+   (a sheet for .csv/.tsv/.xlsx, a doc for .md/.txt and other text, a code file for code), remembered with
+   the node it came from and a key, so only its own link (?doc=…&k=…) opens it again. */
+const UPLOAD_MAX = 3 * 2 ** 20;
+const CODE_EXT = new Set('js mjs cjs ts jsx tsx py html htm css scss json xml yaml yml sql sh bash java c h cpp hpp cs go rs rb php ini toml env log svg kt swift dart lua r pl'.split(' '));
+async function importUpload(args, up) {
+  const name = String(up.name || 'file').slice(0, 120), ext = (name.includes('.') ? name.split('.').pop() : '').toLowerCase();
+  const buf = Buffer.from(String(up.data || ''), 'base64');
+  if (!buf.length) throw new FlowError('That file is empty.', 'bad_file');
+  if (buf.length > UPLOAD_MAX) throw new FlowError(`“${name}” is ${(buf.length / 2 ** 20).toFixed(1)} MB: a file can be at most 3 MB.`, 'too_large');
+  const now = Date.now(), base = { id: rid('f'), title: name, created: now, updated: now, doc: '', diagrams: [{ id: rid('d'), type: 'architecture', name: 'Diagram 1', code: '', manual: {}, dir: 'LR', style: 'color' }], active: 0,
+    upload: { node: args.node.id, key: randomBytes(12).toString('hex'), name, type: up.type || 'application/octet-stream', format: 'text' } };
+  const sheetFrom = rows => {
+    const cells = {};
+    rows.slice(0, 2000).forEach((r, i) => (r || []).slice(0, 26).forEach((v, c) => { const t = v == null ? '' : String(v instanceof Date ? v.toISOString().slice(0, 10) : v); if (t !== '') cells[`${COL(c)}${i + 1}`] = t; }));
+    const e = extent(cells);
+    return { ...base, view: 'sheet', sheets: [{ id: rid('s'), name: 'Sheet1', rows: Math.max(100, e.rows + 20), cols: Math.max(26, e.cols), cells }] };
+  };
+  if (ext === 'csv' || ext === 'tsv') { const f = sheetFrom(csvRows(buf.toString('utf8').replace(/^﻿/, ''), ext === 'tsv' ? '\t' : ',')); f.upload.format = ext; return f; }
+  if (ext === 'xlsx') {
+    const { default: ExcelJS } = await import('exceljs');
+    const wb = new ExcelJS.Workbook();
+    try { await wb.xlsx.load(buf); } catch (e) { throw new FlowError(`“${name}” couldn’t be read as an Excel file.`, 'bad_file'); }
+    const ws = wb.worksheets[0], rows = [];
+    if (ws) ws.eachRow({ includeEmpty: true }, (row, n) => { rows[n - 1] = row.values.slice(1).map(cellValue); });
+    const f = sheetFrom(Array.from(rows, r => r || [])); f.upload.format = 'xlsx'; f.sheets[0].name = ws?.name || 'Sheet1'; return f;
+  }
+  // Text of any kind; a file with NUL bytes (a picture, a PDF, a Word file) can't be edited as text.
+  if (buf.subarray(0, 8000).includes(0)) throw new FlowError(`“${name}” isn’t a file that can be edited here. Upload text, Markdown, CSV, Excel (.xlsx), JSON or code.`, 'bad_file');
+  const text = buf.toString('utf8').replace(/^﻿/, '').replace(/\r\n?/g, '\n');
+  if (CODE_EXT.has(ext)) return { ...base, view: 'code', code: { files: [{ id: rid('cf'), path: name, text }], folders: [], open: [], active: null } };
+  return { ...base, view: 'doc', doc: text };
+}
+// The edited file, back in the format it came in.
+async function exportUpload(f, kind) {
+  const u = f.upload;
+  if (kind === 'sheet') {
+    const sh = (f.sheets || [])[0] || { cells: {} };
+    if (u.format === 'xlsx') {
+      const { default: ExcelJS } = await import('exceljs');
+      const wb = new ExcelJS.Workbook(), ws = wb.addWorksheet(sh.name || 'Sheet1'), e = extent(sh.cells || {});
+      for (let r = 0; r < e.rows; r++) ws.addRow(Array.from({ length: e.cols }, (_, c) => { const v = (sh.cells || {})[`${COL(c)}${r + 1}`] ?? ''; return v !== '' && !Number.isNaN(Number(v)) && /^-?\d/.test(v) ? Number(v) : v; }));
+      return bufFile(u.name, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', Buffer.from(await wb.xlsx.writeBuffer()));
+    }
+    return bufFile(u.name, u.format === 'tsv' ? 'text/tab-separated-values' : 'text/csv', Buffer.from(toCsv(sh.cells || {}, u.format === 'tsv' ? '\t' : ','), 'utf8'));
+  }
+  const text = kind === 'code' ? (f.code?.files?.[0]?.text || '') : (f.doc || '');
+  return bufFile(u.name, u.type && u.type !== 'application/octet-stream' ? u.type : mimeOf(u.name), Buffer.from(text, 'utf8'));
+}
+const toCsv = (cells, sep = ',') => {
+  const e = extent(cells), q = v => { const t = String(v ?? ''); return /[",\n\r\t]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+  return Array.from({ length: e.rows }, (_, r) => Array.from({ length: e.cols }, (_, c) => q(cells[`${COL(c)}${r + 1}`])).join(sep)).join('\n');
+};
+const MIME = { js: 'text/javascript', mjs: 'text/javascript', ts: 'text/plain', jsx: 'text/plain', tsx: 'text/plain', py: 'text/x-python', html: 'text/html', css: 'text/css', json: 'application/json', md: 'text/markdown', csv: 'text/csv', xml: 'application/xml', svg: 'image/svg+xml', yml: 'text/yaml', yaml: 'text/yaml', sql: 'text/plain', txt: 'text/plain' };
+const mimeOf = path => MIME[(String(path).split('.').pop() || '').toLowerCase()] || 'text/plain';
+
 /* ---- the nodes ---- */
 const STYLE_OPTS = ['text', 'heading', 'note'];
 export const UI_NODES = {
@@ -161,6 +239,86 @@ export const UI_NODES = {
     const id = keepCode(codeDoc(fw, String(raw.code || '').slice(0, 100_000), items));
     return add(args, { kind: 'code', id, height: Math.min(4000, Math.max(60, Number(p.height) || 320)), title: String(p.title || args.node.name || 'Code block'), css: p.css || '' });
   } },
+  /* An editor for one of your Workline files, on the page. It looks at the file to see what it is (or uses
+     what's picked): a doc (its text in a big box), a sheet (a grid of cells), a diagram (its code) or a code
+     project (one of its files, with the others as tabs). Save (a POST with this node's action) writes the
+     changes back to the file, then draws it again with “Saved”. Either way the page offers the whole file to
+     download, and the node gives it to the next steps as {name, type, size, data} (data in base64). */
+  'ui.editor': { run: async args => {
+    const p = first(args), page = args.ctx?.page || {}, query = page.query || {};
+    let f, qs = '';
+    if (p.source === 'upload') {
+      // A file uploaded here: the upload box until one is sent, then its editor (on its own link).
+      const open = `open-${args.node.id}`, title = p.title || 'Edit a file';
+      const box = error => { add(args, { kind: 'editor', part: 'upload', title, action: open, error, button: 'Open' }); return { main: [{ json: { saved: false, file: null } }] }; };
+      if (page.action === open) {
+        const up = (page.files || {}).upload;
+        if (!up) return box('Choose a file first.');
+        try { f = await importUpload(args, up); } catch (e) { if (e instanceof FlowError) return box(e.message); throw e; }
+        await args.ctx.files.save(f);
+      } else if (query.doc) {
+        const got = await args.ctx.files.read(String(query.doc)).catch(() => null);
+        if (got && got.upload && got.upload.node === args.node.id && got.upload.key === String(query.k || '')) f = got;
+        else return box('That file isn’t here any more. Upload it again.');
+      } else return box('');
+      qs = `doc=${encodeURIComponent(f.id)}&k=${encodeURIComponent(f.upload.key)}`;
+    } else f = await fileOf(args, p.fileId);
+    const kind = !f.upload && ['doc', 'sheet', 'diagram', 'code'].includes(p.part) ? p.part : kindOf(f);
+    const action = String(p.action || `save-${args.node.id}`).slice(0, 60);
+    const saving = page.action === action, form = page.form || {};
+    const lf = v => String(v ?? '').replace(/\r\n?/g, '\n');
+    let saved = false, block, out;
+    if (kind === 'sheet') {
+      const sh = sheetOf(f, p.sheet);
+      sh.cells ||= {};
+      if (saving) {
+        // Only the cells the grid showed: c_<address> for each; an emptied cell is cleared.
+        for (const [k, v] of Object.entries(form)) {
+          const m = /^c_([A-Z]{1,2}\d{1,4})$/.exec(k);
+          if (!m) continue;
+          const val = String(v ?? '');
+          if (val === '') delete sh.cells[m[1]]; else sh.cells[m[1]] = val;
+        }
+        const e = extent(sh.cells);
+        sh.rows = Math.max(sh.rows || 100, e.rows + 20); sh.cols = Math.max(sh.cols || 26, e.cols);
+        await args.ctx.files.save(f); saved = true;
+      }
+      const e = extent(sh.cells);
+      // What's there, plus room to add: 3 more rows and 1 more column (at most 200 × 26).
+      const rows = Math.min(200, Math.max(e.rows + 3, 6)), cols = Math.min(26, Math.max(e.cols + 1, 3));
+      const grid = Array.from({ length: rows }, (_, r) => Array.from({ length: cols }, (_, c) => { const a = `${COL(c)}${r + 1}`; return { a, v: sh.cells[a] ?? '' }; }));
+      block = { part: 'sheet', grid, cols: Array.from({ length: cols }, (_, c) => COL(c)), label: `Sheet · ${sh.name}` };
+      out = asFile(`${f.title}${(f.sheets || []).length > 1 ? ` - ${sh.name}` : ''}.csv`, 'text/csv', toCsv(sh.cells));
+    } else if (kind === 'code') {
+      const files = Array.isArray(f.code?.files) ? f.code.files : [];
+      if (!files.length) throw new FlowError(`“${f.title}” has no code files yet.`, 'not_found');
+      // Which file: the one asked for in the link (?edit=path), else the one set here, else the one open in Workline.
+      const want = String(query.edit || p.path || '').trim();
+      const cf = files.find(x => x.path === want) || files.find(x => x.id === f.code.active) || files[0];
+      if (saving && form.path === cf.path) { cf.text = lf(form.content); await args.ctx.files.save(f); saved = true; }
+      block = { part: 'code', text: cf.text || '', label: cf.path, path: cf.path, mono: true, tabs: files.slice(0, 40).map(x => ({ path: x.path, on: x === cf })) };
+      out = asFile(cf.path.split('/').pop(), mimeOf(cf.path), cf.text || '');
+    } else if (kind === 'diagram') {
+      f.diagrams = Array.isArray(f.diagrams) ? f.diagrams : [];
+      const name = String(p.diagram || '').trim();
+      let d = name ? f.diagrams.find(x => x.name === name) : (f.diagrams.find(x => String(x.code || '').trim()) || f.diagrams[0]);
+      if (saving) {
+        const code = lf(form.content);
+        if (d) d.code = code; else { d = { id: rid('d'), type: 'architecture', name: name || 'Diagram 1', code, manual: {}, dir: 'LR', style: 'color' }; f.diagrams.push(d); }
+        await args.ctx.files.save(f); saved = true;
+      }
+      block = { part: 'diagram', text: d?.code || '', label: `Diagram code${d ? ` · ${d.name}` : ''}`, mono: true };
+      out = asFile(`${f.title}${d ? ` - ${d.name}` : ''}.txt`, 'text/plain', d?.code || '');
+    } else {
+      if (saving) { f.doc = lf(form.content); await args.ctx.files.save(f); saved = true; }
+      block = { part: 'doc', text: f.doc || '', label: 'Doc' };
+      out = asFile(`${f.title}.md`, 'text/markdown', f.doc || '');
+    }
+    if (f.upload) out = await exportUpload(f, kind);
+    add(args, { kind: 'editor', title: f.upload ? f.upload.name : p.title || f.title, action, button: p.button || 'Save', saved, rows: Math.min(60, Math.max(8, Number(p.rows) || 18)), ...block, qs, another: !!f.upload,
+      what: KIND_WORD[kind], download: { name: out.name, href: `data:${out.type};base64,${out.data}`, size: out.size } });
+    return { main: [{ json: { fileId: f.id, title: f.title, kind, saved, file: out } }] };
+  } },
   'ui.form': { run: args => {
     const p = first(args);
     return add(args, { kind: 'form', title: p.title || '', action: String(p.action || args.node.name || 'submit').slice(0, 60), fields: formFields(p.fields), button: p.button || 'Send', values: args.ctx?.page?.form || {} });
@@ -190,6 +348,21 @@ function block(b, query) {
     case 'form': return `<section class="panel">${head}<form method="post"><input type="hidden" name="_action" value="${esc(b.action)}">${b.fields.map(f => `<label>${esc(f.name)}${f.required ? ' *' : ''}${f.kind === 'long'
       ? `<textarea name="${esc(f.key)}"${f.required ? ' required' : ''}>${esc(b.values[f.key] ?? '')}</textarea>`
       : `<input name="${esc(f.key)}" type="${f.kind}" value="${esc(b.values[f.key] ?? '')}"${f.required ? ' required' : ''}>`}</label>`).join('')}<button>${esc(b.button)}</button></form></section>`;
+    case 'editor': {
+      if (b.part === 'upload') return `<section class="panel editor"><div class="ed-top"><h3>${esc(b.title)}</h3></div>${b.error ? `<p class="ed-err" role="alert">${esc(b.error)}</p>` : ''}<form method="post" enctype="multipart/form-data" action="?"><input type="hidden" name="_action" value="${esc(b.action)}"><label>Your file <span class="muted">(text, Markdown, CSV, Excel .xlsx, JSON or code; up to 3 MB)</span><input type="file" name="upload" required></label><button>${esc(b.button)}</button></form></section>`;
+      const ok = b.saved ? '<span class="ed-ok" role="status">✓ Saved</span>' : '';
+      const kb = b.download.size < 1024 ? `${b.download.size} B` : `${Math.round(b.download.size / 1024)} KB`;
+      const dl = `<a class="ed-dl" href="${esc(b.download.href)}" download="${esc(b.download.name)}">⬇ Download ${esc(b.download.name)} <small>${kb}</small></a>`;
+      const top = `<div class="ed-top"><h3>${esc(b.title)} <span class="ed-kind">${esc(b.what)}</span></h3>${ok}</div>`;
+      const link = path => `?${[b.qs, path ? `edit=${encodeURIComponent(path)}` : ''].filter(Boolean).join('&')}`;
+      const tabs = b.tabs && b.tabs.length > 1 ? `<nav class="ed-tabs">${b.tabs.map(t => `<a class="btn${t.on ? ' on' : ''}" href="${esc(link(t.path))}">${esc(t.path)}</a>`).join('')}</nav>` : '';
+      const hidden = `<input type="hidden" name="_action" value="${esc(b.action)}">${b.path ? `<input type="hidden" name="path" value="${esc(b.path)}">` : ''}`;
+      const body = b.part === 'sheet'
+        ? `<div class="ed-grid" aria-label="${esc(b.label)}"><table><thead><tr><th></th>${b.cols.map(c => `<th>${c}</th>`).join('')}</tr></thead><tbody>${b.grid.map((row, r) => `<tr><th>${r + 1}</th>${row.map(c => `<td><input name="c_${c.a}" value="${esc(c.v)}" aria-label="${c.a}"></td>`).join('')}</tr>`).join('')}</tbody></table></div>`
+        : `<label>${esc(b.label)}<textarea name="content" rows="${b.rows}" class="${b.mono ? 'mono' : ''}" spellcheck="${b.mono ? 'false' : 'true'}">${esc(b.text)}</textarea></label>`;
+      const action = b.path || b.qs ? ` action="${esc(link(b.path))}"` : '';
+      return `<section class="panel editor">${top}${tabs}<form method="post"${action}>${hidden}${body}<div class="ed-acts"><button>${esc(b.button)}</button>${dl}${b.another ? '<a class="ed-new" href="?">Open another file</a>' : ''}</div></form></section>`;
+    }
     default: return '';
   }
 }
@@ -215,6 +388,12 @@ a{color:${t.acc}}code{font:13px ui-monospace,monospace;background:${t.card};bord
 form{display:grid;gap:12px}label{display:grid;gap:5px;font-weight:600;font-size:13px}input,textarea{font:inherit;padding:10px 12px;border:1px solid ${t.line};border-radius:10px;background:${t.bg};color:${t.fg}}textarea{min-height:100px}
 button{justify-self:start;padding:10px 20px;border:0;border-radius:10px;background:${t.acc};color:#fff;font:600 15px system-ui;cursor:pointer}
 .error{border:1px solid #f0b4b4;background:${dark ? '#2a1414' : '#fff1f1'};color:${dark ? '#ffb4b4' : '#a11'};border-radius:12px;padding:12px 16px}
+.editor .ed-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}.editor .ed-top h3{margin:0}.ed-ok{font-size:13px;font-weight:700;color:${dark ? '#7ee2b8' : '#0b7a52'};background:${dark ? '#12301f' : '#e7f7ef'};padding:4px 10px;border-radius:999px}
+.ed-kind{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:2px 8px;border-radius:999px;border:1px solid ${t.line};margin-left:6px;vertical-align:1px}
+.ed-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}.ed-tabs .btn{font:12.5px ui-monospace,monospace;padding:5px 10px}
+.ed-acts{display:flex;align-items:center;gap:14px;flex-wrap:wrap}.ed-new{margin-left:auto;font-size:13px;color:${t.mut}}.ed-err{margin:0 0 10px;color:${dark ? '#ffb4b4' : '#a11'};font-weight:600}.ed-dl{font-weight:600;font-size:14px;text-decoration:none}.ed-dl small{color:${t.mut};font-weight:400}
+.editor textarea{min-height:240px;line-height:1.6;resize:vertical;font-weight:400}.editor textarea.mono{font:13px/1.6 ui-monospace,monospace}
+.ed-grid{overflow:auto;max-height:70vh;border:1px solid ${t.line};border-radius:10px}.ed-grid table{font-size:13px}.ed-grid th{position:sticky;top:0;background:${t.card};text-align:center;padding:6px 8px;z-index:1}.ed-grid tbody th{position:sticky;left:0;top:auto;width:42px}.ed-grid td{padding:0;border-left:1px solid ${t.line}}.ed-grid td input{width:100%;min-width:110px;border:0;border-radius:0;padding:7px 9px;background:transparent}.ed-grid td input:focus{outline:2px solid ${t.acc};outline-offset:-2px;background:${t.bg}}
 footer{color:${t.mut};font-size:12px;text-align:center}.node{min-width:0}.codeblock{display:block;width:100%;border:0;border-radius:12px;background:transparent}
 </style>${params.css ? `<style>${cssOf(params.css)}</style>` : ''}</head><body><main>
 ${params.title || params.description ? `<header>${params.title ? `<h1>${esc(params.title)}</h1>` : ''}${params.description ? `<p>${esc(params.description)}</p>` : ''}</header>` : ''}

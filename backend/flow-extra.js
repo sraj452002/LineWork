@@ -364,13 +364,13 @@ async function scan(client, pattern) {
   for await (const k of client.scanIterator({ MATCH: pattern, COUNT: 100 })) { keys.push(...(Array.isArray(k) ? k : [k])); if (keys.length >= 1000) break; }
   return keys;
 }
-function cellValue(v) {
+export function cellValue(v) {
   if (v == null) return null;
   if (v instanceof Date) return v.toISOString();
   if (typeof v === 'object') return v.result ?? v.text ?? (v.richText ? v.richText.map(t => t.text).join('') : v.hyperlink ? v.text || v.hyperlink : null);
   return v;
 }
-function csvRows(text, sep) {
+export function csvRows(text, sep) {
   const rows = [];
   let row = [], cur = '', q = false;
   for (let i = 0; i < text.length; i++) {

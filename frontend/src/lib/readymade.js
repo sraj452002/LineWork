@@ -865,6 +865,14 @@ const PAGES = [
     ];
     return flowFile('Feedback form page', nodes, edges);
   } },
+  { k: 'p-editor', name: 'Edit any file', note: 'Upload a file, edit it on the page, download it back in the same format', make: () => {
+    const nodes = [
+      node('trigger.page', 'Upload a file', 80, { path: secretPath(), title: 'Edit a file', description: 'Upload a file (text, Markdown, CSV, Excel, JSON or code), change it, then download it.', theme: 'light', width: 'wide' }),
+      node('ui.editor', 'Editor', 360, { source: 'upload', title: 'Your file', button: 'Save', rows: 20 }),
+      node('core.set', 'Edited file', 640, { fields: [{ name: 'file', value: '{{ $json.file }}' }, { name: 'saved', value: '{{ $json.saved }}' }], keep: false }),
+    ];
+    return flowFile('Edit any file', nodes);
+  } },
 ];
 
 export const READY_TOOLS = ['Diagrams', 'Docs', 'Sheets', 'Databases', 'Code', 'Workflows', 'Apps', 'Pages'];

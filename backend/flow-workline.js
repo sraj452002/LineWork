@@ -8,24 +8,24 @@ import { handle as dbHandle } from './dbconnect.js';
    saves the account's files; a file changed here is saved like any other (with its version history).
    Sheet cells are read as written: a formula cell gives its formula, not its value. */
 
-const COL = n => { let s = ''; for (n += 1; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + ((n - 1) % 26)) + s; return s; };
-const parseAddr = a => { const m = /^([A-Z]+)(\d+)$/.exec(a); if (!m) return null; let c = 0; for (const ch of m[1]) c = c * 26 + ch.charCodeAt(0) - 64; return { c: c - 1, r: Number(m[2]) - 1 }; };
-const rid = p => p + Date.now().toString(36) + randomBytes(4).toString('hex');
+export const COL = n => { let s = ''; for (n += 1; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + ((n - 1) % 26)) + s; return s; };
+export const parseAddr = a => { const m = /^([A-Z]+)(\d+)$/.exec(a); if (!m) return null; let c = 0; for (const ch of m[1]) c = c * 26 + ch.charCodeAt(0) - 64; return { c: c - 1, r: Number(m[2]) - 1 }; };
+export const rid = p => p + Date.now().toString(36) + randomBytes(4).toString('hex');
 const text = v => (v == null ? '' : typeof v === 'object' ? JSON.stringify(v) : String(v));
 
-async function fileOf(args, id) {
+export async function fileOf(args, id) {
   const f = await args.ctx.files.read(need(id, 'the Workline file'));
   if (!f) throw new FlowError('That Workline file wasn’t found. Pick it again.', 'not_found');
   return f;
 }
-const sheetOf = (f, name) => {
+export const sheetOf = (f, name) => {
   const sheets = Array.isArray(f.sheets) ? f.sheets : [];
   const s = name ? sheets.find(x => x.name === name) : sheets[0];
   if (!s) throw new FlowError(name ? `No sheet called “${name}” in “${f.title}”.` : `“${f.title}” has no sheets yet.`, 'not_found');
   return s;
 };
 // A sheet's used area: the last row and column with something in them.
-const extent = cells => {
+export const extent = cells => {
   let rows = 0, cols = 0;
   for (const a of Object.keys(cells || {})) { const p = parseAddr(a); if (p && cells[a] !== '') { rows = Math.max(rows, p.r + 1); cols = Math.max(cols, p.c + 1); } }
   return { rows, cols };
