@@ -4663,3 +4663,4 @@ body{background:radial-gradient(1100px 620px at 8% -10%,color-mix(in srgb,var(--
 .app-run-page.desk .btn.primary.app-run{color:#fff;background:linear-gradient(120deg,var(--tn),color-mix(in srgb,var(--tn) 55%,var(--c-purple)));border:0;box-shadow:0 12px 26px -12px var(--tn)}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .app-run-page.desk .btn.primary.app-run{color:#0E1220}}
 :root[data-theme="dark"] .app-run-page.desk .btn.primary.app-run{color:#0E1220}
+@media (max-width:800px){.desk .app-body{grid-template-columns:1fr}.desk .app-hero{padding:20px}.desk .app-hero h2{font-size:22px}.desk .app-hero .app-icon{width:56px;height:56px;font-size:30px}}
