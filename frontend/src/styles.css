@@ -4553,30 +4553,41 @@ body{background:radial-gradient(1100px 620px at 8% -10%,color-mix(in srgb,var(--
 @keyframes fr-hourglass{0%,40%{transform:rotate(0)}50%,90%{transform:rotate(180deg)}100%{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.fr-core.is-wait .rh-mark svg{animation:none}}
 
-/* Before a run (FriendlyRun's AuroraIdle): a flat 2D vector rocket. Flat fills and crisp ink outlines only.
-   It hovers and sways; the flame flickers; speed lines and stars stream down behind; smoke puffs drift. */
-.fx-rkt{width:220px;height:220px;flex:none;overflow:visible;margin-bottom:2px}
-.ws .fx-rkt{width:250px;height:250px}
-.fx-rkt *{transform-box:fill-box;transform-origin:center}
-.fx-sky{fill:color-mix(in srgb,var(--c-purple) 13%,var(--surface))}
-.fx-frame{fill:none;stroke:var(--ink);stroke-width:2.5}
-.fx-speed{stroke:color-mix(in srgb,var(--c-blue) 55%,transparent);stroke-width:3;stroke-linecap:round;animation:fx-fall 1.4s linear infinite}
-.fx-star{fill:var(--hi);stroke:var(--ink);stroke-width:1.1;stroke-linejoin:round;animation:fx-drift 3.2s linear infinite}
-.fx-puff{fill:var(--surface);stroke:var(--ink);stroke-width:2.2}
-.p1{animation:fx-puff 2.6s ease-in-out infinite}.p2{animation:fx-puff 2.6s ease-in-out -.6s infinite}.p3{animation:fx-puff 2.6s ease-in-out -1.3s infinite}.p4{animation:fx-puff 2.6s ease-in-out -1.9s infinite}
-.fx-rocket{transform-box:view-box!important;transform-origin:110px 110px!important;animation:fx-hover 2.6s ease-in-out infinite}
-.fx-body{fill:var(--surface);stroke:var(--ink);stroke-width:2.6;stroke-linejoin:round}
-.fx-nose{fill:#8B6CF6;stroke:var(--ink);stroke-width:2.6;stroke-linejoin:round}
-.fx-fin{fill:#F06FA8;stroke:var(--ink);stroke-width:2.6;stroke-linejoin:round}
-.fx-win{fill:#5B8DEF;stroke:var(--ink);stroke-width:2.6}
-.fx-win-shine{fill:none;stroke:#fff;stroke-width:2.4;stroke-linecap:round}
-.fx-nozzle{fill:#2BC8A8;stroke:var(--ink);stroke-width:2.4;stroke-linejoin:round}
-.fx-flame{transform-origin:50% 0!important;animation:fx-flicker .32s ease-in-out infinite alternate}
-.fx-fl-out{fill:#FF8A4C;stroke:var(--ink);stroke-width:2.2;stroke-linejoin:round}
-.fx-fl-in{fill:var(--hi)}
-@keyframes fx-fall{from{transform:translateY(-40px)}to{transform:translateY(240px)}}
-@keyframes fx-drift{from{transform:translateY(-20px) rotate(0) scale(1.3)}to{transform:translateY(240px) rotate(180deg) scale(1.3)}}
-@keyframes fx-puff{0%,100%{transform:translateX(0) scale(1)}50%{transform:translateX(5px) scale(1.12)}}
-@keyframes fx-hover{0%,100%{transform:translateY(0) rotate(-2deg) scale(1.2)}50%{transform:translateY(-8px) rotate(2deg) scale(1.2)}}
-@keyframes fx-flicker{from{transform:scaleY(.82) scaleX(1.04)}to{transform:scaleY(1.14) scaleX(.94)}}
-@media (prefers-reduced-motion:reduce){.fx-rkt *{animation:none!important}}
+/* Before a run (FriendlyRun's CanvasIdle): a little flat node canvas executing the steps in turn.
+   A dotted canvas; square nodes with ports; a running node spins a blue border; a done one turns green
+   with a tick; a connection carries a dot, then goes green with “1 item”. */
+.nn-canvas{display:flex;align-items:flex-start;justify-content:center;padding:26px 30px 14px;margin-bottom:10px;border-radius:18px;max-width:100%;
+  background-color:color-mix(in srgb,var(--ink) 2.5%,var(--surface));background-image:radial-gradient(color-mix(in srgb,var(--ink) 16%,transparent) 1.1px,transparent 1.2px);background-size:16px 16px;
+  border:1px solid var(--hair)}
+.ws .nn-canvas{zoom:1.15}
+.nn-node{display:flex;flex-direction:column;align-items:center;gap:8px;width:84px;flex:none}
+.nn-node small{font-size:11.5px;font-weight:600;color:var(--ink2);text-align:center;max-width:92px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nn-box{position:relative;display:grid;place-items:center;width:64px;height:64px;border-radius:16px;background:var(--surface);border:2px solid color-mix(in srgb,var(--ink) 18%,transparent);transition:border-color .25s,transform .25s}
+.nn-box .rh-mark{width:36px;height:36px;border-radius:10px}
+.nn-port{position:absolute;top:calc(50% - 5px);width:10px;height:10px;border-radius:50%;background:var(--surface);border:2px solid color-mix(in srgb,var(--ink) 30%,transparent)}
+.nn-port.in{left:-6px}.nn-port.out{right:-6px}
+.nn-node:first-child .nn-port.in,.nn-node:last-child .nn-port.out{display:none}
+.nn-node.run .nn-box{border-color:transparent;transform:scale(1.06)}
+@property --nn-a{syntax:'<angle>';inherits:false;initial-value:0deg}
+.nn-node.run .nn-box::before{content:"";position:absolute;inset:-2px;border-radius:16px;padding:2.5px;background:conic-gradient(from var(--nn-a),var(--c-blue) 0 28%,color-mix(in srgb,var(--c-blue) 18%,transparent) 28% 50%,var(--c-blue) 50% 78%,color-mix(in srgb,var(--c-blue) 18%,transparent) 78%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0);animation:nn-turn .9s linear infinite}
+@keyframes nn-turn{to{--nn-a:360deg}}
+.nn-node.run .nn-box{box-shadow:0 0 0 5px color-mix(in srgb,var(--c-blue) 14%,transparent)}
+.nn-node.run small{color:var(--c-blue)}
+.nn-node.done .nn-box{border-color:var(--c-green)}
+.nn-node.done small{color:var(--ink)}
+.nn-ok{position:absolute;top:-9px;right:-9px;display:grid;place-items:center;width:20px;height:20px;border-radius:50%;background:var(--c-green);color:var(--surface);font-size:12px;font-weight:900;border:2px solid var(--surface);animation:nn-pop .35s cubic-bezier(.3,1.6,.5,1) both}
+.nn-link{position:relative;width:58px;height:64px;flex:none;margin:0 -2px}
+.nn-line{position:absolute;left:0;right:0;top:31px;height:2px;border-radius:2px;background:color-mix(in srgb,var(--ink) 22%,transparent);transition:background .25s}
+.nn-link.flow .nn-line{background:repeating-linear-gradient(90deg,var(--c-green) 0 6px,transparent 6px 11px);background-size:22px 2px;animation:nn-dash .45s linear infinite}
+.nn-link.done .nn-line{background:var(--c-green)}
+.nn-dot{position:absolute;top:27px;left:0;width:10px;height:10px;border-radius:50%;background:var(--c-green);border:2px solid var(--surface);animation:nn-go .85s ease-in-out forwards}
+.nn-link em{position:absolute;left:50%;top:10px;transform:translateX(-50%);font-style:normal;font-size:10.5px;font-weight:700;color:var(--c-green);white-space:nowrap;animation:nn-pop .3s ease-out both}
+@keyframes nn-spin{to{transform:rotate(360deg)}}
+@keyframes nn-pop{from{transform:scale(.3);opacity:0}to{transform:scale(1);opacity:1}}
+.nn-link em{animation-name:nn-fade}
+@keyframes nn-fade{from{opacity:0;transform:translate(-50%,4px)}to{opacity:1;transform:translate(-50%,0)}}
+@keyframes nn-dash{to{background-position:22px 0}}
+@keyframes nn-go{from{left:-4px}to{left:calc(100% - 6px)}}
+@media (max-width:700px){.nn-canvas{zoom:.8}}
+@media (prefers-reduced-motion:reduce){.nn-canvas *{animation:none!important}}

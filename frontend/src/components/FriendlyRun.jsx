@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { nodeDef } from '../lib/flows.js';
 import { Mark } from './RunViews.jsx';
 
@@ -59,8 +59,8 @@ export function FriendlyRun({ steps, run, done, title, secs, failed, onReplay, o
   return (
     <div className={'fr st-' + state}>
       <div className="fr-stage">
-        {/* Before a run: a living aurora orb. (Run is in the toolbar.) */}
-        {state === 'idle' && <AuroraIdle />}
+        {/* Before a run: a little workflow canvas executing its steps one by one. (Run is in the toolbar.) */}
+        {state === 'idle' && <CanvasIdle steps={seen} />}
         {state !== 'idle' && <div className={'fr-orb st-' + state} aria-hidden="true">
           <i className="fr-ring r1" /><i className="fr-ring r2" /><i className="fr-ring r3" />
           <span className="fr-orbit"><i /><i /><i /></span>
@@ -118,40 +118,43 @@ export function FriendlyRun({ steps, run, done, title, secs, failed, onReplay, o
   );
 }
 
-/* Before a run: a flat 2D vector rocket, ready to go. It hovers over its pad with a flickering flame,
-   speed lines and stars streaming past behind it, puffs of smoke drifting at the bottom. */
-const STAR = 'M0 -6 L1.6 -1.6 L6 0 L1.6 1.6 L0 6 L-1.6 1.6 L-6 0 L-1.6 -1.6Z';
-function AuroraIdle() {
+/* Before a run: a little workflow canvas (flat, like a node editor) running this workflow's own first
+   steps: each node runs (a spinning border), hands its data along the connection (a dot travelling, then a
+   green line with “1 item”), and turns green with a tick; when all are done it starts again. */
+function CanvasIdle({ steps }) {
+  const list = steps.slice(0, 4), n = list.length;
+  const [t, setT] = useState(0); // the node running now (n: all done, holding)
+  useEffect(() => {
+    if (!n) return undefined;
+    const id = setInterval(() => setT(x => (x >= n + 1 ? 0 : x + 1)), 900);
+    return () => clearInterval(id);
+  }, [n]);
+  if (!n) return null;
   return (
-    <svg className="fx-rkt" viewBox="0 0 220 220" aria-hidden="true">
-      <defs><clipPath id="fx-rclip"><circle cx="110" cy="110" r="92" /></clipPath></defs>
-      <circle cx="110" cy="110" r="92" className="fx-sky" />
-      <g clipPath="url(#fx-rclip)">
-        {[[46, 0, 26], [82, 1.1, 18], [150, .5, 30], [176, 1.7, 20], [64, 2.3, 14], [132, 2.9, 22]].map(([x, d, h], i) => (
-          <line key={i} x1={x} x2={x} y1="0" y2={h} className="fx-speed" style={{ animationDelay: `-${d}s` }} />
-        ))}
-        {[[44, 0, .4], [170, 0, 1.6], [150, 0, 2.6], [64, 0, 1.2], [104, 0, 2.1]].map(([x, y, d], i) => (
-          <g key={i} transform={`translate(${x} ${y})`}><path d={STAR} className="fx-star" style={{ animationDelay: `-${d}s` }} /></g>
-        ))}
-        <g className="fx-puffs">
-          <circle cx="62" cy="200" r="22" className="fx-puff p1" /><circle cx="96" cy="208" r="26" className="fx-puff p2" />
-          <circle cx="132" cy="206" r="24" className="fx-puff p3" /><circle cx="164" cy="198" r="20" className="fx-puff p4" />
-        </g>
-      </g>
-      <circle cx="110" cy="110" r="92" className="fx-frame" />
-      <g className="fx-rocket">
-        <g className="fx-flame">
-          <path d="M100 150 Q110 192 120 150 Z" className="fx-fl-out" />
-          <path d="M104 150 Q110 176 116 150 Z" className="fx-fl-in" />
-        </g>
-        <path d="M92 128 L76 150 L92 146 Z" className="fx-fin" />
-        <path d="M128 128 L144 150 L128 146 Z" className="fx-fin" />
-        <path d="M110 46 C128 62 132 92 130 130 L128 150 L92 150 L90 130 C88 92 92 62 110 46 Z" className="fx-body" />
-        <path d="M110 46 C119 54 124 64 126 74 L94 74 C96 64 101 54 110 46 Z" className="fx-nose" />
-        <circle cx="110" cy="100" r="11" className="fx-win" />
-        <path d="M104 96 A7 7 0 0 1 110 92" className="fx-win-shine" />
-        <path d="M102 150 L118 150 L116 156 L104 156 Z" className="fx-nozzle" />
-      </g>
-    </svg>
+    <div className="nn-canvas" aria-hidden="true">
+      {list.map((s, i) => {
+        const st = i < t ? 'done' : i === t ? 'run' : 'wait';
+        const link = i === n - 1 ? null : t > i + 1 ? 'done' : t === i + 1 ? 'flow' : 'wait';
+        return (
+          <Fragment key={s.n.id}>
+            <div className={'nn-node ' + st}>
+              <span className="nn-box">
+                <i className="nn-port in" /><i className="nn-port out" />
+                <Mark type={s.n.type} size={22} />
+                {st === 'done' && <b className="nn-ok">✓</b>}
+              </span>
+              <small>{s.n.name}</small>
+            </div>
+            {link && (
+              <div className={'nn-link ' + link}>
+                <i className="nn-line" />
+                {link === 'flow' && <i className="nn-dot" key={'d' + t} />}
+                {link === 'done' && <em>1 item</em>}
+              </div>
+            )}
+          </Fragment>
+        );
+      })}
+    </div>
   );
 }
