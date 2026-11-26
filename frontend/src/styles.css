@@ -4553,54 +4553,28 @@ body{background:radial-gradient(1100px 620px at 8% -10%,color-mix(in srgb,var(--
 @keyframes fr-hourglass{0%,40%{transform:rotate(0)}50%,90%{transform:rotate(180deg)}100%{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.fr-core.is-wait .rh-mark svg{animation:none}}
 
-/* Before a run (FriendlyRun's CanvasIdle): a little flat node canvas executing the steps in turn.
-   A dotted canvas; square nodes with ports; a running node spins a blue border; a done one turns green
-   with a tick; a connection carries a dot, then goes green with “1 item”. */
-.nn-canvas{display:flex;align-items:flex-start;justify-content:center;padding:26px 30px 14px;margin-bottom:10px;border-radius:18px;max-width:100%;
-  background-color:color-mix(in srgb,var(--ink) 2.5%,var(--surface));background-image:radial-gradient(color-mix(in srgb,var(--ink) 16%,transparent) 1.1px,transparent 1.2px);background-size:16px 16px;
-  border:1px solid var(--hair)}
-.ws .nn-canvas{zoom:1.15}
-.nn-node{display:flex;flex-direction:column;align-items:center;gap:8px;width:84px;flex:none}
-.nn-node small{font-size:11.5px;font-weight:600;color:var(--ink2);text-align:center;max-width:92px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.nn-box{position:relative;display:grid;place-items:center;width:64px;height:64px;border-radius:16px;background:var(--surface);border:2px solid color-mix(in srgb,var(--ink) 18%,transparent);transition:border-color .25s,transform .25s}
-.nn-box .rh-mark{width:36px;height:36px;border-radius:10px}
-.nn-port{position:absolute;top:calc(50% - 5px);width:10px;height:10px;border-radius:50%;background:var(--surface);border:2px solid color-mix(in srgb,var(--ink) 30%,transparent)}
-.nn-port.in{left:-6px}.nn-port.out{right:-6px}
-.nn-node:first-child .nn-port.in,.nn-node:last-child .nn-port.out{display:none}
-.nn-node.run .nn-box{border-color:transparent;transform:scale(1.06)}
-@property --nn-a{syntax:'<angle>';inherits:false;initial-value:0deg}
-.nn-node.run .nn-box::before{content:"";position:absolute;inset:-2px;border-radius:16px;padding:2.5px;background:conic-gradient(from var(--nn-a),var(--c-blue) 0 28%,color-mix(in srgb,var(--c-blue) 18%,transparent) 28% 50%,var(--c-blue) 50% 78%,color-mix(in srgb,var(--c-blue) 18%,transparent) 78%);
-  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0);animation:nn-turn .9s linear infinite}
-@keyframes nn-turn{to{--nn-a:360deg}}
-.nn-node.run .nn-box{box-shadow:0 0 0 5px color-mix(in srgb,var(--c-blue) 14%,transparent)}
-.nn-node.run small{color:var(--c-blue)}
-.nn-node.done .nn-box{border-color:var(--c-green)}
-.nn-node.done small{color:var(--ink)}
-.nn-ok{position:absolute;top:-9px;right:-9px;display:grid;place-items:center;width:20px;height:20px;border-radius:50%;background:var(--c-green);color:var(--surface);font-size:12px;font-weight:900;border:2px solid var(--surface);animation:nn-pop .35s cubic-bezier(.3,1.6,.5,1) both}
-.nn-link{position:relative;width:58px;height:64px;flex:none;margin:0 -2px}
-.nn-line{position:absolute;left:0;right:0;top:31px;height:2px;border-radius:2px;background:color-mix(in srgb,var(--ink) 22%,transparent);transition:background .25s}
-.nn-link.flow .nn-line{background:repeating-linear-gradient(90deg,var(--c-green) 0 6px,transparent 6px 11px);background-size:22px 2px;animation:nn-dash .45s linear infinite}
-.nn-link.done .nn-line{background:var(--c-green)}
-.nn-dot{position:absolute;top:27px;left:0;width:10px;height:10px;border-radius:50%;background:var(--c-green);border:2px solid var(--surface);animation:nn-go .85s ease-in-out forwards}
-.nn-link em{position:absolute;left:50%;top:10px;transform:translateX(-50%);font-style:normal;font-size:10.5px;font-weight:700;color:var(--c-green);white-space:nowrap;animation:nn-pop .3s ease-out both}
-@keyframes nn-spin{to{transform:rotate(360deg)}}
-@keyframes nn-pop{from{transform:scale(.3);opacity:0}to{transform:scale(1);opacity:1}}
-.nn-link em{animation-name:nn-fade}
-@keyframes nn-fade{from{opacity:0;transform:translate(-50%,4px)}to{opacity:1;transform:translate(-50%,0)}}
-@keyframes nn-dash{to{background-position:22px 0}}
-@keyframes nn-go{from{left:-4px}to{left:calc(100% - 6px)}}
-@media (max-width:700px){.nn-canvas{zoom:.8}}
-@media (prefers-reduced-motion:reduce){.nn-canvas *{animation:none!important}}
-/* The canvas in one accent: neutral icons, and violet for running, done, the links and their labels. */
-.nn-canvas{--nn:var(--c-purple)}
-.nn-box .rh-mark{--tone:var(--ink2);background:color-mix(in srgb,var(--ink) 6%,var(--surface));color:var(--ink2)}
-.nn-node.done .nn-box .rh-mark,.nn-node.run .nn-box .rh-mark{background:color-mix(in srgb,var(--nn) 12%,var(--surface));color:var(--nn)}
-.nn-node.run .nn-box::before{background:conic-gradient(from var(--nn-a),var(--nn) 0 28%,color-mix(in srgb,var(--nn) 18%,transparent) 28% 50%,var(--nn) 50% 78%,color-mix(in srgb,var(--nn) 18%,transparent) 78%)}
-.nn-node.run .nn-box{box-shadow:0 0 0 5px color-mix(in srgb,var(--nn) 14%,transparent)}
-.nn-node.run small{color:var(--nn)}
-.nn-node.done .nn-box{border-color:var(--nn)}
-.nn-ok{background:var(--nn)}
-.nn-link.flow .nn-line{background:repeating-linear-gradient(90deg,var(--nn) 0 6px,transparent 6px 11px);background-size:22px 2px}
-.nn-link.done .nn-line{background:var(--nn)}
-.nn-dot{background:var(--nn)}
-.nn-link em{color:var(--nn)}
+/* Before a run (FriendlyRun's AnimeIdle): an anime-style READY! panel, flat 2D with ink outlines. */
+.an{width:min(400px,86%);height:auto;flex:none;margin-bottom:8px;overflow:visible}
+.ws .an{width:min(460px,70%)}
+.an *{transform-box:fill-box;transform-origin:center}
+.an-bg{fill:color-mix(in srgb,var(--hi) 10%,var(--surface))}
+.an-frame{fill:none;stroke:var(--ink);stroke-width:3}
+.an-speed line{stroke:var(--ink);stroke-linecap:round;opacity:.75;animation:an-rush .5s ease-in infinite}
+.an-flash{fill:#fff;opacity:0;animation:an-flash 3.2s ease-out infinite}
+.an-burst{animation:an-pulse 1.6s cubic-bezier(.3,1.6,.5,1) infinite}
+.an-burst-back{fill:var(--ink)}
+.an-burst-front{fill:var(--hi);stroke:var(--ink);stroke-width:3;stroke-linejoin:round}
+.an-word{font:italic 900 34px/1 var(--ui);letter-spacing:.02em;text-anchor:middle;fill:#fff;stroke:var(--ink);stroke-width:3;paint-order:stroke;transform-box:view-box!important;transform-origin:140px 100px!important;transform:skewX(-8deg)}
+.an-word-back{fill:#F06FA8;stroke:none;transform:translate(3px,3px) skewX(-8deg)}
+.an-kira{fill:#fff;stroke:var(--ink);stroke-width:1.6;stroke-linejoin:round;animation:an-kira 2.6s ease-in-out infinite}
+.an-petal{fill:#F9A8D4;stroke:var(--ink);stroke-width:1.3;animation:an-spinp 2.4s linear infinite}
+.an-petal-path{transform-box:view-box!important;animation:an-fall 4.2s linear infinite}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .an-bg{fill:color-mix(in srgb,var(--hi) 7%,var(--surface))}:root:not([data-theme="light"]) .an-word{fill:#171A24}:root:not([data-theme="light"]) .an-flash{fill:var(--hi)}}
+:root[data-theme="dark"] .an-bg{fill:color-mix(in srgb,var(--hi) 7%,var(--surface))}:root[data-theme="dark"] .an-word{fill:#171A24}:root[data-theme="dark"] .an-flash{fill:var(--hi)}
+@keyframes an-rush{0%{opacity:.15}50%{opacity:.85}100%{opacity:.15}}
+@keyframes an-flash{0%,86%{opacity:0}88%{opacity:.75}100%{opacity:0}}
+@keyframes an-pulse{0%,100%{transform:scale(1) rotate(-2deg)}12%{transform:scale(1.1) rotate(1deg)}30%{transform:scale(1) rotate(-2deg)}}
+@keyframes an-kira{0%,100%{transform:scale(0) rotate(0);opacity:0}25%{transform:scale(1.2) rotate(45deg);opacity:1}50%{transform:scale(.9) rotate(90deg);opacity:1}70%{transform:scale(0) rotate(135deg);opacity:0}}
+@keyframes an-spinp{to{transform:rotate(360deg)}}
+@keyframes an-fall{from{transform:translate(-20px,calc(var(--py) - 40px))}to{transform:translate(300px,calc(var(--py) + 90px))}}
+@media (prefers-reduced-motion:reduce){.an *{animation:none!important}}
