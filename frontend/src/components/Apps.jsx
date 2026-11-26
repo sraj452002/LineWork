@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { serverInfo } from '../lib/backend.js';
-import { getRun, listRuns } from '../lib/flows.js';
+import { getRun, listRuns, runFields, startRun } from '../lib/flows.js';
+import EditorCard, { continueWith, editorWaiting } from './EditorCard.jsx';
 import { isImage, isLink, livePages, mainText, publishedApps, resultOf, runApp, shapeOf, toCSV } from '../lib/apps.js';
 import { AppIcon } from './AppIcon.jsx';
 import { download } from '../lib/flowio.js';
@@ -84,36 +85,50 @@ export default function Apps({ files, q = '', onEdit, onUpdate }) {
   );
 }
 
-// runner (optional): runs the app some other way (the public store), answering {status, items | error}.
-export function AppRunner({ file, server, onBack, onEdit, onRemove, runner, backLabel = '← Apps' }) {
+// runner (optional): runs the app some other way (the public store), answering {status, items | error}, or
+// {status: 'edit', nodeId, card} when it stopped at an Editor; continuer(nodeId, edited) goes on from there.
+export function AppRunner({ file, server, onBack, onEdit, onRemove, runner, continuer, backLabel = '← Apps' }) {
   const { toast } = useUI();
   const a = file.flow.app;
-  const inputs = a.inputs || [];
+  // A question whose Run by hand field is a (file) asks for a file (even in an app published before files).
+  const start = file.flow.nodes.find(n => n.id === a.startId) || file.flow.nodes.find(n => n.type === 'trigger.manual');
+  const fileKeys = new Set(start && start.type === 'trigger.manual' ? runFields(start.params?.fields).filter(f => f.kind === 'file').map(f => f.key) : []);
+  const inputs = (a.inputs || []).map(f => (fileKeys.has(f.key) ? { ...f, kind: 'file' } : f));
   const [form, setForm] = useState(() => Object.fromEntries(inputs.map(f => [f.key, f.kind === 'yesno' ? false : f.kind === 'choice' ? (f.options || [])[0] || '' : ''])));
   const [run, setRun] = useState(null), [busy, setBusy] = useState(false), [history, setHistory] = useState([]);
+  const [editing, setEditing] = useState(null); // an Editor's card: the run stopped there, waiting for the edit
+  const [lastCard, setLastCard] = useState(null); // the card closed without saving, to open again
   const refresh = () => { if (server && !runner) listRuns(file.id).then(r => setHistory(r.filter(x => x.trigger === 'app').slice(0, 10)), () => {}); };
   useEffect(refresh, [server, file.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const go = async e => {
-    e.preventDefault();
+  const cheer = r => { if (r.status === 'success') { const b = document.querySelector('.app-run')?.getBoundingClientRect(); if (b) confetti({ x: b.left + b.width / 2, y: b.top }); } };
+  const poll = async id => {
+    let r = { id, status: 'running', nodes: {} };
+    for (let i = 0; i < 400 && r.status === 'running'; i++) { await new Promise(res => setTimeout(res, i < 10 ? 300 : 900)); r = await getRun(id); }
+    return r;
+  };
+  // A finished run that stopped at an Editor opens its card instead of showing a result.
+  const settle = r => {
+    const w = r.status === 'edit' ? { nodeId: r.nodeId, card: r.card } : runner ? null : editorWaiting(file.flow, r);
+    if (w) { setEditing(w); setLastCard(w); setRun({ status: 'waiting', name: w.card.name }); return; }
+    setRun(r); cheer(r);
+  };
+  const keepGoing = async edit => {
+    const w = editing; setEditing(null); setLastCard(null);
     setBusy(true); setRun({ status: 'running', nodes: {} });
     try {
-      if (runner) {
-        const r = await runner(form);
-        setRun(r);
-        if (r.status === 'success') { const b = document.querySelector('.app-run')?.getBoundingClientRect(); if (b) confetti({ x: b.left + b.width / 2, y: b.top }); }
-        setBusy(false);
-        return;
-      }
-      const id = await runApp(file.id, form);
-      let r = { id, status: 'running', nodes: {} };
-      for (let i = 0; i < 400 && r.status === 'running'; i++) {
-        await new Promise(res => setTimeout(res, i < 10 ? 300 : 900));
-        r = await getRun(id);
-      }
-      setRun(r);
-      if (r.status === 'success') { const b = document.querySelector('.app-run')?.getBoundingClientRect(); if (b) confetti({ x: b.left + b.width / 2, y: b.top }); }
+      if (continuer) settle(await continuer(w.nodeId, { ...w.card, ...edit }));
+      else settle(await poll(await startRun(file.id, file.flow, w.nodeId, continueWith(w.card, edit))));
       refresh();
+    } catch (err) { setRun({ status: 'error', error: err.message || 'It couldn’t go on.' }); }
+    setBusy(false);
+  };
+  const go = async e => {
+    e.preventDefault();
+    setBusy(true); setRun({ status: 'running', nodes: {} }); setEditing(null); setLastCard(null);
+    try {
+      settle(runner ? await runner(form) : await poll(await runApp(file.id, form)));
+      if (!runner) refresh();
     } catch (err) { setRun({ status: 'error', error: err.message || 'It couldn’t run.' }); }
     setBusy(false);
   };
@@ -142,6 +157,7 @@ export function AppRunner({ file, server, onBack, onEdit, onRemove, runner, back
           {!run ? <p className="muted app-wait">The result shows here.</p>
             : run.status === 'running' ? <div className="app-working"><i className="spin" /><span>Working on it… this can take a little while.</span></div>
             : run.status === 'error' ? <div className="app-error"><b>It didn’t work.</b><p>{run.error || 'Something went wrong.'}</p></div>
+            : run.status === 'waiting' ? <div className="app-waiting"><b>✎ Your turn</b><p>Edit {run.name}, then Save &amp; continue.</p><button type="button" className="btn primary" onClick={() => setEditing(lastCard)} disabled={!!editing || !lastCard}>✎ Open the editor</button></div>
             : <Result items={items} show={a.show} name={a.name} toast={toast} />}
           {history.length > 0 && (
             <div className="app-history">
@@ -155,17 +171,43 @@ export function AppRunner({ file, server, onBack, onEdit, onRemove, runner, back
           )}
         </section>
       </div>
+      {editing && <EditorCard card={editing.card} onClose={() => { setLastCard(editing); setEditing(null); }} onSave={keepGoing} />}
     </div>
   );
 }
 
+const FILE_MAX = 4 * 2 ** 20;
 function Input({ f, value, onChange }) {
+  if (f.kind === 'file') return <FileInput f={f} value={value} onChange={onChange} />;
   const name = <span>{f.label}{f.required ? ' *' : ''}</span>;
   const hint = f.hint ? <small className="muted">{f.hint}</small> : null;
   if (f.kind === 'yesno') return <label className="app-f app-check"><input type="checkbox" checked={!!value} onChange={e => onChange(e.target.checked)} />{f.label}</label>;
   if (f.kind === 'choice') return <label className="app-f">{name}<select value={value} onChange={e => onChange(e.target.value)}>{(f.options || []).map(o => <option key={o}>{o}</option>)}</select>{hint}</label>;
   if (f.kind === 'long') return <label className="app-f">{name}<textarea rows={4} required={f.required} value={value} onChange={e => onChange(e.target.value)} placeholder={f.placeholder || ''} />{hint}</label>;
   return <label className="app-f">{name}<input type={{ number: 'number', email: 'email', date: 'date' }[f.kind] || 'text'} required={f.required} value={value} onChange={e => onChange(e.target.value)} placeholder={f.placeholder || ''} />{hint}</label>;
+}
+
+// A file to send with the form: read here, sent as {name, type, size, data} (data in base64).
+function FileInput({ f, value, onChange }) {
+  const [err, setErr] = useState('');
+  const pick = file => {
+    setErr('');
+    if (!file) { onChange(''); return; }
+    if (file.size > FILE_MAX) { onChange(''); setErr(`“${file.name}” is ${(file.size / 2 ** 20).toFixed(1)} MB: a file can be at most 4 MB.`); return; }
+    const r = new FileReader();
+    r.onload = () => onChange({ name: file.name, type: file.type || 'application/octet-stream', size: file.size, data: String(r.result).replace(/^data:[^,]*,/, '') });
+    r.onerror = () => setErr('That file couldn’t be read.');
+    r.readAsDataURL(file);
+  };
+  return (
+    <label className="app-f">
+      <span>{f.label}{f.required ? ' *' : ''}</span>
+      <input type="file" required={f.required && !value} aria-label={f.label} onChange={e => pick(e.target.files[0])} />
+      {value && value.name && <small className="muted">{value.name} · {value.size < 1024 ? `${value.size} B` : `${Math.round(value.size / 1024)} KB`}</small>}
+      {err && <small className="err">{err}</small>}
+      {f.hint && <small className="muted">{f.hint}</small>}
+    </label>
+  );
 }
 
 function Value({ v }) {

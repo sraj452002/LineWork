@@ -4452,3 +4452,7 @@ button.rv-line:hover{background:rgba(255,255,255,.04)}
 .ed-card-more{display:flex;gap:8px}
 .ed-card-foot{display:flex;align-items:center;gap:10px}.ed-card-foot .muted{flex:1;font-size:12.5px;color:var(--ink2)}
 .modal .ed-card{background:var(--surface)!important}
+/* An app run waiting at an Editor (its card is open, or closed for now). */
+.app-waiting{padding:16px;border-radius:12px;background:color-mix(in srgb,var(--c-blue) 8%,transparent);border:1px solid color-mix(in srgb,var(--c-blue) 28%,transparent);display:grid;gap:6px;justify-items:start}
+.app-waiting p{margin:0;color:var(--ink2)}
+.app-f input[type=file]{padding:8px;border:1px dashed var(--hair);border-radius:10px;background:transparent}

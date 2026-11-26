@@ -4,7 +4,7 @@ import { FlowError, runFlow } from './flow-engine.js';
 import { NODE_TYPES } from './flow-nodes.js';
 import { APP_NODES } from './flow-apps.js';
 import { WORKLINE_NODES } from './flow-workline.js';
-import { POLL_EVERY, TRIGGER_TYPES } from './flow-triggers.js';
+import { POLL_EVERY, TRIGGER_TYPES, formFields } from './flow-triggers.js';
 import { MORE_TRIGGERS, cronDue, parseCron } from './flow-more-triggers.js';
 import { EVENT_TRIGGERS } from './flow-event-triggers.js';
 import { WEB_NODES } from './flow-web.js';
@@ -282,6 +282,14 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
       } catch (e) { console.error('An On error workflow could not start:', e.message); }
     }
   };
+  // An app's questions; one whose Run by hand field is a (file) is a file question, even if it was
+  // published before apps could ask for files.
+  const appInputs = flow => {
+    const a = flow.app || {}, list = Array.isArray(a.inputs) ? a.inputs : [];
+    const start = flow.nodes.find(n => n.id === a.startId) || flow.nodes.find(n => n.type === 'trigger.manual');
+    const files = new Set(start && start.type === 'trigger.manual' ? formFields(start.params?.fields).filter(f => f.kind === 'file').map(f => f.key) : []);
+    return list.map(f => (files.has(f.key) ? { ...f, kind: 'file' } : f));
+  };
   // A published app's start: its trigger, and the form's answers (only the inputs the app declares).
   const appStart = (flow, body) => {
     const app = flow && flow.app;
@@ -290,9 +298,17 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
     if (!from) return { status: 400, error: { error: 'no_start', message: 'The app’s workflow has no trigger to start from.' } };
     const given = body && typeof body.input === 'object' && body.input ? body.input : {};
     const input = {};
-    for (const f of Array.isArray(app.inputs) ? app.inputs : []) {
+    for (const f of appInputs(flow)) {
       const key = String(f.key || ''), v = given[key];
       if (!key) continue;
+      if (f.kind === 'file') {
+        // A file: {name, type, size, data} with data in base64 (at most about 4 MB).
+        const ok = v && typeof v === 'object' && typeof v.data === 'string' && v.data.length > 0;
+        if (!ok) { if (f.required) return { status: 400, error: { error: 'missing', message: `Choose a file for ${f.label || key}.` } }; input[key] = null; continue; }
+        if (v.data.length > 5_600_000) return { status: 413, error: { error: 'too_large', message: `The file for ${f.label || key} is too big: at most 4 MB.` } };
+        input[key] = { name: String(v.name || 'file').slice(0, 200), type: String(v.type || 'application/octet-stream').slice(0, 120), size: Number(v.size) || Math.round(v.data.length * 3 / 4), data: v.data };
+        continue;
+      }
       if (f.required && (v === undefined || v === null || String(v).trim() === '')) return { status: 400, error: { error: 'missing', message: `Fill in ${f.label || key}.` } };
       input[key] = f.kind === 'number' ? (v === '' || v == null ? null : Number(v)) : f.kind === 'yesno' ? v === true || v === 'true' : String(v ?? '').slice(0, 20_000);
     }
@@ -801,8 +817,8 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
     const storeLimit = limiter({ max: 30, windowMs: 10 * 60_000 });
     // An icon: an emoji, or a small picture (a PNG data URL) of the owner's own.
     const iconOf = (v, d) => (typeof v === 'string' && v && v.length < 600_000 ? v : d);
-    const appInfo = (id, a) => ({ id, name: String(a.name || 'App').slice(0, 80), description: String(a.description || '').slice(0, 300), icon: iconOf(a.icon, '✨'), tone: a.tone || 'blue', show: a.show || 'auto',
-      inputs: (Array.isArray(a.inputs) ? a.inputs : []).map(f => ({ key: f.key, label: f.label, kind: f.kind, required: !!f.required, options: f.options, placeholder: f.placeholder, hint: f.hint })) });
+    const appInfo = (id, a, flow) => ({ id, name: String(a.name || 'App').slice(0, 80), description: String(a.description || '').slice(0, 300), icon: iconOf(a.icon, '✨'), tone: a.tone || 'blue', show: a.show || 'auto',
+      inputs: (flow ? appInputs(flow) : Array.isArray(a.inputs) ? a.inputs : []).map(f => ({ key: f.key, label: f.label, kind: f.kind, required: !!f.required, options: f.options, placeholder: f.placeholder, hint: f.hint })) });
     const shown = (flow, r) => {
       const ok = id => r.nodes[id]?.status === 'success', app = flow.app || {};
       const ids = app.outputId && ok(app.outputId) ? [app.outputId] : flow.nodes.filter(n => ok(n.id) && !flow.edges.some(e => e.from === n.id && ok(e.to))).map(n => n.id);
@@ -814,13 +830,30 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
     const answer = (res, x) => {
       if (x.run.status === 'running' || !x.finished) return null;
       if (x.run.status !== 'success' || !x.result) return res.status(422).json({ status: 'error', error: x.run.error || 'The workflow failed.' });
+      // Stopped at an Editor: the app shows its card, and continues from it (/store/:fileId/continue).
+      const ed = x.flow.nodes.find(n => n.type === 'ui.editor' && x.result.nodes?.[n.id]?.output?.editor?.length);
+      if (ed) return res.json({ status: 'edit', nodeId: ed.id, card: x.result.nodes[ed.id].output.editor[0] });
       return res.json({ status: 'success', items: shown(x.flow, x.result) });
+    };
+    // Start a store run and answer with its result (waiting up to 20 s), else with a token to ask again with.
+    const storeStart = async (res, uid, fileId, flow, startId, items) => {
+      let run;
+      try { run = start(uid, fileId, flow, startId, items, 'app'); }
+      catch (e) { return res.status(e.code === 'busy' ? 429 : 400).json({ error: e.code || 'flow_error', message: e.message }); }
+      const x = { run, flow, result: null, finished: false, expires: Date.now() + 30 * 60_000 };
+      const done = run.done.then(d => { x.result = d.result; x.finished = true; });
+      await Promise.race([done, new Promise(r => setTimeout(r, 20_000))]);
+      if (answer(res, x) !== null) return;
+      const token = randomBytes(16).toString('hex');
+      for (const [k, v] of storeRuns) if (v.expires < Date.now()) storeRuns.delete(k);
+      storeRuns.set(token, x);
+      res.status(202).json({ status: 'running', token });
     };
     api.get('/store', async (req, res) => {
       const uid = storeUid();
       if (!uid) return res.status(404).json({ error: 'no_store', message: 'This server has no public apps (set STORE_OWNER on the server to an account’s email).' });
       const files = await store.listFiles(uid);
-      const apps = files.filter(f => f && !f.archived && f.flow && f.flow.app && f.flow.app.published).map(f => ({ ...appInfo(f.id, f.flow.app), updated: f.updated || 0 }));
+      const apps = files.filter(f => f && !f.archived && f.flow && f.flow.app && f.flow.app.published).map(f => ({ ...appInfo(f.id, f.flow.app, f.flow), updated: f.updated || 0 }));
       // Pages too: active workflows with a Page trigger, at their own link (a name of their own, or the hook).
       const pages = files.filter(f => f && !f.archived && f.flow && f.flow.active).flatMap(f => (f.flow.nodes || [])
         .filter(n => n.type === 'trigger.page' && n.params && /^[\w-]{12,80}$/.test(String(n.params.path || '')))
@@ -840,17 +873,23 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
       const got = appStart(flow, req.body);
       if (got.error) return res.status(got.status).json(got.error);
       storeLimit.fail(req.ip);
-      let run;
-      try { run = start(uid, req.params.fileId, flow, got.from.id, [{ json: got.input }], 'app'); }
-      catch (e) { return res.status(e.code === 'busy' ? 429 : 400).json({ error: e.code || 'flow_error', message: e.message }); }
-      const x = { run, flow, result: null, finished: false, expires: Date.now() + 30 * 60_000 };
-      const done = run.done.then(d => { x.result = d.result; x.finished = true; });
-      await Promise.race([done, new Promise(r => setTimeout(r, 20_000))]);
-      if (answer(res, x) !== null) return;
-      const token = randomBytes(16).toString('hex');
-      for (const [k, v] of storeRuns) if (v.expires < Date.now()) storeRuns.delete(k);
-      storeRuns.set(token, x);
-      res.status(202).json({ status: 'running', token });
+      return storeStart(res, uid, req.params.fileId, flow, got.from.id, [{ json: got.input }]);
+    });
+    // Save & continue on an Editor's card: the rest of the app's workflow, from that Editor, with the edit.
+    api.post('/store/:fileId/continue', async (req, res) => {
+      const uid = storeUid();
+      if (!uid) return res.status(404).json({ error: 'no_store' });
+      if (!ID.test(req.params.fileId)) return res.status(400).json({ error: 'bad_id' });
+      if (storeLimit.blocked(req.ip)) return res.status(429).json({ error: 'rate_limited', message: 'Too many runs from here. Try again in a few minutes.' });
+      const flow = await savedFlow(uid, req.params.fileId).catch(() => null);
+      if (!flow || !flow.app || !flow.app.published) return res.status(404).json({ error: 'not_found', message: 'That app isn’t published.' });
+      const b = req.body || {}, node = flow.nodes.find(n => n.id === b.nodeId && n.type === 'ui.editor');
+      const edited = b.edited && typeof b.edited === 'object' ? b.edited : null;
+      if (!node || !edited) return res.status(400).json({ error: 'bad_request', message: 'Nothing to continue.' });
+      // Only the Workline file this Editor is set to edit can be saved back (never one the visitor names).
+      if (node.params?.source === 'file' && ID.test(String(node.params.fileId || ''))) edited.fileId = node.params.fileId; else delete edited.fileId;
+      storeLimit.fail(req.ip);
+      return storeStart(res, uid, req.params.fileId, flow, node.id, [{ json: { _edited: edited } }]);
     });
     api.get('/store/runs/:token', (req, res) => {
       const x = storeRuns.get(req.params.token);
