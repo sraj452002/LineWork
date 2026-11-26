@@ -14,7 +14,7 @@ import { loadConnections } from '../lib/dbclient.js';
 import { besides, download, exportFlow, exportRun, importFlow, templateOf } from '../lib/flowio.js';
 import { getData, setData } from '../lib/userdata.js';
 import { confetti } from '../lib/confetti.js';
-import { NodeCard } from './NodeGuide.jsx';
+import { ExampleSetup, NodeCard, Setup } from './NodeGuide.jsx';
 import CustomNodes from './CustomNodes.jsx';
 import RunForm from './RunForm.jsx';
 import EditorCard, { continueWith, editorWaiting } from './EditorCard.jsx';
@@ -726,8 +726,16 @@ function NodePanel({ node, flow, change, creds, tab, setTab, result, active, onC
       <div className="fv-tabs" role="tablist">
         <button role="tab" aria-selected={tab === 'settings'} onClick={() => setTab('settings')}>Settings</button>
         <button role="tab" aria-selected={tab === 'output'} onClick={() => setTab('output')}>Output{result ? (result.status === 'error' ? ' !' : ` (${result.items})`) : ''}</button>
+        <button role="tab" aria-selected={tab === 'howto'} onClick={() => setTab('howto')}>How to</button>
       </div>
-      {tab === 'settings' ? (
+      {tab === 'howto' ? (
+        // How to set this node up, step by step, and an example setup: the same as in the guide.
+        <div className="fv-howto gn">
+          <Setup type={node.type} d={d} />
+          <ExampleSetup type={node.type} d={d} />
+          <button type="button" className="link" onClick={() => onHelp(node.type)}>All about {d.label}: settings, example and what it gives</button>
+        </div>
+      ) : tab === 'settings' ? (
         <div className="fv-fields">
           {d.custom && (
             <div className="fv-custom"><span>A node you made{d.language ? ` (${d.language === 'python' ? 'Python' : 'JavaScript'})` : ''}.</span>

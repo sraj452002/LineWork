@@ -89,7 +89,7 @@ function OutStep({ type, d }) {
 }
 // Setting a node up, step by step: add it, connect the account, what to do in the other app, the
 // settings one by one, how to try it, and how the next node uses what it gives.
-function Setup({ type, d }) {
+export function Setup({ type, d }) {
   const trigger = d.trigger, listens = d.hook || type === 'trigger.webhook', watches = d.poll || type === 'trigger.schedule';
   const steps = [
     trigger
@@ -118,7 +118,7 @@ function Setup({ type, d }) {
 
 // The node set up for real: each setting with an example value, then the item going in and what comes out.
 const json = v => JSON.stringify(v, null, 2);
-function ExampleSetup({ type, d }) {
+export function ExampleSetup({ type, d }) {
   const ex = exampleOf(type, d);
   if (!ex.rows.length && !ex.output) return null;
   const ports = ex.output && !Array.isArray(ex.output) ? Object.entries(ex.output) : null;
