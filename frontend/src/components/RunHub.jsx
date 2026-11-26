@@ -154,8 +154,8 @@ export default function RunHub({ files, q = '', onOpen, onUpdate, menuHidden, on
   const [pickStep, setPickStep] = useState(null); // the step clicked, to see what it gave
   const [tab, setTab] = useState(null);       // the panel on the right: result, how to run, history (null: by itself)
   const [creds, setCreds] = useState(null);    // saved credentials, for the fix card
-  // The side panel can be hidden for a wider stage; remembered in this browser.
-  const [side, setSide] = useState(() => { try { return localStorage.getItem('linework:run-side') !== 'off'; } catch (e) { return true; } });
+  // The side panel: hidden at first for a wider stage; shown or hidden as last chosen in this browser.
+  const [side, setSide] = useState(() => { try { return localStorage.getItem('linework:run-side') === 'on'; } catch (e) { return false; } });
   const showSide = on => { setSide(on); try { localStorage.setItem('linework:run-side', on ? 'on' : 'off'); } catch (e) { /* not kept */ } };
   const [credPick, setCredPick] = useState('');
   const sel = flows.find(f => f.id === selId) || flows[0] || null;
@@ -299,7 +299,7 @@ export default function RunHub({ files, q = '', onOpen, onUpdate, menuHidden, on
         <section ref={stageRef} className={'ws-main' + (shown && !quiet ? ' s-' + (done ? shown.status : 'running') : ' s-idle')} aria-label={`Runs of ${sel.title}`}>
           <FriendlyRun steps={quiet ? pipe.map((n, i) => ({ n, i, st: 'idle', r: null })) : steps} run={quiet ? null : shown} done={!quiet && done} title={sel.title || 'Untitled'} secs={shown ? secs(shown) : ''} failed={failed}
             last={quiet && shown ? { status: shown.status, when: ago(shown.started), by: startedBy(shown.trigger) } : null} onWatch={() => { setQuiet(false); setUpto(0); }}
-            wantsInput={wantsInput(sel.flow, startOf(sel.flow))} onReplay={() => { setQuiet(false); setUpto(0); }} onResult={() => { setTab('result'); showSide(true); }} onFix={() => (fixCred ? setTab('result') : fixInEditor(failed?.id))} />
+            wantsInput={wantsInput(sel.flow, startOf(sel.flow))} onReplay={() => { setQuiet(false); setUpto(0); }} onResult={() => { setTab('result'); showSide(true); }} onFix={() => (fixCred ? (setTab('result'), showSide(true)) : fixInEditor(failed?.id))} />
         </section>
 
         {side && <aside className="ws-panel" aria-label="About this run">
