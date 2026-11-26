@@ -4417,30 +4417,3 @@ button.rv-line:hover{background:rgba(255,255,255,.04)}
 .ws .fr-stop small{font-size:12.5px}
 @media (max-height:640px),(max-width:700px){.ws .fr-track{--dot:34px}.ws .fr-dot .rh-mark{width:20px;height:20px}.fr-stop small{display:none}}
 @media (prefers-reduced-motion:reduce){.fr-spark,.fr-line i::after,.fr-stop.st-active .fr-dot,.fr-track.st-success .fr-stop .fr-dot,.fr.st-active .fr-stage::before{animation:none!important}}
-
-/* Green, done: one emerald family (the same as the big tick) for everything finished, so “done” reads at a glance.
-   Light tint fills, a clear emerald edge, a deep green for text; brighter in the dark theme. */
-.fr{--ok:#10b981;--ok-hi:#6ee7b7;--ok-deep:#047857;--ok-ink:#065f46;--ok-soft:color-mix(in srgb,#10b981 13%,var(--surface))}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .fr{--ok:#34d399;--ok-hi:#a7f3d0;--ok-deep:#10b981;--ok-ink:#6ee7b7;--ok-soft:color-mix(in srgb,#34d399 16%,var(--surface))}}
-:root[data-theme="dark"] .fr{--ok:#34d399;--ok-hi:#a7f3d0;--ok-deep:#10b981;--ok-ink:#6ee7b7;--ok-soft:color-mix(in srgb,#34d399 16%,var(--surface))}
-/* The line: green for what's done, turning blue only at the step at work; all emerald when it's over. */
-.fr-track.st-active .fr-line i{background:linear-gradient(90deg,var(--ok-deep),var(--ok) 70%,var(--c-blue));box-shadow:0 0 16px color-mix(in srgb,var(--ok) 50%,transparent)}
-.fr-track.st-success .fr-line i{background:linear-gradient(90deg,var(--ok-deep),var(--ok) 50%,var(--ok-hi));box-shadow:0 0 18px color-mix(in srgb,var(--ok) 60%,transparent),0 0 0 1px color-mix(in srgb,var(--ok) 30%,transparent)}
-/* A finished stop: filled with a green tint, an emerald ring, its icon in full colour, its name in green. */
-.fr-stop.st-success .fr-dot{background:radial-gradient(circle at 35% 30%,color-mix(in srgb,var(--ok-hi) 35%,var(--surface)),var(--ok-soft));border-color:var(--ok);box-shadow:0 0 0 4px color-mix(in srgb,var(--ok) 14%,transparent),0 6px 16px -8px color-mix(in srgb,var(--ok) 80%,transparent)}
-.fr-stop.st-success small{color:var(--ok-ink);font-weight:600}
-.fr-dot em{background:linear-gradient(145deg,var(--ok-hi),var(--ok) 55%,var(--ok-deep));box-shadow:0 2px 6px -1px color-mix(in srgb,var(--ok) 70%,transparent)}
-.fr-track.st-success .fr-stop.st-success .fr-dot{box-shadow:0 0 0 5px color-mix(in srgb,var(--ok) 18%,transparent),0 0 18px -2px color-mix(in srgb,var(--ok) 70%,transparent)}
-/* “All done!” in the same green, and the summary chip to match. */
-.fr.st-success .fr-say{background:linear-gradient(90deg,var(--ok-deep),var(--ok) 60%,var(--ok-deep));-webkit-background-clip:text;background-clip:text;color:transparent}
-.fr.st-success .fr-sub{color:var(--ok-ink)}
-.fr-stack{border-color:color-mix(in srgb,var(--ok) 45%,transparent);background:linear-gradient(180deg,color-mix(in srgb,var(--ok) 14%,var(--surface)),var(--ok-soft));box-shadow:0 6px 18px -10px color-mix(in srgb,var(--ok) 80%,transparent)}
-.fr-stack:hover{background:color-mix(in srgb,var(--ok) 20%,var(--surface))}
-.fr-stack b{color:var(--ok-ink)}
-.fr-faces .rh-mark{box-shadow:0 0 0 1.5px color-mix(in srgb,var(--ok) 55%,transparent),0 2px 6px -2px rgba(0,0,0,.4)}
-/* The full list: finished rows get a green edge and tint. */
-.fr-list li.st-success{background:var(--ok-soft);box-shadow:inset 3px 0 0 var(--ok)}
-.fr-list li.st-success b{color:var(--ok)}
-.fr-list li.st-success .fr-no{color:var(--ok-ink)}
-/* The glow behind a finished run, in emerald. */
-.fr.st-success .fr-stage::before{--fr-glow:var(--ok)}
