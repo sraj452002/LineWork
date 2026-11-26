@@ -59,7 +59,8 @@ export function FriendlyRun({ steps, run, done, title, secs, failed, onReplay, o
   return (
     <div className={'fr st-' + state}>
       <div className="fr-stage">
-        <div className={'fr-orb st-' + state} aria-hidden="true">
+        {/* Before a run there's no orb: just the words and the steps (Run is in the toolbar). */}
+        {state !== 'idle' && <div className={'fr-orb st-' + state} aria-hidden="true">
           <i className="fr-ring r1" /><i className="fr-ring r2" /><i className="fr-ring r3" />
           <span className="fr-orbit"><i /><i /><i /></span>
           {state === 'active' && <span className="fr-arc" />}
@@ -69,10 +70,9 @@ export function FriendlyRun({ steps, run, done, title, secs, failed, onReplay, o
           <span className={'fr-core' + (state === 'active' && active?.n.type === 'core.delay' ? ' is-wait' : '')} key={state + (active?.n.id || '')}>
             {state === 'success' ? <svg className="fr-ic fr-ic-ok" viewBox="0 0 52 52"><path d="M14.5 27.5l7.5 7.5 16-17" /></svg>
               : state === 'error' ? <svg className="fr-ic fr-ic-err" viewBox="0 0 52 52"><path d="M26 13.5v16" /><path className="fr-dot" d="M26 37.5v.5" /></svg>
-              : state === 'idle' ? <svg className="fr-play" width="36" height="36" viewBox="0 0 24 24"><path d="M8.5 5.5l10 6.5-10 6.5z" /></svg>
               : active ? <Mark type={active.n.type} size={38} /> : <i className="ws-spin" />}
           </span>
-        </div>
+        </div>}
         <div className="rs-headline fr-text" aria-live="polite">
           <b key={say} className="fr-say">{say}</b>
           <small className="fr-sub">{sub}</small>
