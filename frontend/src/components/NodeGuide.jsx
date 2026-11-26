@@ -3,7 +3,7 @@ import { CRED_TYPES } from '../lib/flows.js';
 import { nodeVideos, nodeVideoUrl } from '../lib/nodevideos.js';
 import { CRED_SETUP, NODE_GUIDE, NODE_SETUP } from '../lib/flowguide.js';
 import { LOGOS } from '../lib/flowlogos.js';
-import { exampleOf, showValue } from '../lib/nodeexamples.js';
+import { defaultsOf, exampleOf, meets, showValue } from '../lib/nodeexamples.js';
 
 /* One workflow node explained: what it does, its settings, where its credential comes from, an
    example and what it gives. Shown in the Workflows guide and as a popup from the editor. */
@@ -21,7 +21,7 @@ function NodeMark({ d }) {
 }
 // What a field asks for: its note in the guide, else its hint, else its choices.
 const fieldText = (f, notes = {}) => notes[f.k] || [
-  f.hint && <>e.g. <code>{f.hint}</code></>,
+  f.hint && <>e.g. <code>{f.hint.replace(/^e\.g\.?\s*/i, '')}</code></>,
   f.options && f.options.map(o => o[1]).join(' · '),
   f.kind === 'bool' && 'On or off.',
   f.kind === 'file' && 'Pick one of your Workline files.',
@@ -29,9 +29,67 @@ const fieldText = (f, notes = {}) => notes[f.k] || [
   f.kind === 'dbconn' && 'A connection saved in the Database view.',
   f.kind === 'pairs' && 'Name and value rows.',
 ].find(Boolean) || '';
+// One setting, as an instruction: what to do with it, its choices or an example, and whether it can stay blank.
+const optionalOf = f => /optional|blank|leave empty|empty:/i.test(`${f.label} ${f.hint || ''}`);
+const nameOf = f => f.label.replace(/\s*\((optional|blank[^)]*)\)\s*/ig, ' ').trim();
+const choiceText = (f, def) => {
+  const opts = (f.options || []).map(o => o[1]);
+  const list = opts.length > 7 ? `${opts.slice(0, 7).join(' · ')} · …` : opts.join(' · ');
+  const start = (f.options || []).find(o => String(o[0]) === String(def ?? ''))?.[1];
+  return <>{list}{start ? <> (starts on <i>{start}</i>)</> : null}</>;
+};
+function fieldStep(f, def, notes = {}, sample) {
+  const L = <b>{nameOf(f)}</b>, note = notes[f.k];
+  // An example: the field's hint, else the value the node's example setup uses.
+  const egText = (f.hint && f.hint.replace(/^e\.g\.?\s*/i, '')) || (sample !== undefined && sample !== '' && f.kind !== 'select' && f.kind !== 'bool' ? showValue(f, sample) : '');
+  const eg = egText ? <> e.g. <code>{String(egText).length > 90 ? String(egText).slice(0, 90) + '…' : egText}</code></> : null;
+  const opt = optionalOf(f) ? <span className="gn-opt"> optional</span> : null;
+  let main;
+  switch (f.kind) {
+    case 'select': main = <>Choose {L}: {choiceText(f, def)}.</>; break;
+    case 'bool': main = <>Switch {L} {def ? 'off' : 'on'} if you need it (it starts {def ? 'on' : 'off'}).</>; break;
+    case 'file': main = <>Pick the Workline file in {L}.</>; break;
+    case 'workflow': main = <>Pick the workflow in {L} (save it first).</>; break;
+    case 'dbconn': main = <>Pick a connection saved in the Database view in {L}.</>; break;
+    case 'pairs': main = <>Add rows in {L}: a name and a value each.{eg}</>; break;
+    case 'code': main = <>Write the code in {L}.{eg}</>; break;
+    case 'number': main = <>Set {L} to a number{def !== undefined && def !== '' ? <> (starts at <code>{String(def)}</code>)</> : null}.{eg}</>; break;
+    case 'aimodel': main = <>Pick the AI model in {L} (blank: the same as AI chat).</>; break;
+    case 'agent': main = <>Pick one of your agents in {L}, or leave it on None and describe the task below.</>; break;
+    default: main = <>Fill in {L}.{eg}</>;
+  }
+  return <>{main}{opt}{note ? <div className="gn-note">{note}</div> : null}</>;
+}
+// The node's settings as steps, in order. Settings that only show for a choice (Operation = Create…)
+// say so; the rest are always there.
+function FieldSteps({ type, d, notes }) {
+  const fields = d.fields || [];
+  if (!fields.length) return null;
+  const def = defaultsOf(d), labelOf = k => fields.find(x => x.k === k);
+  const sample = Object.fromEntries(exampleOf(type, d).rows.map(r => [r.f.k, r.v]));
+  const when = f => {
+    const w = f.when || f.also;
+    if (!w || meets(w, def)) return null;
+    const of = labelOf(w[0]);
+    const vals = w.slice(1).map(v => (of?.options || []).find(o => String(o[0]) === String(v))?.[1] || v || 'blank');
+    return <span className="gn-when">only when {of ? nameOf(of) : w[0]} is {vals.join(' or ')}: </span>;
+  };
+  return (
+    <>Fill in its settings (each can use expressions, like <code>{'{{ $json.email }}'}</code>):
+      <ul className="gn-fsteps">{fields.map(f => <li key={f.k}>{when(f)}{fieldStep(f, def[f.k], notes, sample[f.k])}</li>)}</ul>
+    </>
+  );
+}
+// What the next node reads from it: the fields of its example output, as expressions.
+function OutStep({ type, d }) {
+  const ex = exampleOf(type, d), out = Array.isArray(ex.output) ? ex.output[0] : null;
+  const keys = out && typeof out === 'object' ? Object.keys(out).filter(k => !k.startsWith('_')).slice(0, 4) : [];
+  if (!keys.length) return <>Use what it gives in the next node: <code>{'{{ $json.field }}'}</code> reads a field of the item it passes on (the <b>Output</b> tab shows them all).</>;
+  return <>Use what it gives in the next node: {keys.map((k, i) => <span key={k}>{i ? ', ' : ''}<code>{`{{ $json.${/^[A-Za-z_]\w*$/.test(k) ? k : `["${k}"]`} }}`}</code></span>)}{keys.length < Object.keys(out).length ? ' and more' : ''} (the <b>Output</b> tab shows them all).</>;
+}
 // Setting a node up, step by step: add it, connect the account, what to do in the other app, the
-// settings, and how to try it.
-function Setup({ type, d }) {
+// settings one by one, how to try it, and how the next node uses what it gives.
+export function Setup({ type, d }) {
   const trigger = d.trigger, listens = d.hook || type === 'trigger.webhook', watches = d.poll || type === 'trigger.schedule';
   const steps = [
     trigger
@@ -46,19 +104,21 @@ function Setup({ type, d }) {
         </div>
       ))}
     </>] : []),
-    ...(NODE_SETUP[type] || []),
-    ...((d.fields || []).length && !NODE_SETUP[type] ? [<>Fill in the settings (explained below). Any of them can use expressions, like <code>{'{{ $json.email }}'}</code>.</>] : []),
+    // (The hand-written steps that only say which settings to fill in are left out: the settings steps say it, one by one.)
+    ...(NODE_SETUP[type] || []).filter(t => !((d.fields || []).length && typeof t === 'string' && /^(Fill in|Choose |Write the fields|Write a title|Pick the language)/.test(t))),
+    ...((d.fields || []).length ? [<FieldSteps key="f" type={type} d={d} notes={NODE_GUIDE[type]?.fields} />] : []),
     listens ? <>Turn the workflow <b>Active</b> and wait for <b>Saved</b>: from then on, calls to its URL start it. <b>Run workflow</b> tries the rest of the workflow by hand.</>
       : watches ? <>Turn the workflow <b>Active</b> and wait for <b>Saved</b>: it then runs by itself while the server is awake. <b>Run workflow</b> tries it now.</>
       : trigger ? <>Press <b>Run workflow</b>.</>
       : <>Try it: press <b>Run from here</b> in its settings (or <b>Run workflow</b>), then click the node and open <b>Output</b> to see what it gave.</>,
+    ...((d.outputs ?? ['main']).length && !d.note_ ? [<OutStep key="o" type={type} d={d} />] : []),
   ];
   return <><h5>Set it up</h5><ol className="gn-steps">{steps.map((t, i) => <li key={i}>{t}</li>)}</ol></>;
 }
 
 // The node set up for real: each setting with an example value, then the item going in and what comes out.
 const json = v => JSON.stringify(v, null, 2);
-function ExampleSetup({ type, d }) {
+export function ExampleSetup({ type, d }) {
   const ex = exampleOf(type, d);
   if (!ex.rows.length && !ex.output) return null;
   const ports = ex.output && !Array.isArray(ex.output) ? Object.entries(ex.output) : null;

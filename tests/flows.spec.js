@@ -347,7 +347,9 @@ test('the Workflow view: a template, a credential, a run, and adding a node', as
     await page.getByLabel('Your message').fill('Hello');
     await page.getByRole('button', { name: 'Run', exact: true }).click();
     await expect(page.locator('.app-out')).toContainText('Done', { timeout: 15_000 });
-    await expect(page.locator('.app-history li')).toHaveCount(1);
+    // The earlier runs: a tab beside the result.
+    await page.getByRole('tab', { name: /Earlier runs/ }).click();
+    await expect(page.locator('.app-hist li')).toHaveCount(1);
     // Removed from Apps (unpublished): the workflow stays.
     await page.getByRole('button', { name: 'Unpublish', exact: true }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Unpublish' }).click();
