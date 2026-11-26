@@ -322,8 +322,9 @@ export const NODES = {
     defaults: () => ({ fields: 'Search', button: 'Search', action: 'search' }) },
   'ui.editor': { group: 'UI', label: 'Editor', note: 'Edit any of your files on the page, then download the whole file', icon: I.edit, tone: 'sky',
     fields: [
-      { k: 'fileId', label: 'File', kind: 'file' },
-      { k: 'part', label: 'What to edit', kind: 'select', options: [['auto', 'Find out from the file'], ['doc', 'The doc (text)'], ['sheet', 'A sheet (cells)'], ['diagram', 'A diagram’s code'], ['code', 'A code file']] },
+      { k: 'source', label: 'Which file', kind: 'select', options: [['file', 'One of my Workline files'], ['upload', 'A file uploaded on the page']] },
+      { k: 'fileId', label: 'File', kind: 'file', ...only('source', 'file') },
+      { k: 'part', label: 'What to edit', kind: 'select', ...only('source', 'file'), options: [['auto', 'Find out from the file'], ['doc', 'The doc (text)'], ['sheet', 'A sheet (cells)'], ['diagram', 'A diagram’s code'], ['code', 'A code file']] },
       { k: 'path', label: 'Code file (blank: the one open in Workline)', kind: 'text', hint: 'src/app.js', ...only('part', 'code') },
       { k: 'sheet', label: 'Sheet (blank: the first)', kind: 'text', ...only('part', 'sheet') },
       { k: 'diagram', label: 'Diagram (tab) name (blank: the first)', kind: 'text', ...only('part', 'diagram') },
@@ -331,8 +332,8 @@ export const NODES = {
       { k: 'rows', label: 'Box height in lines', kind: 'number', ...only('part', 'auto', 'doc', 'diagram', 'code') },
       { k: 'button', label: 'Button', kind: 'text', hint: 'Save' },
     ],
-    help: 'It finds out what the file is (a doc, a sheet, a diagram or a code project) and shows the right editor, filled in with what’s there now. Save writes the changes back (with version history). The page offers the whole file to download (.md, .csv, the diagram code or the code file), and the next steps get it as {{ $json.file }}, ready to attach to an email.',
-    defaults: () => ({ part: 'auto', button: 'Save' }) },
+    help: 'A file uploaded on the page: the page shows an upload box; the file (text, Markdown, CSV, Excel .xlsx, JSON or code, up to 3 MB) opens in the right editor, and the download gives it back edited, in the same format. With one of your files: it finds out what the file is (a doc, a sheet, a diagram or a code project) and shows the right editor, filled in with what’s there now. Save writes the changes back (with version history). The page offers the whole file to download (.md, .csv, the diagram code or the code file), and the next steps get it as {{ $json.file }}, ready to attach to an email.',
+    defaults: () => ({ source: 'file', part: 'auto', button: 'Save' }) },
 
   'core.note': { group: 'Flow', label: 'Sticky note', note: 'A note on the canvas; does nothing', icon: I.note, tone: 'amber', inputs: [], outputs: [], note_: true,
     fields: [{ k: 'text', label: 'Note', kind: 'textarea' }], defaults: () => ({ text: 'A note about this part of the workflow.' }) },

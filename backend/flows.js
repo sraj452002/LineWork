@@ -231,7 +231,7 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
     live.set(run.id, { uid, run });
     const ctx = ctxFor(uid);
     ctx.respond = r => { if (!answer) { answer = r; answered(r); } };
-    ctx.page = { blocks: [], form: (page && page.form) || {}, action: (page && page.action) || null, query: (page && page.query) || {} };
+    ctx.page = { blocks: [], form: (page && page.form) || {}, action: (page && page.action) || null, query: (page && page.query) || {}, files: (page && page.files) || {} };
     Object.defineProperty(run, 'page', { value: ctx.page });
     Object.defineProperty(run, 'done', { value: (async () => {
       let r = null;
@@ -541,16 +541,38 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
     // The app itself is cross-origin isolated (COEP, for running code in the browser): a page opts in too, so
     // it can be shown inside the app (WorkLine Apps on a phone, the Run section) and not just on its own.
     'cross-origin-embedder-policy': 'credentialless', 'cross-origin-resource-policy': 'same-origin' };
+  // A page form with a file (the Editor's upload box) comes as multipart/form-data: its fields and files.
+  const multipart = (buf, type) => {
+    const m = /boundary=(?:"([^"]+)"|([^;]+))/i.exec(type || ''), fields = {}, files = {};
+    if (!m) return { fields, files };
+    const b = Buffer.from(`--${m[1] || m[2]}`);
+    for (let i = buf.indexOf(b); i !== -1;) {
+      const start = i + b.length;
+      if (buf.subarray(start, start + 2).toString() === '--') break;
+      const next = buf.indexOf(b, start);
+      if (next === -1) break;
+      const part = buf.subarray(start + 2, next - 2), he = part.indexOf('\r\n\r\n');
+      if (he !== -1) {
+        const head = part.subarray(0, he).toString('utf8'), body = part.subarray(he + 4);
+        const name = /name="([^"]*)"/i.exec(head)?.[1], filename = /filename="([^"]*)"/i.exec(head)?.[1];
+        if (name && filename !== undefined) { if (filename && body.length) files[name] = { name: filename, type: /content-type:\s*([^\r\n]+)/i.exec(head)?.[1] || 'application/octet-stream', size: body.length, data: body.toString('base64') }; }
+        else if (name) fields[name] = body.toString('utf8');
+      }
+      i = next;
+    }
+    return { fields, files };
+  };
   const pageInput = req => {
-    const body = req.method === 'POST' && req.body && typeof req.body === 'object' ? req.body : {};
+    let files = {}, body = req.method === 'POST' && req.body && typeof req.body === 'object' && !Buffer.isBuffer(req.body) ? req.body : {};
+    if (req.method === 'POST' && Buffer.isBuffer(req.body) && /multipart\/form-data/i.test(req.headers['content-type'] || '')) ({ fields: body, files } = multipart(req.body, req.headers['content-type']));
     // An Editor node sends a whole doc (up to 500,000 characters) or a sheet's grid (a field a cell).
     const form = Object.fromEntries(Object.entries(body).filter(([k]) => k !== '_action').map(([k, v]) => [k, String(v ?? '').slice(0, k === 'content' ? 500_000 : 10_000)]).slice(0, 6000));
     const query = Object.fromEntries(Object.entries(req.query || {}).map(([k, v]) => [k, String(v).slice(0, 2000)]).slice(0, 30));
-    return { action: req.method === 'POST' ? String(body._action || 'submit').slice(0, 60) : 'open', query, form };
+    return { action: req.method === 'POST' ? String(body._action || 'submit').slice(0, 60) : 'open', query, form, files };
   };
   // Run a flow from its Page trigger and draw what its UI nodes made. Waits up to 25 s.
   const drawPage = async (uid, fileId, flow, node, input, trigger) => {
-    const run = start(uid, fileId, flow, node.id, [{ json: input }], trigger, { form: input.form, action: input.action, query: input.query });
+    const run = start(uid, fileId, flow, node.id, [{ json: input }], trigger, { form: input.form, action: input.action, query: input.query, files: input.files || {} });
     const got = await Promise.race([run.done, new Promise(r => setTimeout(() => r(null), 25_000))]);
     const p = node.params || {};
     if (!got) return renderPage(p, run.page.blocks, { query: input.query, error: 'This page is taking too long. Try again in a moment.' });
@@ -567,7 +589,7 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
   const hits = limiter({ max: 120, windowMs: 60_000 });
   // The body as sent is kept too: app triggers check its signature.
   const keep = (req, res, buf) => { req.raw = buf; };
-  hooks.use(express.json({ limit: '5mb', verify: keep }), express.urlencoded({ extended: true, limit: '5mb', parameterLimit: 6000, verify: keep }), express.text({ type: 'text/*', limit: '5mb', verify: keep }));
+  hooks.use(express.json({ limit: '5mb', verify: keep }), express.urlencoded({ extended: true, limit: '5mb', parameterLimit: 6000, verify: keep }), express.text({ type: 'text/*', limit: '5mb', verify: keep }), express.raw({ type: 'multipart/form-data', limit: '6mb' }));
   // A link nobody answers: a browser gets a page saying so (a published web app that's been turned off,
   // or never published); other callers get JSON.
   const notLive = (req, res) => (req.method === 'GET' && req.accepts(['json', 'html']) === 'html'

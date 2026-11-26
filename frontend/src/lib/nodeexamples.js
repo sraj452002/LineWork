@@ -137,7 +137,7 @@ export const NODE_EXAMPLE = {
   'ui.media': { poster: '{{ $json.thumbnail }}' },
   'ui.buttons': { buttons: [{ name: 'All', value: '?' }, { name: 'Films', value: '?category=Film' }] },
   'ui.form': { title: 'Find an order', fields: 'Order number* (number)', button: 'Search', action: 'search' },
-  'ui.editor': { fileId: '“Notes” (a Workline file)', part: 'auto', title: 'My notes', rows: 18, button: 'Save' },
+  'ui.editor': { source: 'file', fileId: '“Notes” (a Workline file)', part: 'auto', title: 'My notes', rows: 18, button: 'Save' },
 
   /* ---- AI ---- */
   'ai.agent': { agentId: '', task: 'Reply to this customer email: {{ $json.text }}', use_workflows: false, use_nodes: false, use_files: true, use_docs: false },
