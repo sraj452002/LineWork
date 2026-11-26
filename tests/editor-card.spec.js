@@ -51,6 +51,7 @@ test('a run stops at the Editor, the card opens in the app, Save & continue give
     await card.getByLabel('B2').fill('45');
     await card.getByLabel('A3').fill('Bread');
     await card.getByLabel('B3').fill('30');
+    await page.waitForTimeout(800);
     await page.screenshot({ path: 'test-results/editor-card.png' });
     await card.getByRole('button', { name: 'Save & continue' }).click();
     await expect(card).toHaveCount(0);
