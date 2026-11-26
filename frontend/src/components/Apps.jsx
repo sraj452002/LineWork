@@ -147,6 +147,7 @@ export function AppRunner({ file, server, onBack, onEdit, onRemove, runner, cont
   const [run, setRun] = useState(null), [busy, setBusy] = useState(false), [history, setHistory] = useState([]);
   const [editing, setEditing] = useState(null); // an Editor's card: the run stopped there, waiting for the edit
   const [lastCard, setLastCard] = useState(null); // the card closed without saving, to open again
+  const [resTab, setResTab] = useState('result'); // the right side: the result, or the earlier runs
   const refresh = () => { if (server && !runner) listRuns(file.id).then(r => setHistory(r.filter(x => x.trigger === 'app').slice(0, 10)), () => {}); };
   useEffect(refresh, [server, file.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -185,13 +186,27 @@ export function AppRunner({ file, server, onBack, onEdit, onRemove, runner, cont
 
   return (
     <div className={'app-run-page t-' + (a.tone || 'blue') + (runner ? '' : ' desk')}>
-      <div className="app-top">
+      {!runner && (
+        // On the desktop: one compact header, back, the app and its actions in a row.
+        <header className="app-head">
+          <button className="btn app-back" onClick={onBack} aria-label={backLabel} title={backLabel}>←</button>
+          <i className="app-icon" aria-hidden="true"><AppIcon icon={a.icon} /></i>
+          <div className="app-head-text">
+            <h2>{a.name}</h2>
+            <p>{a.description || 'A workflow app'}<span className="app-head-meta"> · {inputs.length ? `${inputs.length} ${inputs.length === 1 ? 'question' : 'questions'}` : 'no questions'}{history[0] ? ` · last run ${ago(history[0].started)}` : ''}</span></p>
+          </div>
+          <span className="grow" />
+          {onEdit && <button className="btn app-edit" onClick={() => onEdit(file.id)}><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4" /></svg>Edit the workflow</button>}
+          {onRemove && <button className="btn danger-text" onClick={onRemove}>Unpublish</button>}
+        </header>
+      )}
+      {runner && <div className="app-top">
         <button className="btn app-back" onClick={onBack}>{backLabel}</button>
         <span className="grow" />
         {onEdit && <button className="btn app-edit" onClick={() => onEdit(file.id)}><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4" /></svg>Edit the workflow</button>}
         {onRemove && <button className="btn danger-text" onClick={onRemove}>Unpublish</button>}
-      </div>
-      <header className={'app-hero t-' + (a.tone || 'blue')}>
+      </div>}
+      {runner && <header className={'app-hero t-' + (a.tone || 'blue')}>
         <i className="app-icon" aria-hidden="true"><AppIcon icon={a.icon} /></i>
         <div className="app-hero-text">
           <h2>{a.name}</h2>{a.description && <p>{a.description}</p>}
@@ -201,23 +216,36 @@ export function AppRunner({ file, server, onBack, onEdit, onRemove, runner, cont
             {history[0] && <span>Last run {ago(history[0].started)}</span>}
           </div>
         </div>
-      </header>
+      </header>}
       {server === false && !runner && <p className="fv-note">Apps run on the Workline server. Sign in to your account to run this one.</p>}
       <div className="app-body">
-        <form className="app-form" onSubmit={go}>
+        <form className="app-form" onSubmit={go} onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !busy) go(e); }}>
           <div className="app-sec-h"><i>1</i>Fill in</div>
           {inputs.map(f => <Input key={f.key} f={f} value={form[f.key]} onChange={v => setForm(x => ({ ...x, [f.key]: v }))} />)}
           {!inputs.length && <p className="muted">This app needs nothing from you: just press Run.</p>}
-          <button className="btn primary app-run" disabled={busy || (!server && !runner)}>{busy ? <><i className="spin" />Working…</> : <><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4l13 8-13 8z" /></svg>Run</>}</button>
+          <button className="btn primary app-run" disabled={busy || (!server && !runner)}>{busy ? <><i className="spin" />Working…</> : <><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4l13 8-13 8z" /></svg>Run{!runner && <kbd aria-hidden="true">Ctrl ↵</kbd>}</>}</button>
         </form>
         <section className="app-result" aria-live="polite" aria-label="Result">
-          <div className="app-sec-h"><i>2</i>Result</div>
+          {runner || !history.length ? <div className="app-sec-h"><i>2</i>Result</div> : (
+            <div className="app-res-tabs" role="tablist">
+              <button type="button" role="tab" aria-selected={resTab === 'result'} className={resTab === 'result' ? 'on' : ''} onClick={() => setResTab('result')}><i>2</i>Result</button>
+              <button type="button" role="tab" aria-selected={resTab === 'history'} className={resTab === 'history' ? 'on' : ''} onClick={() => setResTab('history')}>Earlier runs <small>{history.length}</small></button>
+            </div>
+          )}
+          {!runner && history.length > 0 && resTab === 'history' ? (
+            <ul className="app-hist">{history.map(h => (
+              <li key={h.id}><button onClick={async () => { try { setRun(await getRun(h.id)); setResTab('result'); } catch (e) { toast('That run is gone.'); } }}>
+                <i className={'dot ' + h.status} /><b>{h.status === 'success' ? 'Done' : h.status === 'error' ? 'Failed' : 'Running'}</b><span>{ago(h.started)}</span><em>View →</em>
+              </button></li>
+            ))}</ul>
+          ) : <>
           {!run ? <div className="app-wait"><span className="app-wait-art" aria-hidden="true"><i /><i /><i /></span><p className="muted">The result shows here.</p><small className="muted">Fill in the form and press Run.</small></div>
-            : run.status === 'running' ? <div className="app-working"><i className="spin" /><span>Working on it… this can take a little while.</span></div>
+            : run.status === 'running' ? (runner ? <div className="app-working"><i className="spin" /><span>Working on it… this can take a little while.</span></div>
+              : <div className="app-skel" role="status"><div className="app-skel-row"><i /><i /><i /></div><span><i className="spin" />Working on it…</span></div>)
             : run.status === 'error' ? <div className="app-error"><b>It didn’t work.</b><p>{run.error || 'Something went wrong.'}</p></div>
             : run.status === 'waiting' ? <div className="app-waiting"><b>✎ Your turn</b><p>Edit {run.name}, then Save &amp; continue.</p><button type="button" className="btn primary" onClick={() => setEditing(lastCard)} disabled={!!editing || !lastCard}>✎ Open the editor</button></div>
             : <Result items={items} show={a.show} name={a.name} toast={toast} />}
-          {history.length > 0 && (
+          {runner && history.length > 0 && (
             <div className="app-history">
               <h4>Earlier runs</h4>
               <ul>{history.map(h => (
@@ -227,6 +255,7 @@ export function AppRunner({ file, server, onBack, onEdit, onRemove, runner, cont
               ))}</ul>
             </div>
           )}
+          </>}
         </section>
       </div>
       {editing && <EditorCard card={editing.card} onClose={() => { setLastCard(editing); setEditing(null); }} onSave={keepGoing} />}
@@ -237,7 +266,7 @@ export function AppRunner({ file, server, onBack, onEdit, onRemove, runner, cont
 const FILE_MAX = 4 * 2 ** 20;
 function Input({ f, value, onChange }) {
   if (f.kind === 'file') return <FileInput f={f} value={value} onChange={onChange} />;
-  const name = <span>{f.label}{f.required ? ' *' : ''}</span>;
+  const name = <span><i className="app-k" aria-hidden="true">{KIND_ICON[f.kind] || 'Aa'}</i>{f.label}{f.required ? ' *' : ''}</span>;
   const hint = f.hint ? <small className="muted">{f.hint}</small> : null;
   if (f.kind === 'yesno') return <label className="app-f app-check"><input type="checkbox" checked={!!value} onChange={e => onChange(e.target.checked)} />{f.label}</label>;
   if (f.kind === 'choice') return <label className="app-f">{name}<select value={value} onChange={e => onChange(e.target.value)}>{(f.options || []).map(o => <option key={o}>{o}</option>)}</select>{hint}</label>;
@@ -285,6 +314,7 @@ function Result({ items, show, name, toast }) {
       <div className="app-out-head"><b>✓ Done</b>
         <span className="grow" />
         {shape === 'text' && <button className="link" onClick={() => copy(mainText(items[0]))}>Copy</button>}
+        {shape === 'cards' && items.length === 1 && <button className="link" onClick={() => copy(keys.filter(k => typeof items[0][k] !== 'object').map(k => `${label(k)}: ${items[0][k]}`).join('\n'))}>Copy all</button>}
         {(shape === 'table' || shape === 'cards') && <button className="link" onClick={saveCSV}>Download CSV</button>}
         {items.length > 0 && <button className="link" onClick={() => download(name, JSON.stringify(items, null, 2), 'result')}>Download JSON</button>}
       </div>
@@ -301,7 +331,7 @@ function Result({ items, show, name, toast }) {
           <tbody>{items.map((i, n) => <tr key={n}>{keys.map(k => <td key={k}><Value v={i[k]} /></td>)}</tr>)}</tbody></table></div>
       )}
       {shape === 'cards' && <div className="app-cards">{items.map((i, n) => (
-        <dl key={n} className="app-item">{keys.filter(k => i[k] !== undefined).map(k => <div key={k}><dt>{label(k)}</dt><dd><Value v={i[k]} /></dd></div>)}</dl>
+        <dl key={n} className="app-item">{keys.filter(k => i[k] !== undefined).map(k => <div key={k} title="Click to copy" onClick={() => typeof i[k] !== 'object' && copy(String(i[k]))}><dt>{label(k)}</dt><dd><Value v={i[k]} /></dd></div>)}</dl>
       ))}</div>}
       {shape === 'json' && !(filesOf(items).length && items.length === 1) && <pre className="app-json">{JSON.stringify(items, slim, 2)}</pre>}
       {items.length >= 20 && <p className="muted">Showing the first 20. Download for everything the run kept.</p>}
