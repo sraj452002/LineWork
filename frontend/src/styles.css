@@ -4664,3 +4664,13 @@ body{background:radial-gradient(1100px 620px at 8% -10%,color-mix(in srgb,var(--
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .app-run-page.desk .btn.primary.app-run{color:#0E1220}}
 :root[data-theme="dark"] .app-run-page.desk .btn.primary.app-run{color:#0E1220}
 @media (max-width:800px){.desk .app-body{grid-template-columns:1fr}.desk .app-hero{padding:20px}.desk .app-hero h2{font-size:22px}.desk .app-hero .app-icon{width:56px;height:56px;font-size:30px}}
+/* An opened app as one canvas: the bar, the hero, Fill in and Result in a single card, split by hairlines. */
+.app-run-page.desk{border:1px solid var(--hair);border-radius:24px;background:var(--surface);box-shadow:var(--shadow);overflow:hidden}
+.desk .app-top{margin:0;padding:12px 16px;border-bottom:1px solid var(--hair)}
+.desk .app-hero{margin:0;border:0;border-radius:0;box-shadow:none;border-bottom:1px solid var(--hair);padding:24px 28px}
+.app-run-page.desk>.fv-note{margin:12px 16px}
+.desk .app-body{gap:0;align-items:stretch}
+.desk .app-form,.desk .app-result{border:0;border-radius:0;box-shadow:none;background:transparent;padding:22px 26px}
+.desk .app-form{border-right:1px solid var(--hair);background:color-mix(in srgb,var(--ink) 1.5%,transparent)}
+.desk .app-result{min-height:300px}
+@media (max-width:800px){.desk .app-form{border-right:0;border-bottom:1px solid var(--hair)}}
