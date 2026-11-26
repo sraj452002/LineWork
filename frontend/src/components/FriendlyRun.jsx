@@ -66,7 +66,7 @@ export function FriendlyRun({ steps, run, done, title, secs, failed, onReplay, o
           {state === 'active' && at > 0 && <em className="fr-stepno" key={'n' + at}>{at}<small>/{total}</small></em>}
           {/* a happy end: sparks flying out from the tick */}
           {state === 'success' && <span className="fr-burst" key={'b' + run?.id}>{Array.from({ length: 10 }, (_, k) => <i key={k} style={{ '--a': `${k * 36}deg`, '--d': `${(k % 3) * 40}ms` }} />)}</span>}
-          <span className="fr-core" key={state + (active?.n.id || '')}>
+          <span className={'fr-core' + (state === 'active' && active?.n.type === 'core.delay' ? ' is-wait' : '')} key={state + (active?.n.id || '')}>
             {state === 'success' ? <svg className="fr-ic fr-ic-ok" viewBox="0 0 52 52"><path d="M14.5 27.5l7.5 7.5 16-17" /></svg>
               : state === 'error' ? <svg className="fr-ic fr-ic-err" viewBox="0 0 52 52"><path d="M26 13.5v16" /><path className="fr-dot" d="M26 37.5v.5" /></svg>
               : state === 'idle' ? <svg className="fr-play" width="36" height="36" viewBox="0 0 24 24"><path d="M8.5 5.5l10 6.5-10 6.5z" /></svg>
