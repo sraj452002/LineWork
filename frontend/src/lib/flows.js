@@ -136,7 +136,7 @@ export const NODES = {
   'trigger.form': { group: 'Triggers', label: 'Form', note: 'Starts when someone fills in a form', icon: I.form, tone: 'green', trigger: true, hook: 'Form link',
     hookHelp: 'Share this link. Each answer starts the workflow with the fields filled in.',
     fields: [{ k: 'title', label: 'Title', kind: 'text' }, { k: 'description', label: 'Description', kind: 'textarea' }, { k: 'fields', label: 'Fields, one a line', kind: 'textarea', hint: 'Name\nEmail* (email)\nMessage (long)' }, { k: 'button', label: 'Button', kind: 'text', hint: 'Send' }, { k: 'thanks', label: 'Thank-you message', kind: 'text' }],
-    help: 'A * makes a field required; (long), (email), (number), (date), (tel) or (url) set its kind.',
+    help: 'A * makes a field required; (long), (email), (number), (date), (tel), (url) or (file) set its kind. A (file) field takes a file of up to 3 MB: {{ $json.field }} is {name, type, size, data}.',
     defaults: () => ({ path: secretPath(), title: 'Contact us', fields: 'Name*\nEmail* (email)\nMessage (long)', button: 'Send', thanks: 'Thanks! We got it.' }) },
   ...appHook('trigger.github', 'GitHub', 'Pushes, issues, pull requests, releases', 'github', 'slate', 'push, issues.opened, pull_request', 'Repository → Settings → Webhooks → Add webhook: this URL as the Payload URL, content type application/json, and the same secret.'),
   ...appHook('trigger.stripe', 'Stripe', 'Payments, checkouts, subscriptions', 'stripe', 'violet', 'checkout.session.completed, invoice.paid', 'Developers → Webhooks → Add endpoint with this URL; paste its signing secret (whsec_…).'),

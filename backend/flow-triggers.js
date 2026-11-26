@@ -28,14 +28,31 @@ const parts = header => String(header || '').split(',').reduce((o, kv) => { cons
 const fresh = t => Math.abs(Date.now() / 1000 - Number(t)) < 300;
 const raw = req => (req.raw ? req.raw.toString('utf8') : typeof req.body === 'string' ? req.body : JSON.stringify(req.body ?? ''));
 
-// Form fields, one a line: "Email*" is required, "(long)" a big box, "(email)" / "(number)" / "(date)" a kind.
+// Form fields, one a line: "Email*" is required, "(long)" a big box, "(email)" / "(number)" / "(date)" a kind,
+// "(file)" a file to upload (the answer is {name, type, size, data} with data in base64).
 export const formFields = text => String(text || 'Name\nEmail* (email)\nMessage (long)').split('\n').map(l => l.trim()).filter(Boolean).slice(0, 30).map(l => {
-  const kind = (/\((long|email|number|date|tel|url)\)/i.exec(l) || [])[1]?.toLowerCase() || 'text';
-  const label = l.replace(/\((long|email|number|date|tel|url)\)/i, '').trim();
+  const kind = (/\((long|email|number|date|tel|url|file)\)/i.exec(l) || [])[1]?.toLowerCase() || 'text';
+  const label = l.replace(/\((long|email|number|date|tel|url|file)\)/i, '').trim();
   const required = label.endsWith('*');
   const name = label.replace(/\*$/, '').trim();
-  return { name, key: name.replace(/[^\w ]+/g, '').trim().replace(/\s+(\w)/g, (_, c) => c.toUpperCase()).replace(/^\w/, c => c.toLowerCase()) || 'field', kind, required };
+  // The key, like Run by hand's: each word lowercased, then joined camelCase ("Your CV" → yourCv).
+  const key = name.replace(/[^\w ]+/g, '').trim().split(/\s+/).filter(Boolean).map((w, i) => (i ? w[0].toUpperCase() + w.slice(1).toLowerCase() : w.toLowerCase())).join('');
+  return { name, key: key || 'field', kind, required };
 });
+// A file sent with a form: at most 3 MB (it travels as base64 in JSON, within the 5 MB a hook takes).
+export const FORM_FILE_MAX = 3 * 2 ** 20;
+const fileAnswer = v => (v && typeof v === 'object' && typeof v.data === 'string' && v.data ? {
+  name: String(v.name || 'file').slice(0, 200), type: String(v.type || 'application/octet-stream').slice(0, 120),
+  size: Math.round(v.data.length * 3 / 4), data: v.data.replace(/^data:[^,]*,/, '') } : null);
+// With a file field the form is sent by a small script, as JSON with each file read in base64.
+const FORM_SCRIPT = `<script>(()=>{const f=document.querySelector('form'),M=${3 * 2 ** 20};if(!f.querySelector('input[type=file]'))return;
+f.addEventListener('submit',async e=>{e.preventDefault();const b=f.querySelector('button'),o={};b.disabled=true;
+try{for(const el of f.elements){if(!el.name)continue;if(el.type==='file'){const x=el.files[0];if(!x)continue;
+if(x.size>M){alert(x.name+' is too big: a file can be at most 3 MB.');b.disabled=false;return}
+o[el.name]=await new Promise((ok,no)=>{const r=new FileReader();r.onload=()=>ok({name:x.name,type:x.type||'application/octet-stream',size:x.size,data:String(r.result).replace(/^data:[^,]*,/,'')});r.onerror=()=>no(r.error);r.readAsDataURL(x)})}
+else o[el.name]=el.value}
+const r=await fetch(location.href,{method:'POST',headers:{'content-type':'application/json',accept:'text/html'},body:JSON.stringify(o)});
+const h=await r.text();document.open();document.write(h);document.close()}catch(err){alert('It could not be sent: '+err.message);b.disabled=false}})})()</script>`;
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const page = (title, inner) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title><style>
 *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px 16px;font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif;color:#1d2433;background:radial-gradient(1200px 600px at 10% -10%,#dfe8ff,transparent),radial-gradient(900px 500px at 110% 110%,#e4f7ee,transparent),#f6f7fb}
@@ -51,12 +68,14 @@ export const TRIGGER_TYPES = {
   'trigger.form': { ...pass, hook(req, p) {
     const fields = formFields(p.fields);
     if (req.method === 'GET') {
-      return { respond: { status: 200, type: 'html', body: page(p.title || 'Form', `<h1>${esc(p.title || 'Form')}</h1>${p.description ? `<p>${esc(p.description)}</p>` : ''}<form method="post">${fields.map(f => `<label>${esc(f.name)}${f.required ? ' *' : ''}${f.kind === 'long' ? `<textarea name="${esc(f.key)}"${f.required ? ' required' : ''}></textarea>` : `<input name="${esc(f.key)}" type="${f.kind}"${f.required ? ' required' : ''}>`}</label>`).join('')}<button>${esc(p.button || 'Send')}</button></form>`) } };
+      return { respond: { status: 200, type: 'html', body: page(p.title || 'Form', `<h1>${esc(p.title || 'Form')}</h1>${p.description ? `<p>${esc(p.description)}</p>` : ''}<form method="post">${fields.map(f => `<label>${esc(f.name)}${f.required ? ' *' : ''}${f.kind === 'long' ? `<textarea name="${esc(f.key)}"${f.required ? ' required' : ''}></textarea>` : f.kind === 'file' ? `<input name="${esc(f.key)}" type="file"${f.required ? ' required' : ''}>` : `<input name="${esc(f.key)}" type="${f.kind}"${f.required ? ' required' : ''}>`}</label>`).join('')}<button>${esc(p.button || 'Send')}</button></form>${fields.some(f => f.kind === 'file') ? FORM_SCRIPT : ''}`) } };
     }
     const body = req.body && typeof req.body === 'object' ? req.body : {};
-    const missing = fields.filter(f => f.required && !String(body[f.key] ?? '').trim());
+    const missing = fields.filter(f => f.required && (f.kind === 'file' ? !fileAnswer(body[f.key]) : !String(body[f.key] ?? '').trim()));
+    const big = fields.find(f => f.kind === 'file' && (fileAnswer(body[f.key])?.size || 0) > FORM_FILE_MAX);
+    if (big) return { respond: { status: 413, type: 'html', body: page('Too big', `<h1>That file is too big</h1><p>${esc(big.name)} can be at most 3 MB.</p><p><a href="">Back to the form</a></p>`) } };
     if (missing.length) return { respond: { status: 400, type: 'html', body: page('Missing', `<h1>Almost there</h1><p>Please fill in ${esc(missing.map(f => f.name).join(', '))}.</p><p><a href="">Back to the form</a></p>`) } };
-    const answers = Object.fromEntries(fields.map(f => [f.key, String(body[f.key] ?? '').slice(0, 10_000)]));
+    const answers = Object.fromEntries(fields.map(f => [f.key, f.kind === 'file' ? fileAnswer(body[f.key]) : String(body[f.key] ?? '').slice(0, 10_000)]));
     return { items: [{ json: { ...answers, submittedAt: new Date().toISOString() } }], respond: { status: 200, type: 'html', body: page('Thanks', `<div class="ok">✓</div><h1>${esc(p.thanks || 'Thanks! We got it.')}</h1>`) } };
   } },
 
