@@ -17,6 +17,7 @@ import { confetti } from '../lib/confetti.js';
 import { NodeCard } from './NodeGuide.jsx';
 import CustomNodes from './CustomNodes.jsx';
 import RunForm from './RunForm.jsx';
+import EditorCard, { continueWith, editorWaiting } from './EditorCard.jsx';
 import { addMissing, loadCustomNodes, onCustomNodes } from '../lib/customnodes.js';
 import { INPUT_KINDS, SHOW, emptyApp, inputsFromTrigger, isImageIcon, keyOf, namesRead } from '../lib/apps.js';
 import { IconPicker } from './AppIcon.jsx';
@@ -255,6 +256,7 @@ export default function FlowView({ file, update, visible, saveState = 'Saved', o
     else go(startId);
   };
   // input: the items to start with (from the run form), else the trigger's own empty item.
+  const [editing, setEditing] = useState(null); // an Editor node's card, when a run stopped there
   const go = async (startId, input) => {
     if (!server) { toast('Workflows run on the Workline server. Sign in to run them.'); return; }
     const first = firstOf(startId);
@@ -269,7 +271,9 @@ export default function FlowView({ file, update, visible, saveState = 'Saved', o
         r = await getRun(id);
         setRun(r);
       }
-      if (r.status === 'success') {
+      const waiting = editorWaiting(flow, r);
+      if (waiting) { setEditing(waiting); toast('Edit the file, then Save & continue'); }
+      else if (r.status === 'success') {
         toast('The workflow ran');
         const b = runBtn.current?.getBoundingClientRect();
         if (b) confetti({ x: b.left + b.width / 2, y: b.top + b.height });
@@ -607,6 +611,7 @@ ${more}`;
           </div>
         </div>
       )}
+      {editing && <EditorCard card={editing.card} onClose={() => setEditing(null)} onSave={edit => { const w = editing; setEditing(null); go(w.nodeId, continueWith(w.card, edit)); }} />}
       {runAsk && <RunForm fileId={file.id} flow={flow} node={nodes.find(n => n.id === runAsk.startId)} onClose={() => setRunAsk(null)}
         onRun={input => { const at = runAsk.startId; setRunAsk(null); go(at, input); }} />}
       {publish && <PublishDialog file={file} flow={flow} change={change} onClose={() => setPublish(false)} />}

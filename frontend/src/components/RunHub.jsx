@@ -7,6 +7,7 @@ import { useUI } from './ui.jsx';
 import RunForm from './RunForm.jsx';
 import { HowToRun, Mark } from './RunViews.jsx';
 import { FriendlyRun } from './FriendlyRun.jsx';
+import EditorCard, { continueWith, editorWaiting } from './EditorCard.jsx';
 import { ResultView } from './ResultView.jsx';
 
 /* Home › Run: a run studio. Pick a workflow from the dropdown, press Run (it asks for input when the
@@ -160,6 +161,9 @@ export default function RunHub({ files, q = '', onOpen, onUpdate, menuHidden, on
   const [credPick, setCredPick] = useState('');
   const sel = flows.find(f => f.id === selId) || flows[0] || null;
   const stageRef = useRef(null);
+  // An Editor node that stopped the run: its card, until saved or closed (each run's card shows once).
+  const [editing, setEditing] = useState(null);
+  const editedRuns = useRef(new Set());
 
   useEffect(() => { serverInfo().then(i => setServer(!!(i && (i.features || []).includes('flows')))); }, []);
   const loadRuns = useCallback(id => listRuns(id).then(list => setRuns(r => ({ ...r, [id]: list })), () => {}), []);
@@ -192,10 +196,16 @@ export default function RunHub({ files, q = '', onOpen, onUpdate, menuHidden, on
   }, [shown, upto, reached]);
   // A run that has just played to a happy end: confetti from its last step.
   useEffect(() => {
-    if (!done || shown.status !== 'success' || upto === Infinity) return;
+    if (!done || shown.status !== 'success' || upto === Infinity || editorWaiting(sel?.flow, shown)) return;
     const last = stageRef.current?.querySelector('.fr-orb')?.getBoundingClientRect();
     if (last) confetti({ x: last.left + last.width / 2, y: last.top + last.height / 2, count: 60 });
   }, [done, shown?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A run that stopped at an Editor: once it has played back, its card opens.
+  useEffect(() => {
+    if (!done || quiet || !sel) return;
+    const w = editorWaiting(sel.flow, shown);
+    if (w && !editedRuns.current.has(w.runId)) setEditing({ ...w, file: sel });
+  }, [done, shown?.id, quiet]); // eslint-disable-line react-hooks/exhaustive-deps
   // A run that failed on a step's credential: load the saved ones, to pick from in the fix card.
   useEffect(() => {
     if (!done || shown.status !== 'error' || !server) return;
@@ -204,8 +214,9 @@ export default function RunHub({ files, q = '', onOpen, onUpdate, menuHidden, on
     listCredentials().then(list => { setCreds(list); const ok = list.find(c => nodeDef(node.type).credential.includes(c.type)); setCredPick(ok ? ok.id : ''); }, () => setCreds([]));
   }, [done, shown?.id, server]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const go = async (file, input) => {
-    const start = startOf(file.flow);
+  // startId: where to start (an Editor's “Save & continue” starts at the Editor), else the trigger.
+  const go = async (file, input, startId) => {
+    const start = startId ? { id: startId } : startOf(file.flow);
     if (!start) { toast('Add a trigger to this workflow first (Run by hand is fine).'); return; }
     setSelId(file.id); setBusy(file.id); setPickStep(null); setUpto(0); setTab(null); setQuiet(false);
     try {
@@ -299,7 +310,9 @@ export default function RunHub({ files, q = '', onOpen, onUpdate, menuHidden, on
         <section ref={stageRef} className={'ws-main' + (shown && !quiet ? ' s-' + (done ? shown.status : 'running') : ' s-idle')} aria-label={`Runs of ${sel.title}`}>
           <FriendlyRun steps={quiet ? pipe.map((n, i) => ({ n, i, st: 'idle', r: null })) : steps} run={quiet ? null : shown} done={!quiet && done} title={sel.title || 'Untitled'} secs={shown ? secs(shown) : ''} failed={failed}
             last={quiet && shown ? { status: shown.status, when: ago(shown.started), by: startedBy(shown.trigger) } : null} onWatch={() => { setQuiet(false); setUpto(0); }}
-            wantsInput={wantsInput(sel.flow, startOf(sel.flow))} onReplay={() => { setQuiet(false); setUpto(0); }} onResult={() => { setTab('result'); showSide(true); }} onFix={() => (fixCred ? (setTab('result'), showSide(true)) : fixInEditor(failed?.id))} />
+            wantsInput={wantsInput(sel.flow, startOf(sel.flow))}
+            waiting={!quiet && done ? (w => w && sel.flow.nodes.find(n => n.id === w.nodeId)?.name)(editorWaiting(sel.flow, shown)) : null}
+            onEdit={() => { const w = editorWaiting(sel.flow, shown); if (w) setEditing({ ...w, file: sel }); }} onReplay={() => { setQuiet(false); setUpto(0); }} onResult={() => { setTab('result'); showSide(true); }} onFix={() => (fixCred ? (setTab('result'), showSide(true)) : fixInEditor(failed?.id))} />
         </section>
 
         {side && <aside className="ws-panel" aria-label="About this run">
@@ -363,6 +376,8 @@ export default function RunHub({ files, q = '', onOpen, onUpdate, menuHidden, on
           </div>
         </aside>}
       </div>
+      {editing && <EditorCard card={editing.card} onClose={() => { editedRuns.current.add(editing.runId); setEditing(null); }}
+        onSave={edit => { const w = editing; editedRuns.current.add(w.runId); setEditing(null); go(w.file, continueWith(w.card, edit), w.nodeId); }} />}
       {ask && <RunForm fileId={ask.id} flow={ask.flow} node={startOf(ask.flow)} onClose={() => setAsk(null)} onRun={input => { const f = ask; setAsk(null); go(f, input); }} />}
     </div>
   );

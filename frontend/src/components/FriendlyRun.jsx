@@ -12,7 +12,7 @@ import { Mark } from './RunViews.jsx';
 const word = n => (n === 1 ? 'step' : 'steps');
 // How long it took, in words: “in under a second”, “in 1.8 seconds”.
 const took = secs => { const v = parseFloat(secs); return !secs || Number.isNaN(v) ? '' : v < 1 ? ' in under a second' : ` in ${v.toFixed(1)} seconds`; };
-export function FriendlyRun({ steps, run, done, title, secs, failed, onReplay, onResult, onFix, wantsInput, last, onWatch }) {
+export function FriendlyRun({ steps, run, done, title, secs, failed, onReplay, onResult, onFix, wantsInput, last, onWatch, waiting, onEdit }) {
   const [all, setAll] = useState(false);
   const doneSteps = steps.filter(s => s.st === 'success');
   const active = steps.find(s => s.st === 'active');
@@ -50,9 +50,10 @@ export function FriendlyRun({ steps, run, done, title, secs, failed, onReplay, o
   })();
   const say = state === 'idle' ? 'Ready when you are'
     : state === 'active' ? (active ? `${active.n.name}…` : 'Getting started…')
-    : state === 'success' ? 'All done!' : 'Something needs your attention';
+    : state === 'success' ? (waiting ? 'Your turn: edit the file' : 'All done!') : 'Something needs your attention';
   const sub = state === 'idle' ? <>Press <b>Run</b> to start “{title}”.{wantsInput ? ' It asks a few questions first.' : ''}</>
     : state === 'active' ? <><b className="fr-of">Step {at || doneSteps.length + 1} of {total}</b> · {doneSteps.length} finished{clock && <> · <span className="fr-clock">{clock}</span></>}</>
+    : state === 'success' && waiting ? <>“{waiting}” is waiting for you. Save &amp; continue to finish the run.</>
     : state === 'success' ? <>Finished {doneSteps.length} {word(doneSteps.length)}{took(secs)}.</>
     : <>“{failed?.name || 'A step'}” couldn’t finish{err ? `: ${err.replace(/^[^:]+: /, '')}` : '.'}</>;
   return (
@@ -101,7 +102,8 @@ export function FriendlyRun({ steps, run, done, title, secs, failed, onReplay, o
           <p className={'fr-last s-' + last.status}><i aria-hidden="true">{last.status === 'success' ? '✓' : last.status === 'error' ? '!' : '…'}</i>Last run {last.when} {last.status === 'success' ? 'finished' : last.status === 'error' ? 'stopped' : 'is running'} · started by {last.by}<button className="link" onClick={onWatch}>Watch it</button></p>
         )}
         <div className="fr-acts">
-          {state === 'success' && <><button className="btn primary" onClick={onResult}>See the result</button><button className="btn" onClick={onReplay}>↺ Watch again</button></>}
+          {state === 'success' && waiting && <button className="btn primary" onClick={onEdit}>✎ Open the editor</button>}
+          {state === 'success' && !waiting && <><button className="btn primary" onClick={onResult}>See the result</button><button className="btn" onClick={onReplay}>↺ Watch again</button></>}
           {state === 'error' && <><button className="btn primary" onClick={onFix}>Fix it</button><button className="btn" onClick={onReplay}>↺ Watch again</button></>}
         </div>
       </div>

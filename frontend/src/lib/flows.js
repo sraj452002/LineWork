@@ -320,9 +320,10 @@ export const NODES = {
     ],
     help: 'When it’s sent, the workflow runs again with { action: this name, form: { answers } }: branch with an IF on {{ $json.action }}. The answers stay filled in.',
     defaults: () => ({ fields: 'Search', button: 'Search', action: 'search' }) },
-  'ui.editor': { group: 'UI', label: 'Editor', note: 'Edit any of your files on the page, then download the whole file', icon: I.edit, tone: 'sky',
+  'ui.editor': { group: 'UI', label: 'Editor', note: 'Opens a file in an editor card, then passes the whole edited file on', icon: I.edit, tone: 'sky',
     fields: [
-      { k: 'source', label: 'Which file', kind: 'select', options: [['file', 'One of my Workline files'], ['upload', 'A file uploaded on the page']] },
+      { k: 'source', label: 'Which file', kind: 'select', options: [['input', 'A file from the step before'], ['file', 'One of my Workline files'], ['upload', 'An upload box on a page (Page workflows)']] },
+      { k: 'input', label: 'File (blank: the first file in the item)', kind: 'text', hint: '{{ $json.file }}', ...only('source', 'input') },
       { k: 'fileId', label: 'File', kind: 'file', ...only('source', 'file') },
       { k: 'part', label: 'What to edit', kind: 'select', ...only('source', 'file'), options: [['auto', 'Find out from the file'], ['doc', 'The doc (text)'], ['sheet', 'A sheet (cells)'], ['diagram', 'A diagram’s code'], ['code', 'A code file']] },
       { k: 'path', label: 'Code file (blank: the one open in Workline)', kind: 'text', hint: 'src/app.js', ...only('part', 'code') },
@@ -332,8 +333,8 @@ export const NODES = {
       { k: 'rows', label: 'Box height in lines', kind: 'number', ...only('part', 'auto', 'doc', 'diagram', 'code') },
       { k: 'button', label: 'Button', kind: 'text', hint: 'Save' },
     ],
-    help: 'A file uploaded on the page: the page shows an upload box; the file (text, Markdown, CSV, Excel .xlsx, JSON or code, up to 3 MB) opens in the right editor, and the download gives it back edited, in the same format. With one of your files: it finds out what the file is (a doc, a sheet, a diagram or a code project) and shows the right editor, filled in with what’s there now. Save writes the changes back (with version history). The page offers the whole file to download (.md, .csv, the diagram code or the code file), and the next steps get it as {{ $json.file }}, ready to attach to an email.',
-    defaults: () => ({ source: 'file', part: 'auto', button: 'Save' }) },
+    help: 'When you run the workflow (Run, Run by hand), the run stops at the Editor and an editor card opens right in the app: a sheet as a grid, text or code in a box. Save & continue goes on with the whole file, edited, in its own format, as {{ $json.file }} (a Workline file is saved back too). On a Page workflow the editor is drawn on the page instead. A file uploaded on the page: the page shows an upload box; the file (text, Markdown, CSV, Excel .xlsx, JSON or code, up to 3 MB) opens in the right editor, and the download gives it back edited, in the same format. With one of your files: it finds out what the file is (a doc, a sheet, a diagram or a code project) and shows the right editor, filled in with what’s there now. Save writes the changes back (with version history). The page offers the whole file to download (.md, .csv, the diagram code or the code file), and the next steps get it as {{ $json.file }}, ready to attach to an email.',
+    defaults: () => ({ source: 'input', part: 'auto', button: 'Save & continue' }) },
 
   'core.note': { group: 'Flow', label: 'Sticky note', note: 'A note on the canvas; does nothing', icon: I.note, tone: 'amber', inputs: [], outputs: [], note_: true,
     fields: [{ k: 'text', label: 'Note', kind: 'textarea' }], defaults: () => ({ text: 'A note about this part of the workflow.' }) },
