@@ -4553,35 +4553,41 @@ body{background:radial-gradient(1100px 620px at 8% -10%,color-mix(in srgb,var(--
 @keyframes fr-hourglass{0%,40%{transform:rotate(0)}50%,90%{transform:rotate(180deg)}100%{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.fr-core.is-wait .rh-mark svg{animation:none}}
 
-/* Before a run (FriendlyRun's OrbitIdle): the steps on an orbit, a radar sweep, a glowing core.
-   The sweep turns clockwise from the top; a step at angle θ lights up at θ/360 of the turn. */
-.fx-orbit{--r:118px;position:relative;width:300px;height:300px;margin:-6px 0 4px;flex:none}
-.ws .fx-orbit{zoom:1.05}
-.fx-orbit>*{position:absolute}
-.fx-halo{inset:40px;border-radius:50%;background:radial-gradient(closest-side,color-mix(in srgb,var(--c-purple) 22%,transparent),color-mix(in srgb,var(--c-blue) 10%,transparent) 60%,transparent);filter:blur(6px);animation:fx-breathe 4.2s ease-in-out infinite}
-.fx-ring{inset:calc(50% - var(--r));border-radius:50%;border:1.5px dashed color-mix(in srgb,var(--ink) 16%,transparent);animation:fx-spin 40s linear infinite}
-.fx-ring.r2{inset:calc(50% - var(--r) * .58);border-style:solid;border-color:color-mix(in srgb,var(--c-blue) 18%,transparent);animation-duration:24s;animation-direction:reverse}
-.fx-sweep{inset:calc(50% - var(--r) - 18px);border-radius:50%;
-  background:conic-gradient(from 0deg,transparent 0 290deg,color-mix(in srgb,var(--c-blue) 10%,transparent) 320deg,color-mix(in srgb,var(--c-purple) 30%,transparent) 352deg,color-mix(in srgb,var(--c-blue) 70%,transparent) 359deg,transparent 360deg);
-  -webkit-mask:radial-gradient(closest-side,transparent 26%,#000 30%,#000 96%,transparent 100%);mask:radial-gradient(closest-side,transparent 26%,#000 30%,#000 96%,transparent 100%);
-  animation:fx-spin var(--period) linear infinite}
-.fx-step{left:50%;top:50%;width:0;height:0;transform:rotate(var(--deg))}
-.fx-beam{left:-1px;bottom:0;width:2px;height:var(--r);transform-origin:50% 100%;border-radius:2px;opacity:0;
-  background:linear-gradient(to top,transparent 18%,color-mix(in srgb,var(--tone,var(--c-blue)) 80%,transparent));animation:fx-beam var(--period) ease-out infinite;animation-delay:var(--delay)}
-.fx-step .fx-beam{--tone:var(--c-blue)}
-.fx-tile{left:-21px;top:calc(-1 * var(--r) - 21px);width:42px;height:42px;display:grid;place-items:center;border-radius:14px;
-  transform:rotate(calc(-1 * var(--deg)));background:var(--surface);border:1.5px solid color-mix(in srgb,var(--ink) 12%,transparent);
-  box-shadow:0 8px 18px -10px rgba(30,30,80,.35);animation:fx-lit var(--period) cubic-bezier(.3,1.5,.5,1) infinite;animation-delay:var(--delay)}
-.fx-tile .rh-mark{width:28px;height:28px;border-radius:9px}
-.fx-core{left:calc(50% - 38px);top:calc(50% - 38px);width:76px;height:76px;border-radius:50%;display:grid;place-items:center}
-.fx-core-ring{inset:0;border-radius:50%;background:conic-gradient(from 0deg,var(--c-purple),var(--c-blue),var(--c-green),var(--c-purple));animation:fx-spin 3s linear infinite;
-  -webkit-mask:radial-gradient(closest-side,transparent 70%,#000 73%);mask:radial-gradient(closest-side,transparent 70%,#000 73%);filter:drop-shadow(0 0 10px color-mix(in srgb,var(--c-blue) 60%,transparent))}
-.fx-core-dot{width:46px;height:46px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff,color-mix(in srgb,var(--c-blue) 60%,#fff) 35%,var(--c-purple));box-shadow:0 0 24px color-mix(in srgb,var(--c-purple) 55%,transparent),inset 0 -6px 12px rgba(0,0,0,.18);animation:fx-pulse 2.1s ease-in-out infinite}
-@keyframes fx-spin{to{transform:rotate(360deg)}}
-@keyframes fx-breathe{0%,100%{transform:scale(.94);opacity:.8}50%{transform:scale(1.06);opacity:1}}
-@keyframes fx-pulse{0%,100%{transform:scale(.92)}50%{transform:scale(1.04)}}
-@keyframes fx-beam{0%{opacity:0}3%{opacity:1}22%,100%{opacity:0}}
-@keyframes fx-lit{0%{transform:rotate(calc(-1 * var(--deg))) scale(1)}5%{transform:rotate(calc(-1 * var(--deg))) scale(1.22);border-color:var(--c-blue);box-shadow:0 0 0 5px color-mix(in srgb,var(--c-blue) 18%,transparent),0 10px 26px -6px color-mix(in srgb,var(--c-blue) 60%,transparent)}
-  20%,100%{transform:rotate(calc(-1 * var(--deg))) scale(1);border-color:color-mix(in srgb,var(--ink) 12%,transparent);box-shadow:0 8px 18px -10px rgba(30,30,80,.35)}}
-@media (prefers-reduced-motion:reduce){.fx-orbit *{animation:none!important}.fx-sweep,.fx-beam{display:none}}
-.fx-step>.fx-beam,.fx-step>.fx-tile{position:absolute}.fx-core>i{position:absolute}.fx-core>.fx-core-dot{position:relative}
+/* Before a run (FriendlyRun's FlowIdle): three steps on a wave and a spark running through them with a
+   comet's tail. Each step lights up in its colour as the spark arrives (a pop, a ripple, its glyph turning
+   white), and the last one draws its tick. One 2.8 s loop: the spark is at the start at 0, the middle at
+   about 43% (1.2 s) and the end at 86% (2.4 s). Soft light and a few drifting motes behind. */
+.fr-idle{width:min(360px,80%);height:auto;overflow:visible;margin-bottom:6px}
+.ws .fr-idle{width:min(440px,70%)}
+.fi-amb{animation:fi-breathe 5.6s ease-in-out infinite;transform-origin:130px 64px}
+.fi-dot{fill:var(--c-blue);opacity:0;animation:fi-mote 4.2s ease-in-out infinite}
+.fi-dot:nth-of-type(odd){fill:var(--c-purple)}
+.fi-bob{animation:fi-bob 5.6s ease-in-out infinite}
+.fi-rail{fill:none;stroke:color-mix(in srgb,var(--ink) 10%,transparent);stroke-width:3;stroke-linecap:round}
+.fi-flow{fill:none;stroke:url(#fi-line);stroke-width:2.4;stroke-linecap:round;stroke-dasharray:5 9;animation:fi-dash 1.1s linear infinite;opacity:.55}
+.fi-comet{fill:none;stroke:url(#fi-line);stroke-width:4.5;stroke-linecap:round;stroke-dasharray:14 86;stroke-dashoffset:14;filter:drop-shadow(0 0 4px var(--c-blue));animation:fi-comet 2.8s infinite}
+.fi-tile{fill:var(--surface);filter:drop-shadow(0 10px 16px rgba(40,40,100,.2))}
+.fi-lit{opacity:0;animation:fi-lit 2.8s ease-out infinite}
+.fi-edge{fill:none;stroke-width:1.8;stroke:url(#fi-line);opacity:.9}
+.fi-glyph{fill:none;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}
+.fi-glyph.white{stroke:#fff;opacity:0;animation:fi-lit 2.8s ease-out infinite}.fi-glyph.white.filled{fill:#fff}
+.n1 .fi-glyph:not(.white){stroke:var(--c-purple)}.n1 .fi-glyph.filled:not(.white){fill:var(--c-purple)}
+.n2 .fi-glyph:not(.white){stroke:var(--c-blue)}.n2 .fi-glyph.filled:not(.white){fill:var(--c-blue)}
+.n3 .fi-glyph:not(.white){stroke:var(--c-green)}
+.fi-tick{stroke-dasharray:30;animation:fi-tick 2.8s ease-out infinite}
+.fi-ripple{fill:none;stroke-width:2;opacity:0;transform-box:fill-box;transform-origin:center;animation:fi-ripple 2.8s ease-out infinite}
+.fi-node{animation:fi-pop 2.8s cubic-bezier(.3,1.6,.5,1) infinite}
+.fi-node.n2,.fi-node.n2 .fi-lit,.fi-node.n2 .fi-glyph.white,.fi-node.n2 .fi-ripple{animation-delay:1.2s}
+.fi-node.n3,.fi-node.n3 .fi-lit,.fi-node.n3 .fi-glyph.white,.fi-node.n3 .fi-ripple,.fi-node.n3 .fi-tick{animation-delay:2.4s}
+.fi-spark{filter:drop-shadow(0 0 7px var(--c-blue));offset-rotate:0deg;offset-distance:0%;animation:fi-move 2.8s infinite}
+@keyframes fi-move{0%{offset-distance:0%;opacity:1;animation-timing-function:cubic-bezier(.45,0,.55,1)}86%{offset-distance:100%;opacity:1}87%,100%{offset-distance:100%;opacity:0}}
+@keyframes fi-dash{to{stroke-dashoffset:-14}}
+@keyframes fi-comet{0%{stroke-dashoffset:14;opacity:1;animation-timing-function:cubic-bezier(.45,0,.55,1)}86%{stroke-dashoffset:-100;opacity:1}87%,100%{stroke-dashoffset:-100;opacity:0}}
+@keyframes fi-pop{0%{transform:scale(1)}9%{transform:scale(1.18)}24%,100%{transform:scale(1)}}
+@keyframes fi-lit{0%{opacity:0}6%{opacity:1}34%{opacity:1}52%,100%{opacity:0}}
+@keyframes fi-ripple{0%{opacity:.7;transform:scale(1)}40%,100%{opacity:0;transform:scale(1.9)}}
+@keyframes fi-tick{0%{stroke-dashoffset:30}14%,100%{stroke-dashoffset:0}}
+@keyframes fi-breathe{0%,100%{transform:scale(1);opacity:.9}50%{transform:scale(1.08);opacity:1}}
+@keyframes fi-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
+@keyframes fi-mote{0%,100%{opacity:0;transform:translateY(4px)}40%,60%{opacity:.7}50%{transform:translateY(-6px)}}
+@media (prefers-reduced-motion:reduce){.fi-flow,.fi-node,.fi-lit,.fi-glyph,.fi-ripple,.fi-comet,.fi-amb,.fi-bob,.fi-dot,.fi-tick{animation:none}.fi-spark,.fi-comet,.fi-dot{display:none}.fi-glyph.white{opacity:0}}
