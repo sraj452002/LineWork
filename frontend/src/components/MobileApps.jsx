@@ -79,8 +79,9 @@ function StoreApp() {
   }, [page?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const open = apps.find(a => a.id === openId);
   // Runs it on the server; a long one is asked about again until it's done.
-  const runner = async form => {
-    const post = await fetch(`/api/store/${encodeURIComponent(open.id)}/run`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ input: form }) });
+  // (A run that stops at an Editor answers {status: 'edit', nodeId, card}; continuer goes on from it.)
+  const storeCall = async (path, body) => {
+    const post = await fetch(`/api/store/${encodeURIComponent(open.id)}/${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
     let j = await post.json().catch(() => ({}));
     for (let i = 0; i < 200 && j.status === 'running' && j.token; i++) {
       await new Promise(r => setTimeout(r, 1500));
@@ -88,8 +89,11 @@ function StoreApp() {
       j = await r.json().catch(() => ({ status: 'error', error: 'Lost the run.' }));
     }
     if (j.status === 'success') return { status: 'success', items: j.items || [] };
+    if (j.status === 'edit') return { status: 'edit', nodeId: j.nodeId, card: j.card };
     return { status: 'error', error: j.error || j.message || 'It couldn’t run.' };
   };
+  const runner = form => storeCall('run', { input: form });
+  const continuer = (nodeId, edited) => storeCall('continue', { nodeId, edited });
   if (page) return (
     <div className="m-page-view">
       <div className="m-page-bar"><button className="btn" onClick={() => (history.state?.mPage ? history.back() : setPage(null))}>← Pages</button><b>{page.title}</b></div>
@@ -98,7 +102,7 @@ function StoreApp() {
   );
   if (open) return (
     <div className="m-shell m-run">
-      <AppRunner file={{ id: open.id, flow: { nodes: [], edges: [], app: open } }} server runner={runner} backLabel="← Workflows" onBack={() => setOpenId(null)} />
+      <AppRunner file={{ id: open.id, flow: { nodes: [], edges: [], app: open } }} server runner={runner} continuer={continuer} backLabel="← Workflows" onBack={() => setOpenId(null)} />
     </div>
   );
   const list = (

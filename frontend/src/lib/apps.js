@@ -9,7 +9,7 @@ import { nodeDef, runFields } from './flows.js';
    the answers as one item ({{ $json.<key> }} in the workflow). What it shows is the output of outputId,
    or of the workflow's last steps. */
 
-export const INPUT_KINDS = [['text', 'Short text'], ['long', 'Long text'], ['number', 'Number'], ['email', 'Email'], ['date', 'Date'], ['choice', 'A choice from a list'], ['yesno', 'Yes / no']];
+export const INPUT_KINDS = [['text', 'Short text'], ['long', 'Long text'], ['number', 'Number'], ['email', 'Email'], ['date', 'Date'], ['choice', 'A choice from a list'], ['yesno', 'Yes / no'], ['file', 'A file']];
 export const SHOW = [['auto', 'Best fit'], ['text', 'Text'], ['table', 'Table'], ['cards', 'Cards'], ['json', 'Raw data']];
 export const APP_ICONS = ['✨', '🚀', '📊', '📝', '📬', '🔎', '🛒', '💬', '📅', '🧾', '🌦️', '🔔', '🤖', '📈', '🗂️', '🌐'];
 // An icon is an emoji, or a picture of your own: a small PNG as a data: URL.
@@ -48,7 +48,7 @@ export function iconImage(file, size = 256) {
 export const keyOf = label => String(label || '').replace(/[^\w ]+/g, '').trim().split(/\s+/).filter(Boolean).map((w, i) => (i ? w[0].toUpperCase() + w.slice(1).toLowerCase() : w.toLowerCase())).join('') || 'field';
 // The questions a Run by hand trigger already asks (its fields), as an app's questions: the same names,
 // so the workflow gets the same {{ $json.… }} either way.
-const KIND_OF = { text: 'text', long: 'long', number: 'number', email: 'email', date: 'date', choice: 'choice', yesno: 'yesno', tel: 'text', url: 'text', time: 'text' };
+const KIND_OF = { text: 'text', long: 'long', number: 'number', email: 'email', date: 'date', choice: 'choice', yesno: 'yesno', file: 'file', tel: 'text', url: 'text', time: 'text' };
 export const inputsFromTrigger = node => (node && node.type === 'trigger.manual' ? runFields(node.params?.fields) : [])
   .map(f => ({ label: f.name, key: f.key, kind: KIND_OF[f.kind] || 'text', required: f.required, ...(f.options.length ? { options: f.options } : {}) }));
 // The names a workflow reads from the item it starts with: {{ $json.x }} in the nodes right after its trigger,
