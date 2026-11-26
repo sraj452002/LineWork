@@ -67,6 +67,9 @@ test('the run studio: dropdown, step-by-step runs with input, step output, repla
     await expect(stage.locator('.fr-sub')).toContainText('Finished 2 steps');
     // The Result tab shows what its last step gave.
     const panel = page.getByRole('complementary', { name: 'About this run' });
+    // The side panel starts hidden; its toggle shows it (and it stays as chosen).
+    await expect(panel).toHaveCount(0);
+    await page.getByRole('button', { name: 'Show the side panel' }).click();
     await expect(panel.getByRole('tab', { name: /^Result/ })).toHaveAttribute('aria-selected', 'true');
     // Shown readably (fields in words), or as the JSON.
     await expect(panel.locator('.rv-card1 .rv-f').filter({ hasText: 'Ok' })).toContainText('yes');
@@ -91,6 +94,12 @@ test('the run studio: dropdown, step-by-step runs with input, step output, repla
     await expect(greetStage.locator('.fr-say')).toContainText('All done!', { timeout: 20_000 });
     await expect(panel.locator('.rv-result')).toContainText('Hi Meera');
     await page.screenshot({ path: 'test-results/run-studio.png' });
+    // The side panel folds away for a wider stage, and See the result brings it back.
+    await page.getByRole('button', { name: 'Hide the side panel' }).click();
+    await expect(panel).toHaveCount(0);
+    await page.screenshot({ path: 'test-results/run-studio-noside.png' });
+    await greetStage.getByRole('button', { name: 'See the result' }).click();
+    await expect(panel.locator('.rv-result')).toContainText('Hi Meera');
     // The steps, for the curious; See the result opens the result.
     await greetStage.locator('.fr-stack').click();
     await expect(greetStage.locator('.fr-list')).toContainText('Greeting');
@@ -192,6 +201,8 @@ test('a step whose credential is gone: the fix card offers a saved one and runs 
     await page.goto('/');
     await page.getByRole('navigation', { name: 'Files' }).getByRole('button', { name: /^Run/ }).click();
     await page.getByRole('button', { name: 'Run Mail me' }).click();
+    // The side panel is hidden: Fix it on the stage opens it at the fix card.
+    await page.getByRole('region', { name: 'Runs of Mail me' }).getByRole('button', { name: 'Fix it' }).click({ timeout: 20_000 });
     const card = page.locator('.rs-fix');
     await expect(card).toContainText('“Mail them to me” needs an account connected', { timeout: 20_000 });
     await expect(card).toContainText('was deleted');

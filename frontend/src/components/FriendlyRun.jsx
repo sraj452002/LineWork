@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { nodeDef } from '../lib/flows.js';
 import { Mark } from './RunViews.jsx';
 
@@ -23,6 +23,23 @@ export function FriendlyRun({ steps, run, done, title, secs, failed, onReplay, o
   const no = new Map(seen.map((s, i) => [s.n.id, i + 1]));
   const total = seen.length, at = active ? no.get(active.n.id) || doneSteps.length + 1 : 0;
   const state = !run ? 'idle' : !done ? 'active' : run.status === 'success' ? 'success' : 'error';
+  // A clock while it runs: seconds since it started, ticking.
+  // (From when it started playing here, so Watch again counts from 0 too.)
+  const [now, setNow] = useState(Date.now()), [t0, setT0] = useState(Date.now());
+  useEffect(() => {
+    if (state !== 'active') return undefined;
+    setT0(Date.now()); setNow(Date.now());
+    const t = setInterval(() => setNow(Date.now()), 100); return () => clearInterval(t);
+  }, [state, run?.id]);
+  const clock = state === 'active' ? Math.max(0, (now - t0) / 1000).toFixed(1) + 's' : '';
+  // The track: every step that runs as a stop on a line, a light running along it to the step at work.
+  // Long workflows show a window of 9 stops around the current one.
+  const stops = steps.filter(s => s.st !== 'skipped' && s.st !== 'unreached');
+  const cur = Math.max(0, stops.findIndex(s => s.st === 'active' || s.st === 'error'));
+  const from = stops.length <= 9 ? 0 : Math.min(Math.max(0, cur - 4), stops.length - 9);
+  const shownStops = stops.slice(from, from + 9);
+  const reached = state === 'success' ? shownStops.length - 1 : state === 'idle' ? -1 : shownStops.findIndex(s => s.st === 'active' || s.st === 'error' || s.st === 'pending' || s.st === 'idle');
+  const fill = shownStops.length < 2 ? (state === 'success' ? 100 : 0) : (Math.max(0, reached === -1 && state !== 'idle' ? shownStops.length - 1 : reached) / (shownStops.length - 1)) * 100;
   // The step's error in words: a service's JSON answer ({"detail": "…"}) comes down to its message.
   const err = (() => {
     const e = failed && run?.nodes?.[failed.id]?.error;
@@ -35,7 +52,7 @@ export function FriendlyRun({ steps, run, done, title, secs, failed, onReplay, o
     : state === 'active' ? (active ? `${active.n.name}…` : 'Getting started…')
     : state === 'success' ? 'All done!' : 'Something needs your attention';
   const sub = state === 'idle' ? <>Press <b>Run</b> to start “{title}”.{wantsInput ? ' It asks a few questions first.' : ''}</>
-    : state === 'active' ? <><b className="fr-of">Step {at || doneSteps.length + 1} of {total}</b> · {doneSteps.length} finished</>
+    : state === 'active' ? <><b className="fr-of">Step {at || doneSteps.length + 1} of {total}</b> · {doneSteps.length} finished{clock && <> · <span className="fr-clock">{clock}</span></>}</>
     : state === 'success' ? <>Finished {doneSteps.length} {word(doneSteps.length)}{took(secs)}.</>
     : <>“{failed?.name || 'A step'}” couldn’t finish{err ? `: ${err.replace(/^[^:]+: /, '')}` : '.'}</>;
   return (
@@ -59,13 +76,20 @@ export function FriendlyRun({ steps, run, done, title, secs, failed, onReplay, o
           <b key={say} className="fr-say">{say}</b>
           <small className="fr-sub">{sub}</small>
         </div>
-        <div className="fr-bar" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label="How far it has got"><i style={{ width: `${pct}%` }} /></div>
-        {state === 'active' ? (
-          // While it runs: one line of finished steps, the newest sliding in on the right, the oldest fading out.
-          <div className="fr-ticker" aria-label="Finished steps"><ul>
-            {doneSteps.slice(-8).map(s => <li key={s.n.id} className="fr-tick"><i className="fr-no">{no.get(s.n.id)}</i><Mark type={s.n.type} size={11} /><span>{s.n.name}</span><b>✓</b></li>)}
-          </ul></div>
-        ) : (state === 'success' || state === 'error') && doneSteps.length > 0 ? (
+        <div className={'fr-track st-' + state} role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label="How far it has got" style={{ '--n': shownStops.length }}>
+          <div className="fr-line"><i style={{ width: `${fill}%` }}>{state === 'active' && <b className="fr-spark" />}</i></div>
+          <ol>
+            {from > 0 && <li className="fr-more-l" aria-hidden="true">+{from}</li>}
+            {shownStops.map(s => (
+              <li key={s.n.id} className={'fr-stop st-' + s.st} title={s.n.name}>
+                <span className="fr-dot"><Mark type={s.n.type} size={14} />{s.st === 'success' && <em aria-hidden="true">✓</em>}</span>
+                <small>{s.n.name}</small>
+              </li>
+            ))}
+            {from + 9 < stops.length && <li className="fr-more-r" aria-hidden="true">+{stops.length - from - 9}</li>}
+          </ol>
+        </div>
+        {state === 'active' ? <div className="fr-ticker" /> : (state === 'success' || state === 'error') && doneSteps.length > 0 ? (
           // Over: one tidy summary of what finished; it opens the full list.
           <button className={'fr-stack' + (all ? ' on' : '')} onClick={() => setAll(!all)} aria-expanded={all} title={all ? 'Hide the steps' : 'See every step'}>
             <span className="fr-faces" aria-hidden="true">{doneSteps.slice(0, 6).map(s => <Mark key={s.n.id} type={s.n.type} size={12} />)}{doneSteps.length > 6 && <em>+{doneSteps.length - 6}</em>}</span>
