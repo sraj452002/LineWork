@@ -320,6 +320,18 @@ export const NODES = {
     ],
     help: 'When it’s sent, the workflow runs again with { action: this name, form: { answers } }: branch with an IF on {{ $json.action }}. The answers stay filled in.',
     defaults: () => ({ fields: 'Search', button: 'Search', action: 'search' }) },
+  'ui.editor': { group: 'UI', label: 'Editor', note: 'Edit one of your files on the page: its doc, a sheet or a diagram', icon: I.edit, tone: 'sky',
+    fields: [
+      { k: 'fileId', label: 'File', kind: 'file' },
+      { k: 'part', label: 'What to edit', kind: 'select', options: [['doc', 'The doc (text)'], ['sheet', 'A sheet (cells)'], ['diagram', 'A diagram’s code']] },
+      { k: 'sheet', label: 'Sheet (blank: the first)', kind: 'text', ...only('part', 'sheet') },
+      { k: 'diagram', label: 'Diagram (tab) name (blank: the first)', kind: 'text', ...only('part', 'diagram') },
+      { k: 'title', label: 'Title (blank: the file’s name)', kind: 'text' },
+      { k: 'rows', label: 'Box height in lines', kind: 'number', ...only('part', 'doc', 'diagram') },
+      { k: 'button', label: 'Button', kind: 'text', hint: 'Save' },
+    ],
+    help: 'The page shows what’s in the file now, ready to change. Save writes it back to the file (with its version history) and shows it again. A sheet shows as a grid with room for 3 more rows and a column.',
+    defaults: () => ({ part: 'doc', button: 'Save' }) },
 
   'core.note': { group: 'Flow', label: 'Sticky note', note: 'A note on the canvas; does nothing', icon: I.note, tone: 'amber', inputs: [], outputs: [], note_: true,
     fields: [{ k: 'text', label: 'Note', kind: 'textarea' }], defaults: () => ({ text: 'A note about this part of the workflow.' }) },

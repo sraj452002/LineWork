@@ -8,6 +8,7 @@
    anyone, and it's served as a sandbox (flows.js) on top of that. */
 import { FlowError } from './flow-engine.js';
 import { formFields } from './flow-triggers.js';
+import { COL, extent, fileOf, rid, sheetOf } from './flow-workline.js';
 import { randomBytes } from 'node:crypto';
 
 const MAX_BLOCKS = 60, MAX_ROWS = 500;
@@ -161,6 +162,55 @@ export const UI_NODES = {
     const id = keepCode(codeDoc(fw, String(raw.code || '').slice(0, 100_000), items));
     return add(args, { kind: 'code', id, height: Math.min(4000, Math.max(60, Number(p.height) || 320)), title: String(p.title || args.node.name || 'Code block'), css: p.css || '' });
   } },
+  /* An editor for one of your Workline files, on the page: the doc (or a diagram's code) in a big box, or a
+     sheet as a grid of cells, filled in with what's in the file now. Save (a POST with this node's action)
+     writes what was sent back to the file first, then draws it again with “Saved”. */
+  'ui.editor': { run: async args => {
+    const p = first(args), part = ['doc', 'sheet', 'diagram'].includes(p.part) ? p.part : 'doc';
+    const f = await fileOf(args, p.fileId);
+    const page = args.ctx?.page || {}, action = String(p.action || `save-${args.node.id}`).slice(0, 60);
+    const saving = page.action === action, form = page.form || {};
+    let saved = false;
+    if (part === 'sheet') {
+      const sh = sheetOf(f, p.sheet);
+      sh.cells ||= {};
+      if (saving) {
+        // Only the cells the grid showed: c_<address> for each; an emptied cell is cleared.
+        for (const [k, v] of Object.entries(form)) {
+          const m = /^c_([A-Z]{1,2}\d{1,4})$/.exec(k);
+          if (!m) continue;
+          const val = String(v ?? '');
+          if (val === '') delete sh.cells[m[1]]; else sh.cells[m[1]] = val;
+        }
+        const e = extent(sh.cells);
+        sh.rows = Math.max(sh.rows || 100, e.rows + 20); sh.cols = Math.max(sh.cols || 26, e.cols);
+        await args.ctx.files.save(f); saved = true;
+      }
+      const e = extent(sh.cells);
+      // What's there, plus room to add: 3 more rows and 1 more column (at most 200 × 26).
+      const rows = Math.min(200, Math.max(e.rows + 3, 6)), cols = Math.min(26, Math.max(e.cols + 1, 3));
+      const grid = Array.from({ length: rows }, (_, r) => Array.from({ length: cols }, (_, c) => { const a = `${COL(c)}${r + 1}`; return { a, v: sh.cells[a] ?? '' }; }));
+      add(args, { kind: 'editor', part, title: p.title || f.title, action, button: p.button || 'Save', saved, file: f.title, sheet: sh.name, grid, cols: Array.from({ length: cols }, (_, c) => COL(c)) });
+      return { main: [{ json: { fileId: f.id, title: f.title, sheet: sh.name, saved } }] };
+    }
+    let text = '', label = 'Doc';
+    if (part === 'diagram') {
+      f.diagrams = Array.isArray(f.diagrams) ? f.diagrams : [];
+      const name = String(p.diagram || '').trim();
+      let d = name ? f.diagrams.find(x => x.name === name) : f.diagrams[0];
+      if (saving) {
+        const code = String(form.content ?? '').replace(/\r\n?/g, '\n');
+        if (d) d.code = code; else { d = { id: rid('d'), type: 'architecture', name: name || 'Diagram 1', code, manual: {}, dir: 'LR', style: 'color' }; f.diagrams.push(d); }
+        await args.ctx.files.save(f); saved = true;
+      }
+      text = d?.code || ''; label = `Diagram code${d ? ` · ${d.name}` : ''}`;
+    } else {
+      if (saving) { f.doc = String(form.content ?? '').replace(/\r\n?/g, '\n'); await args.ctx.files.save(f); saved = true; }
+      text = f.doc || '';
+    }
+    add(args, { kind: 'editor', part, title: p.title || f.title, action, button: p.button || 'Save', saved, file: f.title, label, text, rows: Math.min(60, Math.max(8, Number(p.rows) || 18)) });
+    return { main: [{ json: { fileId: f.id, title: f.title, saved, length: text.length } }] };
+  } },
   'ui.form': { run: args => {
     const p = first(args);
     return add(args, { kind: 'form', title: p.title || '', action: String(p.action || args.node.name || 'submit').slice(0, 60), fields: formFields(p.fields), button: p.button || 'Send', values: args.ctx?.page?.form || {} });
@@ -190,6 +240,12 @@ function block(b, query) {
     case 'form': return `<section class="panel">${head}<form method="post"><input type="hidden" name="_action" value="${esc(b.action)}">${b.fields.map(f => `<label>${esc(f.name)}${f.required ? ' *' : ''}${f.kind === 'long'
       ? `<textarea name="${esc(f.key)}"${f.required ? ' required' : ''}>${esc(b.values[f.key] ?? '')}</textarea>`
       : `<input name="${esc(f.key)}" type="${f.kind}" value="${esc(b.values[f.key] ?? '')}"${f.required ? ' required' : ''}>`}</label>`).join('')}<button>${esc(b.button)}</button></form></section>`;
+    case 'editor': {
+      const ok = b.saved ? '<span class="ed-ok" role="status">✓ Saved</span>' : '';
+      const top = `<div class="ed-top"><h3>${esc(b.title)}</h3>${ok}</div>`;
+      if (b.part === 'sheet') return `<section class="panel editor">${top}<form method="post"><input type="hidden" name="_action" value="${esc(b.action)}"><div class="ed-grid"><table><thead><tr><th></th>${b.cols.map(c => `<th>${c}</th>`).join('')}</tr></thead><tbody>${b.grid.map((row, r) => `<tr><th>${r + 1}</th>${row.map(c => `<td><input name="c_${c.a}" value="${esc(c.v)}" aria-label="${c.a}"></td>`).join('')}</tr>`).join('')}</tbody></table></div><button>${esc(b.button)}</button></form></section>`;
+      return `<section class="panel editor">${top}<form method="post"><input type="hidden" name="_action" value="${esc(b.action)}"><label>${esc(b.label)}<textarea name="content" rows="${b.rows}" class="${b.part === 'diagram' ? 'mono' : ''}" spellcheck="${b.part === 'diagram' ? 'false' : 'true'}">${esc(b.text)}</textarea></label><button>${esc(b.button)}</button></form></section>`;
+    }
     default: return '';
   }
 }
@@ -215,6 +271,9 @@ a{color:${t.acc}}code{font:13px ui-monospace,monospace;background:${t.card};bord
 form{display:grid;gap:12px}label{display:grid;gap:5px;font-weight:600;font-size:13px}input,textarea{font:inherit;padding:10px 12px;border:1px solid ${t.line};border-radius:10px;background:${t.bg};color:${t.fg}}textarea{min-height:100px}
 button{justify-self:start;padding:10px 20px;border:0;border-radius:10px;background:${t.acc};color:#fff;font:600 15px system-ui;cursor:pointer}
 .error{border:1px solid #f0b4b4;background:${dark ? '#2a1414' : '#fff1f1'};color:${dark ? '#ffb4b4' : '#a11'};border-radius:12px;padding:12px 16px}
+.editor .ed-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}.editor .ed-top h3{margin:0}.ed-ok{font-size:13px;font-weight:700;color:${dark ? '#7ee2b8' : '#0b7a52'};background:${dark ? '#12301f' : '#e7f7ef'};padding:4px 10px;border-radius:999px}
+.editor textarea{min-height:240px;line-height:1.6;resize:vertical;font-weight:400}.editor textarea.mono{font:13px/1.6 ui-monospace,monospace}
+.ed-grid{overflow:auto;max-height:70vh;border:1px solid ${t.line};border-radius:10px}.ed-grid table{font-size:13px}.ed-grid th{position:sticky;top:0;background:${t.card};text-align:center;padding:6px 8px;z-index:1}.ed-grid tbody th{position:sticky;left:0;top:auto;width:42px}.ed-grid td{padding:0;border-left:1px solid ${t.line}}.ed-grid td input{width:100%;min-width:110px;border:0;border-radius:0;padding:7px 9px;background:transparent}.ed-grid td input:focus{outline:2px solid ${t.acc};outline-offset:-2px;background:${t.bg}}
 footer{color:${t.mut};font-size:12px;text-align:center}.node{min-width:0}.codeblock{display:block;width:100%;border:0;border-radius:12px;background:transparent}
 </style>${params.css ? `<style>${cssOf(params.css)}</style>` : ''}</head><body><main>
 ${params.title || params.description ? `<header>${params.title ? `<h1>${esc(params.title)}</h1>` : ''}${params.description ? `<p>${esc(params.description)}</p>` : ''}</header>` : ''}

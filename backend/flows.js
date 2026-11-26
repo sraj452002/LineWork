@@ -231,7 +231,7 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
     live.set(run.id, { uid, run });
     const ctx = ctxFor(uid);
     ctx.respond = r => { if (!answer) { answer = r; answered(r); } };
-    ctx.page = { blocks: [], form: (page && page.form) || {} };
+    ctx.page = { blocks: [], form: (page && page.form) || {}, action: (page && page.action) || null };
     Object.defineProperty(run, 'page', { value: ctx.page });
     Object.defineProperty(run, 'done', { value: (async () => {
       let r = null;
@@ -543,13 +543,14 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
     'cross-origin-embedder-policy': 'credentialless', 'cross-origin-resource-policy': 'same-origin' };
   const pageInput = req => {
     const body = req.method === 'POST' && req.body && typeof req.body === 'object' ? req.body : {};
-    const form = Object.fromEntries(Object.entries(body).filter(([k]) => k !== '_action').map(([k, v]) => [k, String(v ?? '').slice(0, 10_000)]).slice(0, 50));
+    // An Editor node sends a whole doc (up to 500,000 characters) or a sheet's grid (a field a cell).
+    const form = Object.fromEntries(Object.entries(body).filter(([k]) => k !== '_action').map(([k, v]) => [k, String(v ?? '').slice(0, k === 'content' ? 500_000 : 10_000)]).slice(0, 6000));
     const query = Object.fromEntries(Object.entries(req.query || {}).map(([k, v]) => [k, String(v).slice(0, 2000)]).slice(0, 30));
     return { action: req.method === 'POST' ? String(body._action || 'submit').slice(0, 60) : 'open', query, form };
   };
   // Run a flow from its Page trigger and draw what its UI nodes made. Waits up to 25 s.
   const drawPage = async (uid, fileId, flow, node, input, trigger) => {
-    const run = start(uid, fileId, flow, node.id, [{ json: input }], trigger, { form: input.form });
+    const run = start(uid, fileId, flow, node.id, [{ json: input }], trigger, { form: input.form, action: input.action });
     const got = await Promise.race([run.done, new Promise(r => setTimeout(() => r(null), 25_000))]);
     const p = node.params || {};
     if (!got) return renderPage(p, run.page.blocks, { query: input.query, error: 'This page is taking too long. Try again in a moment.' });
@@ -566,7 +567,7 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
   const hits = limiter({ max: 120, windowMs: 60_000 });
   // The body as sent is kept too: app triggers check its signature.
   const keep = (req, res, buf) => { req.raw = buf; };
-  hooks.use(express.json({ limit: '5mb', verify: keep }), express.urlencoded({ extended: true, limit: '5mb', verify: keep }), express.text({ type: 'text/*', limit: '5mb', verify: keep }));
+  hooks.use(express.json({ limit: '5mb', verify: keep }), express.urlencoded({ extended: true, limit: '5mb', parameterLimit: 6000, verify: keep }), express.text({ type: 'text/*', limit: '5mb', verify: keep }));
   // A link nobody answers: a browser gets a page saying so (a published web app that's been turned off,
   // or never published); other callers get JSON.
   const notLive = (req, res) => (req.method === 'GET' && req.accepts(['json', 'html']) === 'html'
