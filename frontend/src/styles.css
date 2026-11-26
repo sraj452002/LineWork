@@ -4434,3 +4434,20 @@ button.rv-line:hover{background:rgba(255,255,255,.04)}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .fr-orb .fr-stepno{color:#0b1b3a}}
 :root[data-theme="dark"] .fr-orb .fr-stepno{color:#0b1b3a}
 .fr-core .fr-play{fill:#1a1d1b}
+
+/* The Editor node's card (EditorCard.jsx): a sheet's grid or a box of text, in a dialog. */
+.ed-card{width:min(1000px,96vw);max-height:92vh;display:flex;flex-direction:column;gap:12px}
+.ed-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.ed-card-head h3{margin:0;font-size:18px}.ed-card-head small{color:var(--ink2)}
+.ed-card-kind{font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;padding:2px 7px;border-radius:999px;border:1px solid var(--hair)}
+.ed-card-text{flex:1;min-height:min(56vh,520px);resize:vertical;padding:12px 14px;border:1px solid var(--hair);border-radius:12px;background:var(--surface);color:var(--ink);font:14px/1.6 inherit}
+.ed-card-text.mono{font:13px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace}
+.ed-card-grid{flex:1;min-height:200px;max-height:58vh;overflow:auto;border:1px solid var(--hair);border-radius:12px}
+.ed-card-grid table{border-collapse:collapse;font-size:13px}
+.ed-card-grid th{position:sticky;top:0;z-index:1;background:color-mix(in srgb,var(--ink) 5%,var(--surface));color:var(--ink2);font-weight:600;padding:6px 8px;border-bottom:1px solid var(--hair)}
+.ed-card-grid tbody th{position:sticky;left:0;top:auto;width:40px;border-right:1px solid var(--hair)}
+.ed-card-grid td{padding:0;border-bottom:1px solid var(--hair);border-right:1px solid var(--hair)}
+.ed-card-grid td input{width:130px;border:0;background:transparent;color:var(--ink);padding:7px 9px;font:inherit}
+.ed-card-grid td input:focus{outline:2px solid var(--c-blue);outline-offset:-2px;background:var(--surface)}
+.ed-card-more{display:flex;gap:8px}
+.ed-card-foot{display:flex;align-items:center;gap:10px}.ed-card-foot .muted{flex:1;font-size:12.5px;color:var(--ink2)}

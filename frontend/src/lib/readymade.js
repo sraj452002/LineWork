@@ -601,6 +601,14 @@ const WORKFLOWS = [
     ];
     return flowFile('Failure alerts', nodes);
   } },
+  { k: 'w-editor', name: 'Edit any file', note: 'Pick a file, edit it in a card right here, get the edited file back in the same format', make: () => {
+    const nodes = [
+      node('trigger.manual', 'Pick a file', 80, { fields: 'File* (file)' }),
+      node('ui.editor', 'Editor', 360, { source: 'input', input: '{{ $json.file }}', title: 'Edit your file', button: 'Save & continue' }),
+      node('core.set', 'Edited file', 640, { fields: [{ name: 'file', value: '{{ $json.file }}' }, { name: 'name', value: '{{ $json.name }}' }], keep: false }),
+    ];
+    return flowFile('Edit any file', nodes);
+  } },
 ];
 
 /* ---- Custom apps (a workflow, and a page of your own around it) ---- */
@@ -864,14 +872,6 @@ const PAGES = [
       { id: rid('e'), from: nodes[1].id, fromPort: 'false', to: nodes[4].id, toPort: 'main' },
     ];
     return flowFile('Feedback form page', nodes, edges);
-  } },
-  { k: 'p-editor', name: 'Edit any file', note: 'Upload a file, edit it on the page, download it back in the same format', make: () => {
-    const nodes = [
-      node('trigger.page', 'Upload a file', 80, { path: secretPath(), title: 'Edit a file', description: 'Upload a file (text, Markdown, CSV, Excel, JSON or code), change it, then download it.', theme: 'light', width: 'wide' }),
-      node('ui.editor', 'Editor', 360, { source: 'upload', title: 'Your file', button: 'Save', rows: 20 }),
-      node('core.set', 'Edited file', 640, { fields: [{ name: 'file', value: '{{ $json.file }}' }, { name: 'saved', value: '{{ $json.saved }}' }], keep: false }),
-    ];
-    return flowFile('Edit any file', nodes);
   } },
 ];
 

@@ -140,56 +140,117 @@ const bufFile = (name, type, buf) => ({ name: String(name).replace(/[\\/:*?"<>|]
    the node it came from and a key, so only its own link (?doc=…&k=…) opens it again. */
 const UPLOAD_MAX = 3 * 2 ** 20;
 const CODE_EXT = new Set('js mjs cjs ts jsx tsx py html htm css scss json xml yaml yml sql sh bash java c h cpp hpp cs go rs rb php ini toml env log svg kt swift dart lua r pl'.split(' '));
-async function importUpload(args, up) {
-  const name = String(up.name || 'file').slice(0, 120), ext = (name.includes('.') ? name.split('.').pop() : '').toLowerCase();
-  const buf = Buffer.from(String(up.data || ''), 'base64');
-  if (!buf.length) throw new FlowError('That file is empty.', 'bad_file');
+// A file's contents, ready to edit: a sheet's cells (.csv/.tsv/.xlsx), or text (a doc, or code by its extension).
+async function parseFile(up) {
+  const name = String(up?.name || 'file').slice(0, 120), ext = (name.includes('.') ? name.split('.').pop() : '').toLowerCase();
+  const buf = Buffer.from(String(up?.data || '').replace(/^data:[^,]*,/, ''), 'base64');
+  const type = up?.type || 'application/octet-stream';
+  if (!buf.length) throw new FlowError(`“${name}” is empty.`, 'bad_file');
   if (buf.length > UPLOAD_MAX) throw new FlowError(`“${name}” is ${(buf.length / 2 ** 20).toFixed(1)} MB: a file can be at most 3 MB.`, 'too_large');
-  const now = Date.now(), base = { id: rid('f'), title: name, created: now, updated: now, doc: '', diagrams: [{ id: rid('d'), type: 'architecture', name: 'Diagram 1', code: '', manual: {}, dir: 'LR', style: 'color' }], active: 0,
-    upload: { node: args.node.id, key: randomBytes(12).toString('hex'), name, type: up.type || 'application/octet-stream', format: 'text' } };
-  const sheetFrom = rows => {
+  const cellsOf = rows => {
     const cells = {};
     rows.slice(0, 2000).forEach((r, i) => (r || []).slice(0, 26).forEach((v, c) => { const t = v == null ? '' : String(v instanceof Date ? v.toISOString().slice(0, 10) : v); if (t !== '') cells[`${COL(c)}${i + 1}`] = t; }));
-    const e = extent(cells);
-    return { ...base, view: 'sheet', sheets: [{ id: rid('s'), name: 'Sheet1', rows: Math.max(100, e.rows + 20), cols: Math.max(26, e.cols), cells }] };
+    return cells;
   };
-  if (ext === 'csv' || ext === 'tsv') { const f = sheetFrom(csvRows(buf.toString('utf8').replace(/^﻿/, ''), ext === 'tsv' ? '\t' : ',')); f.upload.format = ext; return f; }
+  if (ext === 'csv' || ext === 'tsv') return { kind: 'sheet', format: ext, name, type, sheet: 'Sheet1', cells: cellsOf(csvRows(buf.toString('utf8').replace(/^﻿/, ''), ext === 'tsv' ? '\t' : ',')) };
   if (ext === 'xlsx') {
     const { default: ExcelJS } = await import('exceljs');
     const wb = new ExcelJS.Workbook();
     try { await wb.xlsx.load(buf); } catch (e) { throw new FlowError(`“${name}” couldn’t be read as an Excel file.`, 'bad_file'); }
     const ws = wb.worksheets[0], rows = [];
     if (ws) ws.eachRow({ includeEmpty: true }, (row, n) => { rows[n - 1] = row.values.slice(1).map(cellValue); });
-    const f = sheetFrom(Array.from(rows, r => r || [])); f.upload.format = 'xlsx'; f.sheets[0].name = ws?.name || 'Sheet1'; return f;
+    return { kind: 'sheet', format: 'xlsx', name, type, sheet: ws?.name || 'Sheet1', cells: cellsOf(Array.from(rows, r => r || [])) };
   }
   // Text of any kind; a file with NUL bytes (a picture, a PDF, a Word file) can't be edited as text.
-  if (buf.subarray(0, 8000).includes(0)) throw new FlowError(`“${name}” isn’t a file that can be edited here. Upload text, Markdown, CSV, Excel (.xlsx), JSON or code.`, 'bad_file');
+  if (buf.subarray(0, 8000).includes(0)) throw new FlowError(`“${name}” isn’t a file that can be edited here. Use text, Markdown, CSV, Excel (.xlsx), JSON or code.`, 'bad_file');
   const text = buf.toString('utf8').replace(/^﻿/, '').replace(/\r\n?/g, '\n');
-  if (CODE_EXT.has(ext)) return { ...base, view: 'code', code: { files: [{ id: rid('cf'), path: name, text }], folders: [], open: [], active: null } };
-  return { ...base, view: 'doc', doc: text };
+  return { kind: CODE_EXT.has(ext) ? 'code' : 'doc', format: 'text', name, type, text };
+}
+// The whole file again, from what was edited, in the format it came in.
+async function buildFile(m, cells, text) {
+  if (m.kind === 'sheet') {
+    if (m.format === 'xlsx') {
+      const { default: ExcelJS } = await import('exceljs');
+      const wb = new ExcelJS.Workbook(), ws = wb.addWorksheet(m.sheet || 'Sheet1'), e = extent(cells || {});
+      for (let r = 0; r < e.rows; r++) ws.addRow(Array.from({ length: e.cols }, (_, c) => { const v = (cells || {})[`${COL(c)}${r + 1}`] ?? ''; return v !== '' && /^-?\d+(\.\d+)?$/.test(v) ? Number(v) : v; }));
+      return bufFile(m.name, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', Buffer.from(await wb.xlsx.writeBuffer()));
+    }
+    return bufFile(m.name, m.format === 'tsv' ? 'text/tab-separated-values' : 'text/csv', Buffer.from(toCsv(cells || {}, m.format === 'tsv' ? '\t' : ','), 'utf8'));
+  }
+  return bufFile(m.name, m.type && m.type !== 'application/octet-stream' ? m.type : mimeOf(m.name), Buffer.from(String(text ?? ''), 'utf8'));
+}
+async function importUpload(args, up) {
+  const m = await parseFile(up), now = Date.now();
+  const base = { id: rid('f'), title: m.name, created: now, updated: now, doc: '', diagrams: [{ id: rid('d'), type: 'architecture', name: 'Diagram 1', code: '', manual: {}, dir: 'LR', style: 'color' }], active: 0,
+    upload: { node: args.node.id, key: randomBytes(12).toString('hex'), name: m.name, type: m.type, format: m.format } };
+  if (m.kind === 'sheet') { const e = extent(m.cells); return { ...base, view: 'sheet', sheets: [{ id: rid('s'), name: m.sheet, rows: Math.max(100, e.rows + 20), cols: Math.max(26, e.cols), cells: m.cells }] }; }
+  if (m.kind === 'code') return { ...base, view: 'code', code: { files: [{ id: rid('cf'), path: m.name, text: m.text }], folders: [], open: [], active: null } };
+  return { ...base, view: 'doc', doc: m.text };
 }
 // The edited file, back in the format it came in.
 async function exportUpload(f, kind) {
-  const u = f.upload;
-  if (kind === 'sheet') {
-    const sh = (f.sheets || [])[0] || { cells: {} };
-    if (u.format === 'xlsx') {
-      const { default: ExcelJS } = await import('exceljs');
-      const wb = new ExcelJS.Workbook(), ws = wb.addWorksheet(sh.name || 'Sheet1'), e = extent(sh.cells || {});
-      for (let r = 0; r < e.rows; r++) ws.addRow(Array.from({ length: e.cols }, (_, c) => { const v = (sh.cells || {})[`${COL(c)}${r + 1}`] ?? ''; return v !== '' && !Number.isNaN(Number(v)) && /^-?\d/.test(v) ? Number(v) : v; }));
-      return bufFile(u.name, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', Buffer.from(await wb.xlsx.writeBuffer()));
-    }
-    return bufFile(u.name, u.format === 'tsv' ? 'text/tab-separated-values' : 'text/csv', Buffer.from(toCsv(sh.cells || {}, u.format === 'tsv' ? '\t' : ','), 'utf8'));
-  }
-  const text = kind === 'code' ? (f.code?.files?.[0]?.text || '') : (f.doc || '');
-  return bufFile(u.name, u.type && u.type !== 'application/octet-stream' ? u.type : mimeOf(u.name), Buffer.from(text, 'utf8'));
+  const u = f.upload, m = { kind, format: u.format, name: u.name, type: u.type, sheet: (f.sheets || [])[0]?.name };
+  return buildFile(m, (f.sheets || [])[0]?.cells, kind === 'code' ? f.code?.files?.[0]?.text : f.doc);
 }
+// The first thing in an item that looks like a file: {name, data} (a Run by hand or Form (file) field).
+const fileIn = json => { for (const v of Object.values(json || {})) if (v && typeof v === 'object' && typeof v.data === 'string' && v.name) return v; return null; };
 const toCsv = (cells, sep = ',') => {
   const e = extent(cells), q = v => { const t = String(v ?? ''); return /[",\n\r\t]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
   return Array.from({ length: e.rows }, (_, r) => Array.from({ length: e.cols }, (_, c) => q(cells[`${COL(c)}${r + 1}`])).join(sep)).join('\n');
 };
 const MIME = { js: 'text/javascript', mjs: 'text/javascript', ts: 'text/plain', jsx: 'text/plain', tsx: 'text/plain', py: 'text/x-python', html: 'text/html', css: 'text/css', json: 'application/json', md: 'text/markdown', csv: 'text/csv', xml: 'application/xml', svg: 'image/svg+xml', yml: 'text/yaml', yaml: 'text/yaml', sql: 'text/plain', txt: 'text/plain' };
 const mimeOf = path => MIME[(String(path).split('.').pop() || '').toLowerCase()] || 'text/plain';
+
+async function editInApp(args, p) {
+  const item = args.items[0]?.json || {};
+  if (item._edited && typeof item._edited === 'object') {
+    const e = item._edited, cells = e.cells && typeof e.cells === 'object' ? e.cells : {}, text = String(e.text ?? '').replace(/\r\n?/g, '\n');
+    let file;
+    if (e.fileId) {
+      // A Workline file: write the edit back, then give the whole file.
+      const f = await fileOf(args, e.fileId);
+      if (e.kind === 'sheet') {
+        const sh = sheetOf(f, e.sheet);
+        sh.cells = Object.fromEntries(Object.entries(cells).filter(([a, v]) => /^[A-Z]{1,2}\d{1,4}$/.test(a) && String(v) !== '').map(([a, v]) => [a, String(v)]));
+        const x = extent(sh.cells); sh.rows = Math.max(sh.rows || 100, x.rows + 20); sh.cols = Math.max(sh.cols || 26, x.cols);
+        file = asFile(`${f.title}${(f.sheets || []).length > 1 ? ` - ${sh.name}` : ''}.csv`, 'text/csv', toCsv(sh.cells));
+      } else if (e.kind === 'code') {
+        const cf = (f.code?.files || []).find(x => x.path === e.path);
+        if (!cf) throw new FlowError(`“${e.path}” isn’t in “${f.title}” any more.`, 'not_found');
+        cf.text = text; file = asFile(cf.path.split('/').pop(), mimeOf(cf.path), text);
+      } else if (e.kind === 'diagram') {
+        f.diagrams = Array.isArray(f.diagrams) ? f.diagrams : [];
+        let d = f.diagrams.find(x => x.name === e.diagram);
+        if (d) d.code = text; else { d = { id: rid('d'), type: 'architecture', name: e.diagram || 'Diagram 1', code: text, manual: {}, dir: 'LR', style: 'color' }; f.diagrams.push(d); }
+        file = asFile(`${f.title} - ${d.name}.txt`, 'text/plain', text);
+      } else { f.doc = text; file = asFile(`${f.title}.md`, 'text/markdown', text); }
+      await args.ctx.files.save(f);
+    } else file = await buildFile(e, cells, text);
+    return { main: [{ json: { file, name: file.name, kind: e.kind, saved: true } }] };
+  }
+  let card;
+  if (p.source === 'file') {
+    const f = await fileOf(args, p.fileId);
+    const kind = ['doc', 'sheet', 'diagram', 'code'].includes(p.part) ? p.part : kindOf(f);
+    if (kind === 'sheet') { const sh = sheetOf(f, p.sheet); card = { kind, cells: sh.cells || {}, sheet: sh.name, name: `${f.title}.csv` }; }
+    else if (kind === 'code') {
+      const files = f.code?.files || [], cf = files.find(x => x.path === p.path) || files.find(x => x.id === f.code?.active) || files[0];
+      if (!cf) throw new FlowError(`“${f.title}” has no code files yet.`, 'not_found');
+      card = { kind, text: cf.text || '', path: cf.path, name: cf.path.split('/').pop() };
+    } else if (kind === 'diagram') {
+      const d = (f.diagrams || []).find(x => x.name === p.diagram) || (f.diagrams || []).find(x => String(x.code || '').trim()) || (f.diagrams || [])[0];
+      card = { kind, text: d?.code || '', diagram: d?.name || 'Diagram 1', name: `${f.title} - ${d?.name || 'Diagram 1'}.txt` };
+    } else card = { kind: 'doc', text: f.doc || '', name: `${f.title}.md` };
+    Object.assign(card, { fileId: f.id, title: f.title });
+  } else {
+    // A file from the step before: the one named in “File”, else the first file in the item.
+    const up = p.input && typeof p.input === 'object' && typeof p.input.data === 'string' ? p.input : fileIn(item);
+    if (!up) throw new FlowError('No file reached the Editor. Add a file field to Run by hand (like “File* (file)”), or set the Editor’s File to {{ $json.yourField }}.', 'missing');
+    card = await parseFile(up);
+    card.title = card.name;
+  }
+  return { main: [], editor: [{ json: { ...card, button: p.button || 'Save & continue', heading: p.title || '' } }] };
+}
 
 /* ---- the nodes ---- */
 const STYLE_OPTS = ['text', 'heading', 'note'];
@@ -246,6 +307,10 @@ export const UI_NODES = {
      download, and the node gives it to the next steps as {name, type, size, data} (data in base64). */
   'ui.editor': { run: async args => {
     const p = first(args), page = args.ctx?.page || {}, query = page.query || {};
+    // Not on a page (Run, Run by hand, a schedule…): the run stops here and the app shows an editor card.
+    // “Save & continue” runs it again from this node with what was edited ({_edited}): the node then gives
+    // the whole file, edited, to the next steps (and saves a Workline file back).
+    if (page.action == null) return editInApp(args, p);
     let f, qs = '';
     if (p.source === 'upload') {
       // A file uploaded here: the upload box until one is sent, then its editor (on its own link).
