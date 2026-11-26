@@ -4417,3 +4417,20 @@ button.rv-line:hover{background:rgba(255,255,255,.04)}
 .ws .fr-stop small{font-size:12.5px}
 @media (max-height:640px),(max-width:700px){.ws .fr-track{--dot:34px}.ws .fr-dot .rh-mark{width:20px;height:20px}.fr-stop small{display:none}}
 @media (prefers-reduced-motion:reduce){.fr-spark,.fr-line i::after,.fr-stop.st-active .fr-dot,.fr-track.st-success .fr-stop .fr-dot,.fr.st-active .fr-stage::before{animation:none!important}}
+
+/* Run animation contrast: deep shades in the light theme, light shades in the dark theme, so the track,
+   the tick and the step at work stand out from the page either way. */
+.fr{--c-blue:#1d4ed8;--c-green:#047857;--err:#b91c1c;--fr-idle:color-mix(in srgb,var(--ink) 32%,transparent);--fr-rail:color-mix(in srgb,var(--ink) 14%,transparent);--fr-tick:#fff;--fr-ok-hi:#34d399;--fr-ok:#059669;--fr-ok-lo:#065f46}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .fr{--c-blue:#93c5fd;--c-green:#6ee7b7;--err:#fca5a5;--fr-idle:color-mix(in srgb,var(--ink) 40%,transparent);--fr-rail:color-mix(in srgb,var(--ink) 20%,transparent);--fr-tick:#052e22;--fr-ok-hi:#d1fae5;--fr-ok:#6ee7b7;--fr-ok-lo:#34d399}}
+:root[data-theme="dark"] .fr{--c-blue:#93c5fd;--c-green:#6ee7b7;--err:#fca5a5;--fr-idle:color-mix(in srgb,var(--ink) 40%,transparent);--fr-rail:color-mix(in srgb,var(--ink) 20%,transparent);--fr-tick:#052e22;--fr-ok-hi:#d1fae5;--fr-ok:#6ee7b7;--fr-ok-lo:#34d399}
+.fr-orb.st-success .fr-core{background:radial-gradient(120% 120% at 30% 20%,var(--fr-ok-hi),var(--fr-ok) 55%,var(--fr-ok-lo));box-shadow:0 20px 44px -14px color-mix(in srgb,var(--fr-ok) 75%,transparent),0 0 0 10px color-mix(in srgb,var(--fr-ok) 16%,transparent),inset 0 2px 0 rgba(255,255,255,.35)}
+.fr-ic-ok path{stroke:var(--fr-tick)}
+.fr-line{background:var(--fr-rail)}
+.fr-dot{border-color:var(--fr-idle)}
+.fr-stop.st-pending small,.fr-stop.st-idle small{color:color-mix(in srgb,var(--ink) 62%,transparent)}
+.fr-dot em{color:var(--fr-tick)}
+.fr-orb .fr-stepno{color:var(--fr-tick)}
+:root:not([data-theme="dark"]) .fr-orb .fr-stepno{color:#fff}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .fr-orb .fr-stepno{color:#0b1b3a}}
+:root[data-theme="dark"] .fr-orb .fr-stepno{color:#0b1b3a}
+.fr-core .fr-play{fill:#1a1d1b}
