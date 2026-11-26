@@ -91,6 +91,12 @@ test('the run studio: dropdown, step-by-step runs with input, step output, repla
     await expect(greetStage.locator('.fr-say')).toContainText('All done!', { timeout: 20_000 });
     await expect(panel.locator('.rv-result')).toContainText('Hi Meera');
     await page.screenshot({ path: 'test-results/run-studio.png' });
+    // The side panel folds away for a wider stage, and See the result brings it back.
+    await page.getByRole('button', { name: 'Hide the side panel' }).click();
+    await expect(panel).toHaveCount(0);
+    await page.screenshot({ path: 'test-results/run-studio-noside.png' });
+    await greetStage.getByRole('button', { name: 'See the result' }).click();
+    await expect(panel.locator('.rv-result')).toContainText('Hi Meera');
     // The steps, for the curious; See the result opens the result.
     await greetStage.locator('.fr-stack').click();
     await expect(greetStage.locator('.fr-list')).toContainText('Greeting');

@@ -154,6 +154,9 @@ export default function RunHub({ files, q = '', onOpen, onUpdate, menuHidden, on
   const [pickStep, setPickStep] = useState(null); // the step clicked, to see what it gave
   const [tab, setTab] = useState(null);       // the panel on the right: result, how to run, history (null: by itself)
   const [creds, setCreds] = useState(null);    // saved credentials, for the fix card
+  // The side panel can be hidden for a wider stage; remembered in this browser.
+  const [side, setSide] = useState(() => { try { return localStorage.getItem('linework:run-side') !== 'off'; } catch (e) { return true; } });
+  const showSide = on => { setSide(on); try { localStorage.setItem('linework:run-side', on ? 'on' : 'off'); } catch (e) { /* not kept */ } };
   const [credPick, setCredPick] = useState('');
   const sel = flows.find(f => f.id === selId) || flows[0] || null;
   const stageRef = useRef(null);
@@ -286,17 +289,20 @@ export default function RunHub({ files, q = '', onOpen, onUpdate, menuHidden, on
         <button className="btn rs-tb-btn" aria-label="Open in editor" onClick={() => onOpen(sel.id)}><svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4" /></svg><span className="rs-tb-lbl">Open in editor</span></button>
         <button className="btn rs-tb-btn" aria-label="Run with input…" disabled={!server || !!busy} onClick={() => runIt(sel, true)}><svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5zM9 9h6M9 13h6M9 17h3" /></svg><span className="rs-tb-lbl">Run with input…</span></button>
         <button className="btn primary rs-go" disabled={!server || !!busy} onClick={() => runIt(sel)} aria-label={`Run ${sel.title}`}>{busy === sel.id ? <><i className="spin" />Running</> : <><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4l13 8-13 8z" /></svg>Run</>}</button>
+        <button className={'rs-ib rs-side-btn' + (side ? ' on' : '')} onClick={() => showSide(!side)} aria-pressed={side} aria-label={side ? 'Hide the side panel' : 'Show the side panel'} title={side ? 'Hide the side panel' : 'Show the side panel'}>
+          <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM15 5v14" /></svg>
+        </button>
       </div>
       {server === false && <p className="rh-note">Workflows run on the Workline server. Start it with <code>npm run dev</code> (or sign in to a Workline server) to run them here.</p>}
 
-      <div className="rs-body">
+      <div className={'rs-body' + (side ? '' : ' no-side')}>
         <section ref={stageRef} className={'ws-main' + (shown && !quiet ? ' s-' + (done ? shown.status : 'running') : ' s-idle')} aria-label={`Runs of ${sel.title}`}>
           <FriendlyRun steps={quiet ? pipe.map((n, i) => ({ n, i, st: 'idle', r: null })) : steps} run={quiet ? null : shown} done={!quiet && done} title={sel.title || 'Untitled'} secs={shown ? secs(shown) : ''} failed={failed}
             last={quiet && shown ? { status: shown.status, when: ago(shown.started), by: startedBy(shown.trigger) } : null} onWatch={() => { setQuiet(false); setUpto(0); }}
-            wantsInput={wantsInput(sel.flow, startOf(sel.flow))} onReplay={() => { setQuiet(false); setUpto(0); }} onResult={() => setTab('result')} onFix={() => (fixCred ? setTab('result') : fixInEditor(failed?.id))} />
+            wantsInput={wantsInput(sel.flow, startOf(sel.flow))} onReplay={() => { setQuiet(false); setUpto(0); }} onResult={() => { setTab('result'); showSide(true); }} onFix={() => (fixCred ? setTab('result') : fixInEditor(failed?.id))} />
         </section>
 
-        <aside className="ws-panel" aria-label="About this run">
+        {side && <aside className="ws-panel" aria-label="About this run">
           <div className="ws-tabs" role="tablist">
             {tabs.map(([k, label]) => <button key={k} role="tab" aria-selected={panel === k} className={panel === k ? 'on' : ''} onClick={() => setTab(k)}>{label}{k === 'result' && done && <i className={'ws-tdot s-' + shown.status} />}</button>)}
           </div>
@@ -355,7 +361,7 @@ export default function RunHub({ files, q = '', onOpen, onUpdate, menuHidden, on
               <ResultView results={resultOf(sel.flow, shown)} onCopy={copy} />
             )}
           </div>
-        </aside>
+        </aside>}
       </div>
       {ask && <RunForm fileId={ask.id} flow={ask.flow} node={startOf(ask.flow)} onClose={() => setAsk(null)} onRun={input => { const f = ask; setAsk(null); go(f, input); }} />}
     </div>

@@ -4360,3 +4360,6 @@ button.rv-line:hover{background:rgba(255,255,255,.04)}
 .ws .ws-main,.ws .ws-panel{border:0;border-radius:0;box-shadow:none;background:transparent}
 .ws .ws-panel{border-left:1px solid var(--hair,var(--line))}
 @media (max-width:1100px){.ws .ws-panel{border-left:0;border-top:1px solid var(--hair,var(--line))}}
+/* The side panel hidden: the run takes the whole canvas. */
+.ws .rs-body.no-side{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr)}
+.rs-side-btn.on{color:var(--ink);background:color-mix(in srgb,var(--ink) 8%,transparent)}
