@@ -4591,3 +4591,16 @@ body{background:radial-gradient(1100px 620px at 8% -10%,color-mix(in srgb,var(--
 @keyframes nn-go{from{left:-4px}to{left:calc(100% - 6px)}}
 @media (max-width:700px){.nn-canvas{zoom:.8}}
 @media (prefers-reduced-motion:reduce){.nn-canvas *{animation:none!important}}
+/* The canvas in one accent: neutral icons, and violet for running, done, the links and their labels. */
+.nn-canvas{--nn:var(--c-purple)}
+.nn-box .rh-mark{--tone:var(--ink2);background:color-mix(in srgb,var(--ink) 6%,var(--surface));color:var(--ink2)}
+.nn-node.done .nn-box .rh-mark,.nn-node.run .nn-box .rh-mark{background:color-mix(in srgb,var(--nn) 12%,var(--surface));color:var(--nn)}
+.nn-node.run .nn-box::before{background:conic-gradient(from var(--nn-a),var(--nn) 0 28%,color-mix(in srgb,var(--nn) 18%,transparent) 28% 50%,var(--nn) 50% 78%,color-mix(in srgb,var(--nn) 18%,transparent) 78%)}
+.nn-node.run .nn-box{box-shadow:0 0 0 5px color-mix(in srgb,var(--nn) 14%,transparent)}
+.nn-node.run small{color:var(--nn)}
+.nn-node.done .nn-box{border-color:var(--nn)}
+.nn-ok{background:var(--nn)}
+.nn-link.flow .nn-line{background:repeating-linear-gradient(90deg,var(--nn) 0 6px,transparent 6px 11px);background-size:22px 2px}
+.nn-link.done .nn-line{background:var(--nn)}
+.nn-dot{background:var(--nn)}
+.nn-link em{color:var(--nn)}
