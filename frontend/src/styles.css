@@ -4350,3 +4350,13 @@ button.rv-line:hover{background:rgba(255,255,255,.04)}
 
 /* A word as an app's icon: small, kept inside its box. */
 .app-txt-icon { font-size: .34em; font-weight: 700; letter-spacing: -.02em; line-height: 1; max-width: 100%; overflow: hidden; display: inline-block; }
+
+/* Run: one canvas. The toolbar, the run and the side panel are one card, split by hairlines,
+   instead of three floating boxes. */
+.rs.ws{gap:0;padding-bottom:0;height:100%;border:1px solid var(--hair,var(--line));border-radius:20px;background:var(--surface);box-shadow:var(--shadow-sm);overflow:hidden}
+.rs.ws>.rs-tb{border:0;border-bottom:1px solid var(--hair,var(--line));border-radius:0;box-shadow:none;background:transparent;-webkit-backdrop-filter:none;backdrop-filter:none;padding:10px 14px}
+.rs.ws>.rh-note{margin:10px 16px 0}
+.ws .rs-body{gap:0}
+.ws .ws-main,.ws .ws-panel{border:0;border-radius:0;box-shadow:none;background:transparent}
+.ws .ws-panel{border-left:1px solid var(--hair,var(--line))}
+@media (max-width:1100px){.ws .ws-panel{border-left:0;border-top:1px solid var(--hair,var(--line))}}
