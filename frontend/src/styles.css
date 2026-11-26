@@ -4479,3 +4479,61 @@ button.rv-line:hover{background:rgba(255,255,255,.04)}
 .modal .ed-card .ed-card-text,.ed-card .ed-card-grid{width:auto;align-self:stretch;min-width:0}
 .ed-card .ed-card-grid td input,.ed-card .ed-card-grid td input:focus{box-shadow:none}
 @media (max-width:560px){.ed-card>*{margin-left:12px;margin-right:12px}.ed-card-head{padding:14px 12px 12px}.ed-card-foot{flex-wrap:wrap}.ed-card-foot .muted{flex-basis:100%}}
+
+/* =====================================================================
+   Aesthetic palette (the last word on colour): cool slate neutrals with a faint lavender tint, the
+   brand gold kept for the main actions, and one family of soft, harmonious accents for everything that
+   carries a colour (node tones, statuses, links). Deeper shades in the light theme, lighter ones in the
+   dark theme, so each reads clearly on its own background.
+   ===================================================================== */
+:root{
+  --paper:#EEF0F6;--grid:#E2E5EF;--grid2:#D2D7E5;--surface:#FFFFFF;--panel:#F6F7FB;
+  --ink:#1A1E2C;--ink2:#5B6276;--line:#CCD1DF;--edge:#475069;
+  --hi:#F4C542;--hiInk:#1A1E2C;
+  --c-blue:#4C63E6;--c-green:#0F9F7A;--c-orange:#E2683C;--c-purple:#7B5CF0;--err:#DC3D4B;
+  --hair:color-mix(in srgb,var(--line) 70%,transparent);
+  --shadow-sm:0 1px 2px rgba(26,30,44,.06),0 1px 1px rgba(26,30,44,.04);
+  --shadow:0 1px 2px rgba(26,30,44,.05),0 10px 26px -12px rgba(60,64,110,.28);
+  --shadow-lg:0 2px 4px rgba(26,30,44,.05),0 22px 48px -18px rgba(60,64,110,.36);
+  --glass:color-mix(in srgb,var(--surface) 84%,transparent);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#0D0F17;--grid:#141724;--grid2:#1C2031;--surface:#161A27;--panel:#11141F;
+    --ink:#ECEEF7;--ink2:#9EA4BA;--line:#2B3045;--edge:#A7AEC6;
+    --hi:#F6CD55;--hiInk:#171A24;
+    --c-blue:#8EA2FF;--c-green:#4FD3A8;--c-orange:#FF9F7A;--c-purple:#B7A0FF;--err:#FF7A85;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.35);
+    --shadow:0 1px 2px rgba(0,0,0,.35),0 12px 30px -12px rgba(0,0,0,.7);
+    --shadow-lg:0 2px 6px rgba(0,0,0,.4),0 24px 54px -18px rgba(0,0,0,.8);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0D0F17;--grid:#141724;--grid2:#1C2031;--surface:#161A27;--panel:#11141F;
+  --ink:#ECEEF7;--ink2:#9EA4BA;--line:#2B3045;--edge:#A7AEC6;
+  --hi:#F6CD55;--hiInk:#171A24;
+  --c-blue:#8EA2FF;--c-green:#4FD3A8;--c-orange:#FF9F7A;--c-purple:#B7A0FF;--err:#FF7A85;
+  --shadow-sm:0 1px 2px rgba(0,0,0,.35);
+  --shadow:0 1px 2px rgba(0,0,0,.35),0 12px 30px -12px rgba(0,0,0,.7);
+  --shadow-lg:0 2px 6px rgba(0,0,0,.4),0 24px 54px -18px rgba(0,0,0,.8);
+}
+/* Node and card tones: one harmonious set, a step deeper in the light theme and lighter in the dark. */
+.t-green{--tone:#16A37F}.t-teal{--tone:#0E9AA0}.t-amber{--tone:#D9921A}.t-blue{--tone:#4C63E6}.t-violet{--tone:#7B5CF0}
+.t-pink{--tone:#D9468F}.t-indigo{--tone:#5B54E8}.t-sky{--tone:#1E90D6}.t-slate{--tone:#66708A}.t-orange{--tone:#E2683C}.t-brand{--tone:#C99A12}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]) .t-green{--tone:#4FD3A8}:root:not([data-theme="light"]) .t-teal{--tone:#4DD4DA}
+  :root:not([data-theme="light"]) .t-amber{--tone:#F5BE55}:root:not([data-theme="light"]) .t-blue{--tone:#8EA2FF}
+  :root:not([data-theme="light"]) .t-violet{--tone:#B7A0FF}:root:not([data-theme="light"]) .t-pink{--tone:#FF8CC6}
+  :root:not([data-theme="light"]) .t-indigo{--tone:#A5A0FF}:root:not([data-theme="light"]) .t-sky{--tone:#6CC6FF}
+  :root:not([data-theme="light"]) .t-slate{--tone:#A3ABC2}:root:not([data-theme="light"]) .t-orange{--tone:#FF9F7A}
+  :root:not([data-theme="light"]) .t-brand{--tone:#F6CD55}
+}
+:root[data-theme="dark"] .t-green{--tone:#4FD3A8}:root[data-theme="dark"] .t-teal{--tone:#4DD4DA}
+:root[data-theme="dark"] .t-amber{--tone:#F5BE55}:root[data-theme="dark"] .t-blue{--tone:#8EA2FF}
+:root[data-theme="dark"] .t-violet{--tone:#B7A0FF}:root[data-theme="dark"] .t-pink{--tone:#FF8CC6}
+:root[data-theme="dark"] .t-indigo{--tone:#A5A0FF}:root[data-theme="dark"] .t-sky{--tone:#6CC6FF}
+:root[data-theme="dark"] .t-slate{--tone:#A3ABC2}:root[data-theme="dark"] .t-orange{--tone:#FF9F7A}
+:root[data-theme="dark"] .t-brand{--tone:#F6CD55}
+/* The page: a soft wash of the accents behind everything, very faint, so the neutrals don't feel flat. */
+body{background:radial-gradient(1100px 620px at 8% -10%,color-mix(in srgb,var(--c-purple) 9%,transparent),transparent 62%),radial-gradient(900px 560px at 105% 110%,color-mix(in srgb,var(--c-blue) 8%,transparent),transparent 60%),var(--paper)}
+::selection{background:color-mix(in srgb,var(--c-purple) 28%,transparent)}
