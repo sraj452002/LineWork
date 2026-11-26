@@ -4363,3 +4363,15 @@ button.rv-line:hover{background:rgba(255,255,255,.04)}
 /* The side panel hidden: the run takes the whole canvas. */
 .ws .rs-body.no-side{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr)}
 .rs-side-btn.on{color:var(--ink);background:color-mix(in srgb,var(--ink) 8%,transparent)}
+/* Run page: the animation fills the stage (about 80% of it), not a small island in the middle. */
+.ws .fr-stage{max-width:80%;gap:22px}
+.ws .fr-orb{zoom:1.35}
+.ws .fr-say{font-size:40px}
+.ws .fr-sub{font-size:17px}
+.ws .fr-text{max-width:100%}
+.ws .fr-bar{width:100%;height:14px}
+.ws .fr-ticker{width:100%}
+.ws .fr-list{max-width:100%}
+.ws .fr-acts .btn{padding:11px 22px;font-size:15px}
+@media (min-height:820px){.ws .fr-orb{zoom:1.6}.ws .fr-say{font-size:46px}}
+@media (max-height:640px),(max-width:700px){.ws .fr-orb{zoom:1}.ws .fr-say{font-size:30px}.ws .fr-stage{max-width:100%}.ws .fr-bar,.ws .fr-ticker,.ws .fr-list{width:100%;max-width:100%}}
