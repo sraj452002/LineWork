@@ -13,7 +13,7 @@ import { FileCard, filesOf, slim } from './ResultView.jsx';
    with a Run button; the result shows as words, a table or cards, and earlier runs are listed. Nothing
    about nodes or credentials shows here. */
 
-const ago = t => { const s = Math.round((Date.now() - t) / 1000); return s < 60 ? 'just now' : s < 3600 ? `${Math.round(s / 60)} min ago` : s < 86400 ? `${Math.round(s / 3600)} h ago` : new Date(t).toLocaleDateString(); };
+const ago = t => { const s = Math.round((Date.now() - t) / 1000); return s < 60 ? 'just now' : s < 3600 ? `${Math.round(s / 60)} min ago` : s < 86400 ? `${Math.round(s / 3600)} h ago` : s < 30 * 86400 ? `${Math.round(s / 86400)} d ago` : new Date(t).toLocaleDateString(); };
 const label = k => String(k).replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').replace(/^\w/, c => c.toUpperCase());
 
 export default function Apps({ files, q = '', onEdit, onUpdate }) {
@@ -27,63 +27,112 @@ export default function Apps({ files, q = '', onEdit, onUpdate }) {
     return true;
   };
   const [openId, setOpenId] = useState(null);
+  const [view, setView] = useState('all'), [sort, setSort] = useState('recent');
   const [server, setServer] = useState(undefined);
   useEffect(() => { serverInfo().then(i => setServer(!!(i && (i.features || []).includes('flows')))); }, []);
   const apps = publishedApps(files);
   const open = apps.find(f => f.id === openId);
   if (open) return <AppRunner file={open} server={server} onBack={() => setOpenId(null)} onEdit={onEdit} onRemove={onUpdate ? async () => { if (await remove(open)) setOpenId(null); } : null} />;
   const needle = q.trim().toLowerCase();
-  const shown = apps.filter(f => !needle || `${f.flow.app.name} ${f.flow.app.description}`.toLowerCase().includes(needle));
+  const byName = (x, y) => x.localeCompare(y, undefined, { sensitivity: 'base' });
+  const shown = apps.filter(f => !needle || `${f.flow.app.name} ${f.flow.app.description}`.toLowerCase().includes(needle))
+    .sort((x, y) => (sort === 'az' ? byName(x.flow.app.name || '', y.flow.app.name || '') : (y.updated || 0) - (x.updated || 0)));
   // Pages (workflows published as web apps) apart from the form apps: each opens at its own link.
-  const pages = livePages(files).filter(p => !needle || `${p.title} ${p.description}`.toLowerCase().includes(needle));
+  const pages = livePages(files).filter(p => !needle || `${p.title} ${p.description}`.toLowerCase().includes(needle))
+    .sort((x, y) => (sort === 'az' ? byName(x.title || '', y.title || '') : (y.updated || 0) - (x.updated || 0)));
+  const allPages = livePages(files);
+  const showApps = view !== 'pages', showPages = view !== 'apps';
   return (
     <div className="apps">
-      <header className="tpl-head">
-        <h2>Apps</h2>
-        <p>Tools made from workflows: fill in the form and press Run. To make one, open a workflow and press <b>Publish</b>.</p>
+      <header className="apps-hero">
+        <div className="apps-hero-text">
+          <h2>Apps</h2>
+          <p>Tools made from your workflows. Open one, fill in the form and press <b>Run</b>.</p>
+          <div className="apps-stats">
+            <span><b>{apps.length}</b> {apps.length === 1 ? 'app' : 'apps'}</span>
+            <span><b>{allPages.length}</b> {allPages.length === 1 ? 'page' : 'pages'}</span>
+          </div>
+        </div>
+        <div className="apps-hero-tip"><i aria-hidden="true">✦</i><span>To make one, open a workflow and press <b>Publish</b> in its toolbar.</span></div>
       </header>
-      {!apps.length ? (
-        <div className="nofiles">
+      {(apps.length > 0 || allPages.length > 0) && (
+        <div className="apps-bar">
+          <div className="apps-chips" role="tablist" aria-label="Show">
+            {[['all', 'All', apps.length + allPages.length], ['apps', 'Workflows', apps.length], ['pages', 'Pages', allPages.length]].map(([k, l, n]) => (
+              <button key={k} role="tab" aria-selected={view === k} className={view === k ? 'on' : ''} onClick={() => setView(k)}>{l} <small>{n}</small></button>
+            ))}
+          </div>
+          <label className="apps-sort"><span>Sort</span>
+            <select value={sort} onChange={e => setSort(e.target.value)} aria-label="Sort apps"><option value="recent">Recently updated</option><option value="az">A–Z</option></select>
+          </label>
+        </div>
+      )}
+      {showApps && (!apps.length ? (
+        <div className="nofiles apps-empty">
           <svg className="nofiles-art" viewBox="0 0 160 110" aria-hidden="true"><rect x="22" y="24" width="70" height="56" rx="10" /><rect x="68" y="38" width="70" height="56" rx="10" /><path d="M80 56h44M80 66h30M80 76h38" /><circle cx="40" cy="42" r="6" /><path d="M34 64h40" /></svg>
           <div>No apps yet. Build a workflow, then press <b>Publish</b> in its toolbar to turn it into an app anyone can run.</div>
         </div>
       ) : !shown.length ? <div className="nofiles">No apps match “{q.trim()}”.</div> : (
-        <div className="app-grid">
-          {shown.map(f => {
-            const a = f.flow.app;
-            return (
-              <div key={f.id} className="app-wrap">
-                <button className={'app-card t-' + (a.tone || 'blue')} onClick={() => setOpenId(f.id)} aria-label={`Open the app ${a.name}`}>
-                  <i className="app-icon" aria-hidden="true"><AppIcon icon={a.icon} /></i>
-                  <b>{a.name}</b>
-                  {a.description && <small>{a.description}</small>}
-                  <span className="app-go">Open →</span>
-                </button>
-                {onUpdate && <button className="btn app-x" aria-label={`Unpublish the app ${a.name}`} title="Take it out of Apps (the workflow stays)" onClick={() => remove(f)}>Unpublish</button>}
-              </div>
-            );
-          })}
-        </div>
-      )}
-      {pages.length > 0 && (<>
+        <>
+          {view === 'all' && <h3 className="apps-sec">Workflows <small>{shown.length}</small></h3>}
+          <div className="app-grid">
+            {shown.map((f, i) => {
+              const a = f.flow.app, inputs = (a.inputs || []).slice(0, 3);
+              return (
+                <div key={f.id} className="app-wrap" style={{ animationDelay: `${Math.min(i, 8) * 40}ms` }}>
+                  <button className={'app-card t-' + (a.tone || 'blue')} onClick={() => setOpenId(f.id)} aria-label={`Open the app ${a.name}`}>
+                    <span className="app-card-top">
+                      <i className="app-icon" aria-hidden="true"><AppIcon icon={a.icon} /></i>
+                      <span className="app-kind">Workflow</span>
+                    </span>
+                    <b>{a.name}</b>
+                    {a.description ? <small>{a.description}</small> : <small className="muted">No description</small>}
+                    {inputs.length > 0 && (
+                      <span className="app-asks" aria-hidden="true">{inputs.map(x => <em key={x.key}><i>{KIND_ICON[x.kind] || 'Aa'}</i>{x.label}</em>)}{(a.inputs || []).length > 3 && <em>+{a.inputs.length - 3}</em>}</span>
+                    )}
+                    <span className="app-foot">
+                      <span className="app-when">{f.updated ? `Updated ${ago(f.updated)}` : ''}</span>
+                      <span className="app-go">▶ Open</span>
+                    </span>
+                  </button>
+                  {onUpdate && <button className="app-x" aria-label={`Unpublish the app ${a.name}`} title="Unpublish: take it out of Apps (the workflow stays)" onClick={() => remove(f)}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" /></svg>
+                  </button>}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      ))}
+      {showPages && pages.length > 0 && (<>
         <h3 className="apps-sec">Pages <small>{pages.length}</small></h3>
         <p className="apps-sec-note">Workflows published as web pages: each opens at its own link, for anyone.</p>
         <div className="app-grid">
-          {pages.map(p => (
-            <div key={p.id} className="app-wrap">
+          {pages.map((p, i) => (
+            <div key={p.id} className="app-wrap" style={{ animationDelay: `${Math.min(i, 8) * 40}ms` }}>
               <a className="app-card t-sky" href={p.url} target="_blank" rel="noreferrer" aria-label={`Open the page ${p.title}`}>
-                <i className="app-icon" aria-hidden="true"><AppIcon icon={p.icon} fallback="🌐" /></i>
+                <span className="app-card-top">
+                  <i className="app-icon" aria-hidden="true"><AppIcon icon={p.icon} fallback="🌐" /></i>
+                  <span className="app-kind">Page</span>
+                </span>
                 <b>{p.title}</b>
-                {p.description && <small>{p.description}</small>}
-                <span className="app-go">Open ↗</span>
+                {p.description ? <small>{p.description}</small> : <small className="muted">A web page</small>}
+                <span className="app-foot">
+                  <span className="app-when">{p.updated ? `Updated ${ago(p.updated)}` : ''}</span>
+                  <span className="app-go">Open ↗</span>
+                </span>
               </a>
             </div>
           ))}
         </div>
       </>)}
+      {showPages && view === 'pages' && !pages.length && <div className="nofiles">No pages yet. Add a Page trigger to a workflow and turn it Active.</div>}
     </div>
   );
 }
+
+// The kind of a question, as a tiny mark on the card.
+const KIND_ICON = { file: '📎', number: '#', long: '¶', text: 'Aa', email: '@', date: '📅', choice: '☰', yesno: '✓' };
 
 // runner (optional): runs the app some other way (the public store), answering {status, items | error}, or
 // {status: 'edit', nodeId, card} when it stopped at an Editor; continuer(nodeId, edited) goes on from there.
