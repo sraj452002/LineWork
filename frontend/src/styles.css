@@ -4552,3 +4552,25 @@ body{background:radial-gradient(1100px 620px at 8% -10%,color-mix(in srgb,var(--
 .fr-core.is-wait .rh-mark svg{animation:fr-hourglass 2.4s cubic-bezier(.6,0,.3,1) infinite}
 @keyframes fr-hourglass{0%,40%{transform:rotate(0)}50%,90%{transform:rotate(180deg)}100%{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.fr-core.is-wait .rh-mark svg{animation:none}}
+
+/* Before a run (FriendlyRun's FlowIdle): three steps on a wave, a spark running through, each step lighting
+   up as it passes (the spark's 2.8 s loop: start at 0, the middle at about 43%, the end at 86%). */
+.fr-idle{width:min(340px,80%);height:auto;overflow:visible;margin-bottom:6px}
+.fi-rail{fill:none;stroke:color-mix(in srgb,var(--ink) 12%,transparent);stroke-width:3;stroke-linecap:round}
+.fi-flow{fill:none;stroke:url(#fi-line);stroke-width:3;stroke-linecap:round;stroke-dasharray:6 10;animation:fi-dash 1.2s linear infinite;opacity:.9}
+.fi-tile{fill:var(--surface);filter:drop-shadow(0 8px 14px rgba(40,40,90,.18))}
+.fi-edge{fill:none;stroke-width:2;stroke:url(#fi-line)}
+.fi-glyph{fill:none;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}
+.n1 .fi-glyph{fill:var(--c-purple);stroke:var(--c-purple)}
+.n2 .fi-glyph{fill:var(--c-blue);stroke:var(--c-blue)}
+.n3 .fi-glyph{stroke:var(--c-green)}
+.fi-node{animation:fi-pop 2.8s cubic-bezier(.3,1.6,.5,1) infinite}
+.fi-node.n2{animation-delay:1.2s}.fi-node.n3{animation-delay:2.4s}
+.fi-node .fi-tile{animation:fi-lit 2.8s ease-out infinite}
+.fi-node.n2 .fi-tile{animation-delay:1.2s}.fi-node.n3 .fi-tile{animation-delay:2.4s}
+.fi-spark{filter:drop-shadow(0 0 6px var(--c-blue))}
+@keyframes fi-dash{to{stroke-dashoffset:-16}}
+@keyframes fi-pop{0%{transform:scale(1)}8%{transform:scale(1.16)}22%,100%{transform:scale(1)}}
+@keyframes fi-lit{0%{fill:color-mix(in srgb,var(--c-blue) 18%,var(--surface))}30%,100%{fill:var(--surface)}}
+.ws .fr-idle{width:min(420px,70%)}
+@media (prefers-reduced-motion:reduce){.fi-flow,.fi-node,.fi-node .fi-tile{animation:none}.fi-spark{display:none}}

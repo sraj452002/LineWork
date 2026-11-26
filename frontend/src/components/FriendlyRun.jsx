@@ -59,7 +59,9 @@ export function FriendlyRun({ steps, run, done, title, secs, failed, onReplay, o
   return (
     <div className={'fr st-' + state}>
       <div className="fr-stage">
-        {/* Before a run there's no orb: just the words and the steps (Run is in the toolbar). */}
+        {/* Before a run: a little flow that's ready to go: three steps on a wave, a spark running through
+            them, each lighting up as it passes. (Run is in the toolbar.) */}
+        {state === 'idle' && <FlowIdle />}
         {state !== 'idle' && <div className={'fr-orb st-' + state} aria-hidden="true">
           <i className="fr-ring r1" /><i className="fr-ring r2" /><i className="fr-ring r3" />
           <span className="fr-orbit"><i /><i /><i /></span>
@@ -114,5 +116,34 @@ export function FriendlyRun({ steps, run, done, title, secs, failed, onReplay, o
         </ol>
       )}
     </div>
+  );
+}
+
+const WAVE = 'M40 60 C 78 8, 102 8, 130 60 S 182 112, 220 60';
+function FlowIdle() {
+  const node = (x, cls, glyph) => (
+    <g className={'fi-node ' + cls} style={{ transformOrigin: `${x}px 60px` }}>
+      <rect x={x - 22} y="38" width="44" height="44" rx="14" className="fi-tile" />
+      <rect x={x - 22} y="38" width="44" height="44" rx="14" className="fi-edge" />
+      {glyph}
+    </g>
+  );
+  return (
+    <svg className="fr-idle" viewBox="0 0 260 120" aria-hidden="true">
+      <defs>
+        <linearGradient id="fi-line" x1="0" x2="1"><stop offset="0" style={{ stopColor: 'var(--c-purple)' }} /><stop offset=".5" style={{ stopColor: 'var(--c-blue)' }} /><stop offset="1" style={{ stopColor: 'var(--c-green)' }} /></linearGradient>
+        <radialGradient id="fi-glow"><stop offset="0" stopColor="#fff" /><stop offset=".35" style={{ stopColor: 'var(--c-blue)' }} /><stop offset="1" style={{ stopColor: 'var(--c-blue)', stopOpacity: 0 }} /></radialGradient>
+      </defs>
+      <path d={WAVE} className="fi-rail" />
+      <path d={WAVE} className="fi-flow" />
+      {node(40, 'n1', <path className="fi-glyph" d="M35 52l12 8-12 8z" />)}
+      {node(130, 'n2', <path className="fi-glyph" d="M130 49l2.6 6.4 6.4 2.6-6.4 2.6-2.6 6.4-2.6-6.4-6.4-2.6 6.4-2.6z" />)}
+      {node(220, 'n3', <path className="fi-glyph fi-tick" d="M211 60l6 6 12-12" />)}
+      <g className="fi-spark">
+        <circle r="14" fill="url(#fi-glow)" opacity=".75" />
+        <circle r="4.5" fill="#fff" />
+        <animateMotion dur="2.8s" repeatCount="indefinite" path={WAVE} keyPoints="0;1;1" keyTimes="0;.86;1" calcMode="spline" keySplines=".45 0 .55 1;0 0 1 1" />
+      </g>
+    </svg>
   );
 }
