@@ -59,20 +59,21 @@ export function FriendlyRun({ steps, run, done, title, secs, failed, onReplay, o
   return (
     <div className={'fr st-' + state}>
       <div className="fr-stage">
-        <div className={'fr-orb st-' + state} aria-hidden="true">
+        {/* Before a run: an anime-style “READY!” moment. (Run is in the toolbar.) */}
+        {state === 'idle' && <AnimeIdle />}
+        {state !== 'idle' && <div className={'fr-orb st-' + state} aria-hidden="true">
           <i className="fr-ring r1" /><i className="fr-ring r2" /><i className="fr-ring r3" />
           <span className="fr-orbit"><i /><i /><i /></span>
           {state === 'active' && <span className="fr-arc" />}
           {state === 'active' && at > 0 && <em className="fr-stepno" key={'n' + at}>{at}<small>/{total}</small></em>}
           {/* a happy end: sparks flying out from the tick */}
           {state === 'success' && <span className="fr-burst" key={'b' + run?.id}>{Array.from({ length: 10 }, (_, k) => <i key={k} style={{ '--a': `${k * 36}deg`, '--d': `${(k % 3) * 40}ms` }} />)}</span>}
-          <span className="fr-core" key={state + (active?.n.id || '')}>
+          <span className={'fr-core' + (state === 'active' && active?.n.type === 'core.delay' ? ' is-wait' : '')} key={state + (active?.n.id || '')}>
             {state === 'success' ? <svg className="fr-ic fr-ic-ok" viewBox="0 0 52 52"><path d="M14.5 27.5l7.5 7.5 16-17" /></svg>
               : state === 'error' ? <svg className="fr-ic fr-ic-err" viewBox="0 0 52 52"><path d="M26 13.5v16" /><path className="fr-dot" d="M26 37.5v.5" /></svg>
-              : state === 'idle' ? <svg className="fr-play" width="36" height="36" viewBox="0 0 24 24"><path d="M8.5 5.5l10 6.5-10 6.5z" /></svg>
               : active ? <Mark type={active.n.type} size={38} /> : <i className="ws-spin" />}
           </span>
-        </div>
+        </div>}
         <div className="rs-headline fr-text" aria-live="polite">
           <b key={say} className="fr-say">{say}</b>
           <small className="fr-sub">{sub}</small>
@@ -114,5 +115,38 @@ export function FriendlyRun({ steps, run, done, title, secs, failed, onReplay, o
         </ol>
       )}
     </div>
+  );
+}
+
+/* Before a run: an anime-style “READY!” moment, flat 2D. Manga speed lines rush in to the middle, a
+   gold comic burst with READY! pulses, kira-kira sparkles pop, sakura petals drift across, and now and
+   then an impact flash. Original art, made of plain shapes. */
+const BURST = (() => { const p = []; for (let i = 0; i < 24; i++) { const a = (i / 24) * Math.PI * 2, r = i % 2 ? 46 : 70; p.push(`${(140 + Math.cos(a) * r * 1.35).toFixed(1)},${(100 + Math.sin(a) * r).toFixed(1)}`); } return p.join(' '); })();
+const SPEED = Array.from({ length: 44 }, (_, i) => { const a = (i / 44) * Math.PI * 2 + (i % 3) * .03, r1 = 96 + (i % 4) * 8; return { x1: 140 + Math.cos(a) * 190, y1: 100 + Math.sin(a) * 150, x2: 140 + Math.cos(a) * r1 * 1.3, y2: 100 + Math.sin(a) * r1, w: i % 3 ? 1.2 : 2.6, d: (i % 5) * .12 }; });
+const KIRA = 'M0 -10 C1 -2 2 -1 10 0 C2 1 1 2 0 10 C-1 2 -2 1 -10 0 C-2 -1 -1 -2 0 -10Z';
+const PETAL = 'M0 -7 C5 -6 6 2 0 7 C-6 2 -5 -6 0 -7Z';
+function AnimeIdle() {
+  return (
+    <svg className="an" viewBox="0 0 280 200" aria-hidden="true">
+      <defs><clipPath id="an-clip"><rect x="0" y="0" width="280" height="200" rx="22" /></clipPath></defs>
+      <g clipPath="url(#an-clip)">
+        <rect x="0" y="0" width="280" height="200" className="an-bg" />
+        <g className="an-speed">{SPEED.map((l, i) => <line key={i} x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} strokeWidth={l.w} style={{ animationDelay: `${l.d}s` }} />)}</g>
+        <rect x="0" y="0" width="280" height="200" className="an-flash" />
+        <g className="an-burst">
+          <polygon points={BURST} className="an-burst-back" transform="translate(5 6)" />
+          <polygon points={BURST} className="an-burst-front" />
+          <text x="140" y="112" className="an-word an-word-back">READY!</text>
+          <text x="140" y="112" className="an-word">READY!</text>
+        </g>
+        {[[44, 40, 0, 1], [236, 52, .5, .8], [222, 158, 1.1, 1.1], [56, 156, 1.6, .7], [140, 24, 2.1, .6]].map(([x, y, d, k], i) => (
+          <g key={i} transform={`translate(${x} ${y}) scale(${k})`}><path d={KIRA} className="an-kira" style={{ animationDelay: `${d}s` }} /></g>
+        ))}
+        {[[0, 0], [1, 1.3], [2, 2.6], [3, .7], [4, 2]].map(([i, d]) => (
+          <g key={'p' + i} className="an-petal-path" style={{ animationDelay: `-${d}s`, '--py': `${20 + i * 34}px` }}><path d={PETAL} className="an-petal" style={{ animationDelay: `-${d}s` }} /></g>
+        ))}
+      </g>
+      <rect x="1.5" y="1.5" width="277" height="197" rx="21" className="an-frame" />
+    </svg>
   );
 }

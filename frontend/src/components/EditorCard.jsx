@@ -21,9 +21,10 @@ export default function EditorCard({ card, onSave, onClose }) {
   const save = e => { e.preventDefault(); onSave(sheet ? { cells } : { text }); };
   return (
     <div className="modal" onPointerDown={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <form className="mbox ed-card" role="dialog" aria-modal="true" aria-label={`Edit ${card.name}`} onSubmit={save} onKeyDown={e => { if (e.key === 'Escape') onClose(); }}>
+      <form className={`mbox ed-card k-${card.kind || 'doc'}`} role="dialog" aria-modal="true" aria-label={`Edit ${card.name}`} onSubmit={save} onKeyDown={e => { if (e.key === 'Escape') onClose(); }}>
         <header className="ed-card-head">
-          <div><h3>{card.heading || card.title || card.name}</h3><small>{card.name} · <b className="ed-card-kind">{KIND[card.kind] || 'File'}</b></small></div>
+          <i className="ed-card-ico" aria-hidden="true">{{ sheet: '▦', doc: '¶', code: '</>', diagram: '◇' }[card.kind] || '✎'}</i>
+          <div className="ed-card-ttl"><h3>{card.heading || card.title || card.name}</h3><small>{card.name} <b className="ed-card-kind">{KIND[card.kind] || 'File'}</b></small></div>
           <button type="button" className="rs-ib" aria-label="Close" onClick={onClose}>×</button>
         </header>
         {sheet ? (
@@ -50,7 +51,7 @@ export default function EditorCard({ card, onSave, onClose }) {
         <footer className="ed-card-foot">
           <span className="muted">{card.fileId ? `Saves back to “${card.title}”, then the workflow goes on.` : 'The workflow goes on with the edited file.'}</span>
           <button type="button" className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn primary">{card.button || 'Save & continue'}</button>
+          <button className="btn primary ed-card-go">{card.button || 'Save & continue'}</button>
         </footer>
       </form>
     </div>

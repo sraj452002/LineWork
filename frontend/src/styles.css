@@ -4435,24 +4435,146 @@ button.rv-line:hover{background:rgba(255,255,255,.04)}
 :root[data-theme="dark"] .fr-orb .fr-stepno{color:#0b1b3a}
 .fr-core .fr-play{fill:#1a1d1b}
 
-/* The Editor node's card (EditorCard.jsx): a sheet's grid or a box of text, in a dialog. */
-.ed-card{width:min(1000px,96vw);max-height:92vh;display:flex;flex-direction:column;gap:12px;background:var(--surface);position:relative;z-index:2}
-.ed-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
-.ed-card-head h3{margin:0;font-size:18px}.ed-card-head small{color:var(--ink2)}
-.ed-card-kind{font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;padding:2px 7px;border-radius:999px;border:1px solid var(--hair)}
-.ed-card-text{flex:1;min-height:min(56vh,520px);resize:vertical;padding:12px 14px;border:1px solid var(--hair);border-radius:12px;background:var(--surface);color:var(--ink);font:14px/1.6 inherit}
-.ed-card-text.mono{font:13px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace}
-.ed-card-grid{flex:1;min-height:200px;max-height:58vh;overflow:auto;border:1px solid var(--hair);border-radius:12px}
-.ed-card-grid table{border-collapse:collapse;font-size:13px;min-width:100%}
-.ed-card-grid th{position:sticky;top:0;z-index:1;background:color-mix(in srgb,var(--ink) 5%,var(--surface));color:var(--ink2);font-weight:600;padding:6px 8px;border-bottom:1px solid var(--hair)}
-.ed-card-grid tbody th{position:sticky;left:0;top:auto;width:40px;border-right:1px solid var(--hair)}
-.ed-card-grid td{padding:0;border-bottom:1px solid var(--hair);border-right:1px solid var(--hair)}
-.ed-card-grid td input{width:100%;min-width:120px;border:0;background:transparent;color:var(--ink);padding:7px 9px;font:inherit}
-.ed-card-grid td input:focus{outline:2px solid var(--c-blue);outline-offset:-2px;background:var(--surface)}
-.ed-card-more{display:flex;gap:8px}
-.ed-card-foot{display:flex;align-items:center;gap:10px}.ed-card-foot .muted{flex:1;font-size:12.5px;color:var(--ink2)}
+/* The Editor node's card (EditorCard.jsx): a sheet's grid or a box of text, in a dialog.
+   Each kind has its own accent (sheet emerald, doc violet, code amber, diagram sky), on a calm neutral card;
+   the Save button is the app's violet → blue. Light shades in the dark theme, deeper ones in the light theme. */
+.ed-card{--acc:#7c3aed;--acc2:#a78bfa;--acc-soft:color-mix(in srgb,var(--acc) 10%,var(--surface));
+  width:min(1000px,96vw);max-height:92vh;display:flex;flex-direction:column;gap:14px;padding:0 0 16px!important;overflow:hidden;position:relative;z-index:2;
+  border:1px solid color-mix(in srgb,var(--acc) 22%,var(--hair))!important;border-radius:20px!important;
+  box-shadow:0 30px 80px -30px color-mix(in srgb,var(--acc) 45%,rgba(0,0,0,.6)),0 0 0 1px color-mix(in srgb,var(--acc) 8%,transparent)!important}
+.ed-card.k-sheet{--acc:#059669;--acc2:#34d399}.ed-card.k-code{--acc:#d97706;--acc2:#fbbf24}.ed-card.k-diagram{--acc:#0284c7;--acc2:#38bdf8}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .ed-card{--acc:#a78bfa;--acc2:#c4b5fd}:root:not([data-theme="light"]) .ed-card.k-sheet{--acc:#34d399;--acc2:#6ee7b7}:root:not([data-theme="light"]) .ed-card.k-code{--acc:#fbbf24;--acc2:#fcd34d}:root:not([data-theme="light"]) .ed-card.k-diagram{--acc:#38bdf8;--acc2:#7dd3fc}}
+:root[data-theme="dark"] .ed-card{--acc:#a78bfa;--acc2:#c4b5fd}:root[data-theme="dark"] .ed-card.k-sheet{--acc:#34d399;--acc2:#6ee7b7}:root[data-theme="dark"] .ed-card.k-code{--acc:#fbbf24;--acc2:#fcd34d}:root[data-theme="dark"] .ed-card.k-diagram{--acc:#38bdf8;--acc2:#7dd3fc}
 .modal .ed-card{background:var(--surface)!important}
+.ed-card>*{margin-left:18px;margin-right:18px}
+.ed-card-head{display:flex;align-items:center;gap:12px;margin:0!important;padding:16px 18px 14px;
+  background:linear-gradient(120deg,color-mix(in srgb,var(--acc) 16%,var(--surface)),color-mix(in srgb,var(--acc2) 8%,var(--surface)) 55%,var(--surface));
+  border-bottom:1px solid color-mix(in srgb,var(--acc) 18%,var(--hair))}
+.ed-card-ico{flex:none;display:grid;place-items:center;width:40px;height:40px;border-radius:12px;font-style:normal;font-weight:800;font-size:15px;color:#fff;
+  background:linear-gradient(145deg,var(--acc2),var(--acc));box-shadow:0 8px 18px -8px var(--acc)}
+.ed-card-ttl{flex:1;min-width:0}.ed-card-head h3{margin:0;font-size:18px;letter-spacing:-.01em}.ed-card-head small{color:var(--ink2);display:flex;align-items:center;gap:8px}
+.ed-card-kind{font-size:10px;letter-spacing:.06em;text-transform:uppercase;padding:2px 8px;border-radius:999px;color:var(--acc);background:var(--acc-soft);border:1px solid color-mix(in srgb,var(--acc) 30%,transparent)}
+.ed-card-text{flex:1;min-height:min(54vh,500px);resize:vertical;padding:14px 16px;border:1px solid var(--hair);border-radius:14px;background:color-mix(in srgb,var(--ink) 2.5%,var(--surface));color:var(--ink);font:14px/1.65 inherit;transition:border-color .2s,box-shadow .2s}
+.ed-card-text.mono{font:13px/1.65 ui-monospace,SFMono-Regular,Menlo,monospace}
+.ed-card-text:focus{outline:none;border-color:var(--acc);box-shadow:0 0 0 4px color-mix(in srgb,var(--acc) 16%,transparent)}
+.ed-card-grid{flex:1;min-height:200px;max-height:56vh;overflow:auto;border:1px solid var(--hair);border-radius:14px;background:var(--surface)}
+.ed-card-grid table{border-collapse:separate;border-spacing:0;font-size:13px;min-width:100%}
+.ed-card-grid th{position:sticky;top:0;z-index:1;background:color-mix(in srgb,var(--acc) 9%,var(--surface));color:color-mix(in srgb,var(--acc) 70%,var(--ink));font-weight:700;font-size:11.5px;letter-spacing:.04em;padding:7px 8px;border-bottom:1px solid color-mix(in srgb,var(--acc) 22%,var(--hair))}
+.ed-card-grid tbody th{position:sticky;left:0;top:auto;width:42px;font-size:11.5px;border-right:1px solid color-mix(in srgb,var(--acc) 22%,var(--hair))}
+.ed-card-grid tbody tr:nth-child(even) td{background:color-mix(in srgb,var(--ink) 2.5%,transparent)}
+.ed-card-grid tbody tr:hover td{background:color-mix(in srgb,var(--acc) 5%,transparent)}
+.ed-card-grid td{padding:0;border-bottom:1px solid color-mix(in srgb,var(--hair) 70%,transparent);border-right:1px solid color-mix(in srgb,var(--hair) 70%,transparent)}
+.ed-card-grid td input{width:100%;min-width:120px;border:0;background:transparent!important;color:var(--ink);padding:8px 10px;font:inherit}
+.ed-card-grid td input:focus{outline:2px solid var(--acc);outline-offset:-2px;background:var(--acc-soft)!important}
+.ed-card-more{display:flex;gap:8px}
+.ed-card-more .btn{border-radius:999px;color:var(--acc);border-color:color-mix(in srgb,var(--acc) 35%,var(--hair));background:var(--acc-soft)}
+.ed-card-foot{display:flex;align-items:center;gap:10px}.ed-card-foot .muted{flex:1;font-size:12.5px;color:var(--ink2)}
+.ed-card-foot .btn{border-radius:12px}
+.ed-card-go{border:0!important;color:#fff!important;background:linear-gradient(120deg,#7c3aed,#4f46e5 55%,#3b82f6)!important;box-shadow:0 10px 24px -10px #6d28d9!important;padding:10px 18px!important}
+.ed-card-go:hover{filter:brightness(1.08)}
 /* An app run waiting at an Editor (its card is open, or closed for now). */
 .app-waiting{padding:16px;border-radius:12px;background:color-mix(in srgb,var(--c-blue) 8%,transparent);border:1px solid color-mix(in srgb,var(--c-blue) 28%,transparent);display:grid;gap:6px;justify-items:start}
 .app-waiting p{margin:0;color:var(--ink2)}
 .app-f input[type=file]{padding:8px;border:1px dashed var(--hair);border-radius:10px;background:transparent}
+.modal .ed-card .ed-card-text,.ed-card .ed-card-grid{width:auto;align-self:stretch;min-width:0}
+.ed-card .ed-card-grid td input,.ed-card .ed-card-grid td input:focus{box-shadow:none}
+@media (max-width:560px){.ed-card>*{margin-left:12px;margin-right:12px}.ed-card-head{padding:14px 12px 12px}.ed-card-foot{flex-wrap:wrap}.ed-card-foot .muted{flex-basis:100%}}
+
+/* =====================================================================
+   Aesthetic palette (the last word on colour): cool slate neutrals with a faint lavender tint, the
+   brand gold kept for the main actions, and one family of soft, harmonious accents for everything that
+   carries a colour (node tones, statuses, links). Deeper shades in the light theme, lighter ones in the
+   dark theme, so each reads clearly on its own background.
+   ===================================================================== */
+:root{
+  --paper:#EEF0F6;--grid:#E2E5EF;--grid2:#D2D7E5;--surface:#FFFFFF;--panel:#F6F7FB;
+  --ink:#1A1E2C;--ink2:#5B6276;--line:#CCD1DF;--edge:#475069;
+  --hi:#F4C542;--hiInk:#1A1E2C;
+  --c-blue:#4C63E6;--c-green:#0F9F7A;--c-orange:#E2683C;--c-purple:#7B5CF0;--err:#DC3D4B;
+  --hair:color-mix(in srgb,var(--line) 70%,transparent);
+  --shadow-sm:0 1px 2px rgba(26,30,44,.06),0 1px 1px rgba(26,30,44,.04);
+  --shadow:0 1px 2px rgba(26,30,44,.05),0 10px 26px -12px rgba(60,64,110,.28);
+  --shadow-lg:0 2px 4px rgba(26,30,44,.05),0 22px 48px -18px rgba(60,64,110,.36);
+  --glass:color-mix(in srgb,var(--surface) 84%,transparent);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#0D0F17;--grid:#141724;--grid2:#1C2031;--surface:#161A27;--panel:#11141F;
+    --ink:#ECEEF7;--ink2:#9EA4BA;--line:#2B3045;--edge:#A7AEC6;
+    --hi:#F6CD55;--hiInk:#171A24;
+    --c-blue:#8EA2FF;--c-green:#4FD3A8;--c-orange:#FF9F7A;--c-purple:#B7A0FF;--err:#FF7A85;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.35);
+    --shadow:0 1px 2px rgba(0,0,0,.35),0 12px 30px -12px rgba(0,0,0,.7);
+    --shadow-lg:0 2px 6px rgba(0,0,0,.4),0 24px 54px -18px rgba(0,0,0,.8);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0D0F17;--grid:#141724;--grid2:#1C2031;--surface:#161A27;--panel:#11141F;
+  --ink:#ECEEF7;--ink2:#9EA4BA;--line:#2B3045;--edge:#A7AEC6;
+  --hi:#F6CD55;--hiInk:#171A24;
+  --c-blue:#8EA2FF;--c-green:#4FD3A8;--c-orange:#FF9F7A;--c-purple:#B7A0FF;--err:#FF7A85;
+  --shadow-sm:0 1px 2px rgba(0,0,0,.35);
+  --shadow:0 1px 2px rgba(0,0,0,.35),0 12px 30px -12px rgba(0,0,0,.7);
+  --shadow-lg:0 2px 6px rgba(0,0,0,.4),0 24px 54px -18px rgba(0,0,0,.8);
+}
+/* Node and card tones: one harmonious set, a step deeper in the light theme and lighter in the dark. */
+.t-green{--tone:#16A37F}.t-teal{--tone:#0E9AA0}.t-amber{--tone:#D9921A}.t-blue{--tone:#4C63E6}.t-violet{--tone:#7B5CF0}
+.t-pink{--tone:#D9468F}.t-indigo{--tone:#5B54E8}.t-sky{--tone:#1E90D6}.t-slate{--tone:#66708A}.t-orange{--tone:#E2683C}.t-brand{--tone:#C99A12}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]) .t-green{--tone:#4FD3A8}:root:not([data-theme="light"]) .t-teal{--tone:#4DD4DA}
+  :root:not([data-theme="light"]) .t-amber{--tone:#F5BE55}:root:not([data-theme="light"]) .t-blue{--tone:#8EA2FF}
+  :root:not([data-theme="light"]) .t-violet{--tone:#B7A0FF}:root:not([data-theme="light"]) .t-pink{--tone:#FF8CC6}
+  :root:not([data-theme="light"]) .t-indigo{--tone:#A5A0FF}:root:not([data-theme="light"]) .t-sky{--tone:#6CC6FF}
+  :root:not([data-theme="light"]) .t-slate{--tone:#A3ABC2}:root:not([data-theme="light"]) .t-orange{--tone:#FF9F7A}
+  :root:not([data-theme="light"]) .t-brand{--tone:#F6CD55}
+}
+:root[data-theme="dark"] .t-green{--tone:#4FD3A8}:root[data-theme="dark"] .t-teal{--tone:#4DD4DA}
+:root[data-theme="dark"] .t-amber{--tone:#F5BE55}:root[data-theme="dark"] .t-blue{--tone:#8EA2FF}
+:root[data-theme="dark"] .t-violet{--tone:#B7A0FF}:root[data-theme="dark"] .t-pink{--tone:#FF8CC6}
+:root[data-theme="dark"] .t-indigo{--tone:#A5A0FF}:root[data-theme="dark"] .t-sky{--tone:#6CC6FF}
+:root[data-theme="dark"] .t-slate{--tone:#A3ABC2}:root[data-theme="dark"] .t-orange{--tone:#FF9F7A}
+:root[data-theme="dark"] .t-brand{--tone:#F6CD55}
+/* The page: a soft wash of the accents behind everything, very faint, so the neutrals don't feel flat. */
+body{background:radial-gradient(1100px 620px at 8% -10%,color-mix(in srgb,var(--c-purple) 9%,transparent),transparent 62%),radial-gradient(900px 560px at 105% 110%,color-mix(in srgb,var(--c-blue) 8%,transparent),transparent 60%),var(--paper)}
+::selection{background:color-mix(in srgb,var(--c-purple) 28%,transparent)}
+
+/* The step at work, big in the run's orb: its icon on a glossy tile in the step's colour (an app icon,
+   not a faint glyph), with a bold white line; lighter tiles carry a dark line in the dark theme. A Wait
+   step's hourglass turns over while it waits. */
+.fr{--fr-tile-ink:#fff}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .fr{--fr-tile-ink:#0E1220}}
+:root[data-theme="dark"] .fr{--fr-tile-ink:#0E1220}
+.fr-core .rh-mark{width:78px;height:78px;border-radius:24px;color:var(--fr-tile-ink);
+  background:radial-gradient(120% 120% at 28% 18%,color-mix(in srgb,var(--tone,var(--c-blue)) 55%,#fff),var(--tone,var(--c-blue)) 62%,color-mix(in srgb,var(--tone,var(--c-blue)) 82%,#000));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.45),inset 0 -6px 14px rgba(0,0,0,.12),0 10px 24px -10px var(--tone,var(--c-blue))}
+.fr-core .rh-mark svg{width:42px;height:42px;stroke-width:2.3;filter:drop-shadow(0 1px 1px rgba(0,0,0,.18))}
+.fr-core .rh-mark svg.logo{fill:var(--fr-tile-ink)!important}
+.fr-core.is-wait .rh-mark svg{animation:fr-hourglass 2.4s cubic-bezier(.6,0,.3,1) infinite}
+@keyframes fr-hourglass{0%,40%{transform:rotate(0)}50%,90%{transform:rotate(180deg)}100%{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.fr-core.is-wait .rh-mark svg{animation:none}}
+
+/* Before a run (FriendlyRun's AnimeIdle): an anime-style READY! panel, flat 2D with ink outlines. */
+.an{width:min(400px,86%);height:auto;flex:none;margin-bottom:8px;overflow:visible}
+.ws .an{width:min(460px,70%)}
+.an *{transform-box:fill-box;transform-origin:center}
+.an-bg{fill:color-mix(in srgb,var(--hi) 10%,var(--surface))}
+.an-frame{fill:none;stroke:var(--ink);stroke-width:3}
+.an-speed line{stroke:var(--ink);stroke-linecap:round;opacity:.75;animation:an-rush .5s ease-in infinite}
+.an-flash{fill:#fff;opacity:0;animation:an-flash 3.2s ease-out infinite}
+.an-burst{animation:an-pulse 1.6s cubic-bezier(.3,1.6,.5,1) infinite}
+.an-burst-back{fill:var(--ink)}
+.an-burst-front{fill:var(--hi);stroke:var(--ink);stroke-width:3;stroke-linejoin:round}
+.an-word{font:italic 900 34px/1 var(--ui);letter-spacing:.02em;text-anchor:middle;fill:#fff;stroke:var(--ink);stroke-width:3;paint-order:stroke;transform-box:view-box!important;transform-origin:140px 100px!important;transform:skewX(-8deg)}
+.an-word-back{fill:#F06FA8;stroke:none;transform:translate(3px,3px) skewX(-8deg)}
+.an-kira{fill:#fff;stroke:var(--ink);stroke-width:1.6;stroke-linejoin:round;animation:an-kira 2.6s ease-in-out infinite}
+.an-petal{fill:#F9A8D4;stroke:var(--ink);stroke-width:1.3;animation:an-spinp 2.4s linear infinite}
+.an-petal-path{transform-box:view-box!important;animation:an-fall 4.2s linear infinite}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .an-bg{fill:color-mix(in srgb,var(--hi) 7%,var(--surface))}:root:not([data-theme="light"]) .an-word{fill:#171A24}:root:not([data-theme="light"]) .an-flash{fill:var(--hi)}}
+:root[data-theme="dark"] .an-bg{fill:color-mix(in srgb,var(--hi) 7%,var(--surface))}:root[data-theme="dark"] .an-word{fill:#171A24}:root[data-theme="dark"] .an-flash{fill:var(--hi)}
+@keyframes an-rush{0%{opacity:.15}50%{opacity:.85}100%{opacity:.15}}
+@keyframes an-flash{0%,86%{opacity:0}88%{opacity:.75}100%{opacity:0}}
+@keyframes an-pulse{0%,100%{transform:scale(1) rotate(-2deg)}12%{transform:scale(1.1) rotate(1deg)}30%{transform:scale(1) rotate(-2deg)}}
+@keyframes an-kira{0%,100%{transform:scale(0) rotate(0);opacity:0}25%{transform:scale(1.2) rotate(45deg);opacity:1}50%{transform:scale(.9) rotate(90deg);opacity:1}70%{transform:scale(0) rotate(135deg);opacity:0}}
+@keyframes an-spinp{to{transform:rotate(360deg)}}
+@keyframes an-fall{from{transform:translate(-20px,calc(var(--py) - 40px))}to{transform:translate(300px,calc(var(--py) + 90px))}}
+@media (prefers-reduced-motion:reduce){.an *{animation:none!important}}
