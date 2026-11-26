@@ -4375,3 +4375,45 @@ button.rv-line:hover{background:rgba(255,255,255,.04)}
 .ws .fr-acts .btn{padding:11px 22px;font-size:15px}
 @media (min-height:820px){.ws .fr-orb{zoom:1.6}.ws .fr-say{font-size:46px}}
 @media (max-height:640px),(max-width:700px){.ws .fr-orb{zoom:1}.ws .fr-say{font-size:30px}.ws .fr-stage{max-width:100%}.ws .fr-bar,.ws .fr-ticker,.ws .fr-list{width:100%;max-width:100%}}
+
+/* The run's track: each step a stop on a line; the line fills to the step at work, a spark riding its tip. */
+.fr-track{position:relative;width:min(560px,100%);padding-top:4px;--dot:40px}
+.fr-track ol{position:relative;z-index:1;list-style:none;margin:0;padding:0;display:flex;justify-content:space-between;gap:0}
+.fr-line{position:absolute;left:calc(100% / var(--n,1) / 2);right:calc(100% / var(--n,1) / 2);top:calc(4px + var(--dot)/2 - 3px);height:6px;border-radius:999px;background:color-mix(in srgb,var(--ink) 9%,transparent)}
+.fr-line i{position:relative;display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--c-blue),var(--c-green));box-shadow:0 0 14px color-mix(in srgb,var(--c-green) 55%,transparent);transition:width .7s cubic-bezier(.4,0,.2,1)}
+.fr-track.st-error .fr-line i{background:linear-gradient(90deg,var(--c-blue),var(--err));box-shadow:0 0 14px color-mix(in srgb,var(--err) 55%,transparent)}
+.fr-spark{position:absolute;right:-7px;top:50%;width:14px;height:14px;margin-top:-7px;border-radius:50%;background:#fff;box-shadow:0 0 0 4px color-mix(in srgb,var(--c-blue) 45%,transparent),0 0 18px 6px var(--c-blue);animation:fr-spark-pulse 1s ease-in-out infinite}
+.fr-line i::after{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(90deg,transparent,rgba(255,255,255,.65),transparent);background-size:40% 100%;background-repeat:no-repeat;animation:fr-flow 1.4s linear infinite;opacity:0}
+.fr-track.st-active .fr-line i::after,.fr-track.st-success .fr-line i::after{opacity:1}
+.fr-track.st-success .fr-line i::after{animation:fr-flow 1.2s linear 1 forwards}
+.fr-stop{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;gap:7px}
+.fr-dot{position:relative;display:grid;place-items:center;width:var(--dot);height:var(--dot);border-radius:50%;background:var(--surface);border:2px solid color-mix(in srgb,var(--ink) 16%,transparent);transition:border-color .3s,transform .3s,box-shadow .3s}
+.fr-dot .rh-mark{width:24px;height:24px;border-radius:7px;filter:grayscale(.8);opacity:.6;transition:filter .3s,opacity .3s}
+.fr-dot em{position:absolute;right:-4px;bottom:-4px;display:grid;place-items:center;width:17px;height:17px;border-radius:50%;background:var(--c-green);color:#fff;font-style:normal;font-size:10px;font-weight:800;border:2px solid var(--surface);animation:fr-pop .35s cubic-bezier(.3,1.6,.5,1) both}
+.fr-stop small{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11.5px;color:var(--ink2);transition:color .3s}
+.fr-stop.st-success .fr-dot{border-color:var(--c-green)}
+.fr-stop.st-success .fr-dot .rh-mark,.fr-stop.st-active .fr-dot .rh-mark,.fr-stop.st-error .fr-dot .rh-mark{filter:none;opacity:1}
+.fr-stop.st-success small{color:var(--ink)}
+.fr-stop.st-active .fr-dot{border-color:var(--c-blue);transform:scale(1.18);box-shadow:0 0 0 0 color-mix(in srgb,var(--c-blue) 55%,transparent);animation:ws-pulse 1.2s ease-out infinite}
+.fr-stop.st-active small{color:var(--c-blue);font-weight:700}
+.fr-stop.st-error .fr-dot{border-color:var(--err);transform:scale(1.12);box-shadow:0 0 0 6px color-mix(in srgb,var(--err) 18%,transparent)}
+.fr-stop.st-error small{color:var(--err);font-weight:700}
+.fr-track.st-success .fr-stop .fr-dot{animation:fr-hop .5s cubic-bezier(.3,1.6,.5,1) both}
+.fr-track.st-success .fr-stop:nth-child(2) .fr-dot{animation-delay:.06s}.fr-track.st-success .fr-stop:nth-child(3) .fr-dot{animation-delay:.12s}.fr-track.st-success .fr-stop:nth-child(4) .fr-dot{animation-delay:.18s}.fr-track.st-success .fr-stop:nth-child(5) .fr-dot{animation-delay:.24s}.fr-track.st-success .fr-stop:nth-child(6) .fr-dot{animation-delay:.3s}.fr-track.st-success .fr-stop:nth-child(7) .fr-dot{animation-delay:.36s}.fr-track.st-success .fr-stop:nth-child(8) .fr-dot{animation-delay:.42s}.fr-track.st-success .fr-stop:nth-child(9) .fr-dot{animation-delay:.48s}
+.fr-more-l,.fr-more-r{flex:none;align-self:flex-start;display:grid;place-items:center;height:var(--dot);padding:0 4px;font-size:11px;font-weight:700;color:var(--ink2)}
+.fr-clock{font-variant-numeric:tabular-nums;color:var(--ink2)}
+@keyframes fr-spark-pulse{50%{transform:scale(1.25)}}
+@keyframes fr-flow{from{background-position:-40% 0}to{background-position:140% 0}}
+@keyframes fr-hop{0%{transform:translateY(0)}40%{transform:translateY(-8px)}100%{transform:translateY(0)}}
+/* A soft light behind the stage, in the run's colour. */
+.ws .fr-stage{position:relative;isolation:isolate}
+.ws .fr-stage::before{content:"";position:absolute;z-index:-1;left:50%;top:38%;width:min(720px,110%);aspect-ratio:1;transform:translate(-50%,-50%);border-radius:50%;background:radial-gradient(closest-side,color-mix(in srgb,var(--fr-glow,var(--c-blue)) 16%,transparent),transparent);opacity:0;transition:opacity .6s,background .6s;pointer-events:none}
+.fr.st-active .fr-stage::before{opacity:1;--fr-glow:var(--c-blue);animation:fr-breathe 2.4s ease-in-out infinite}
+.fr.st-success .fr-stage::before{opacity:1;--fr-glow:var(--c-green)}
+.fr.st-error .fr-stage::before{opacity:1;--fr-glow:var(--err)}
+@keyframes fr-breathe{50%{transform:translate(-50%,-50%) scale(1.08)}}
+.ws .fr-track{width:100%;--dot:46px}
+.ws .fr-dot .rh-mark{width:28px;height:28px}
+.ws .fr-stop small{font-size:12.5px}
+@media (max-height:640px),(max-width:700px){.ws .fr-track{--dot:34px}.ws .fr-dot .rh-mark{width:20px;height:20px}.fr-stop small{display:none}}
+@media (prefers-reduced-motion:reduce){.fr-spark,.fr-line i::after,.fr-stop.st-active .fr-dot,.fr-track.st-success .fr-stop .fr-dot,.fr.st-active .fr-stage::before{animation:none!important}}
