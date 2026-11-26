@@ -4554,3 +4554,9 @@ body{background:radial-gradient(1100px 620px at 8% -10%,color-mix(in srgb,var(--
 @media (prefers-reduced-motion:reduce){.fr-core.is-wait .rh-mark svg{animation:none}}
 
 
+/* A node's set-up steps (NodeGuide.jsx): each setting as its own instruction. */
+.gn-fsteps{margin:6px 0 2px;padding-left:18px;display:grid;gap:5px}
+.gn-fsteps li{line-height:1.5}
+.gn-opt{margin-left:6px;font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--ink2);padding:1px 6px;border-radius:999px;border:1px solid var(--hair)}
+.gn-when{font-size:12px;font-weight:600;color:var(--c-purple)}
+.gn-note{margin-top:2px;font-size:12.5px;color:var(--ink2)}

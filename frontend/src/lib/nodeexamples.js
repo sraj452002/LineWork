@@ -312,8 +312,8 @@ export function hintValue(hint) {
   const s = String(hint).replace(/^e\.g\.\s*/i, '').replace(/\s{2,}\(.*$/s, '').split(/\s+or\s+/)[0].trim();
   return s || undefined;
 }
-const defaultsOf = d => (typeof d.defaults === 'function' ? d.defaults() : d.defaults) || {};
-const meets = (w, p) => !w || w.slice(1).includes(p[w[0]] ?? '');
+export const defaultsOf = d => (typeof d.defaults === 'function' ? d.defaults() : d.defaults) || {};
+export const meets = (w, p) => !w || w.slice(1).includes(p[w[0]] ?? '');
 
 /* The example for one node: { rows: [{ f, v }] (the settings shown, in order), input, output, missing:
    [keys of shown settings with no value] }. */
