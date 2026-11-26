@@ -4553,28 +4553,4 @@ body{background:radial-gradient(1100px 620px at 8% -10%,color-mix(in srgb,var(--
 @keyframes fr-hourglass{0%,40%{transform:rotate(0)}50%,90%{transform:rotate(180deg)}100%{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.fr-core.is-wait .rh-mark svg{animation:none}}
 
-/* Before a run (FriendlyRun's AnimeIdle): an anime-style READY! panel, flat 2D with ink outlines. */
-.an{width:min(400px,86%);height:auto;flex:none;margin-bottom:8px;overflow:visible}
-.ws .an{width:min(460px,70%)}
-.an *{transform-box:fill-box;transform-origin:center}
-.an-bg{fill:color-mix(in srgb,var(--hi) 10%,var(--surface))}
-.an-frame{fill:none;stroke:var(--ink);stroke-width:3}
-.an-speed line{stroke:var(--ink);stroke-linecap:round;opacity:.75;animation:an-rush .5s ease-in infinite}
-.an-flash{fill:#fff;opacity:0;animation:an-flash 3.2s ease-out infinite}
-.an-burst{animation:an-pulse 1.6s cubic-bezier(.3,1.6,.5,1) infinite}
-.an-burst-back{fill:var(--ink)}
-.an-burst-front{fill:var(--hi);stroke:var(--ink);stroke-width:3;stroke-linejoin:round}
-.an-word{font:italic 900 34px/1 var(--ui);letter-spacing:.02em;text-anchor:middle;fill:#fff;stroke:var(--ink);stroke-width:3;paint-order:stroke;transform-box:view-box!important;transform-origin:140px 100px!important;transform:skewX(-8deg)}
-.an-word-back{fill:#F06FA8;stroke:none;transform:translate(3px,3px) skewX(-8deg)}
-.an-kira{fill:#fff;stroke:var(--ink);stroke-width:1.6;stroke-linejoin:round;animation:an-kira 2.6s ease-in-out infinite}
-.an-petal{fill:#F9A8D4;stroke:var(--ink);stroke-width:1.3;animation:an-spinp 2.4s linear infinite}
-.an-petal-path{transform-box:view-box!important;animation:an-fall 4.2s linear infinite}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .an-bg{fill:color-mix(in srgb,var(--hi) 7%,var(--surface))}:root:not([data-theme="light"]) .an-word{fill:#171A24}:root:not([data-theme="light"]) .an-flash{fill:var(--hi)}}
-:root[data-theme="dark"] .an-bg{fill:color-mix(in srgb,var(--hi) 7%,var(--surface))}:root[data-theme="dark"] .an-word{fill:#171A24}:root[data-theme="dark"] .an-flash{fill:var(--hi)}
-@keyframes an-rush{0%{opacity:.15}50%{opacity:.85}100%{opacity:.15}}
-@keyframes an-flash{0%,86%{opacity:0}88%{opacity:.75}100%{opacity:0}}
-@keyframes an-pulse{0%,100%{transform:scale(1) rotate(-2deg)}12%{transform:scale(1.1) rotate(1deg)}30%{transform:scale(1) rotate(-2deg)}}
-@keyframes an-kira{0%,100%{transform:scale(0) rotate(0);opacity:0}25%{transform:scale(1.2) rotate(45deg);opacity:1}50%{transform:scale(.9) rotate(90deg);opacity:1}70%{transform:scale(0) rotate(135deg);opacity:0}}
-@keyframes an-spinp{to{transform:rotate(360deg)}}
-@keyframes an-fall{from{transform:translate(-20px,calc(var(--py) - 40px))}to{transform:translate(300px,calc(var(--py) + 90px))}}
-@media (prefers-reduced-motion:reduce){.an *{animation:none!important}}
+
