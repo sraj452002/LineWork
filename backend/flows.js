@@ -231,7 +231,7 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
     live.set(run.id, { uid, run });
     const ctx = ctxFor(uid);
     ctx.respond = r => { if (!answer) { answer = r; answered(r); } };
-    ctx.page = { blocks: [], form: (page && page.form) || {}, action: (page && page.action) || null };
+    ctx.page = { blocks: [], form: (page && page.form) || {}, action: (page && page.action) || null, query: (page && page.query) || {} };
     Object.defineProperty(run, 'page', { value: ctx.page });
     Object.defineProperty(run, 'done', { value: (async () => {
       let r = null;
@@ -537,7 +537,7 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
      is the UI nodes' blocks, drawn as HTML with no scripts and served as a sandbox. */
   // allow-scripts is only for the browser's own video controls (Safari's are scripts, and a sandbox without
   // it leaves a video that won't play); script-src 'none' still keeps every script on the page from running.
-  const PAGE_HEADERS = { 'content-security-policy': "sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox; default-src 'none'; script-src 'none'; frame-src 'self' https: http:; img-src https: http: data:; media-src https: http:; style-src 'unsafe-inline'; form-action 'self'", 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'cache-control': 'no-store',
+  const PAGE_HEADERS = { 'content-security-policy': "sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads; default-src 'none'; script-src 'none'; frame-src 'self' https: http:; img-src https: http: data:; media-src https: http:; style-src 'unsafe-inline'; form-action 'self'", 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'cache-control': 'no-store',
     // The app itself is cross-origin isolated (COEP, for running code in the browser): a page opts in too, so
     // it can be shown inside the app (WorkLine Apps on a phone, the Run section) and not just on its own.
     'cross-origin-embedder-policy': 'credentialless', 'cross-origin-resource-policy': 'same-origin' };
@@ -550,7 +550,7 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
   };
   // Run a flow from its Page trigger and draw what its UI nodes made. Waits up to 25 s.
   const drawPage = async (uid, fileId, flow, node, input, trigger) => {
-    const run = start(uid, fileId, flow, node.id, [{ json: input }], trigger, { form: input.form, action: input.action });
+    const run = start(uid, fileId, flow, node.id, [{ json: input }], trigger, { form: input.form, action: input.action, query: input.query });
     const got = await Promise.race([run.done, new Promise(r => setTimeout(() => r(null), 25_000))]);
     const p = node.params || {};
     if (!got) return renderPage(p, run.page.blocks, { query: input.query, error: 'This page is taking too long. Try again in a moment.' });
