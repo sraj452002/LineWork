@@ -4553,30 +4553,30 @@ body{background:radial-gradient(1100px 620px at 8% -10%,color-mix(in srgb,var(--
 @keyframes fr-hourglass{0%,40%{transform:rotate(0)}50%,90%{transform:rotate(180deg)}100%{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.fr-core.is-wait .rh-mark svg{animation:none}}
 
-/* Before a run (FriendlyRun's AuroraIdle): a flat 2D vector orb. Flat fills and crisp strokes only:
-   no blur, gloss, gradients or shadows. Discs drift inside, rings breathe, stars twinkle. */
-.fx-vec{width:210px;height:210px;flex:none;overflow:visible;margin-bottom:2px}
-.ws .fx-vec{width:240px;height:240px}
-.fx-vec *{transform-box:fill-box;transform-origin:center}
-.fx-base{fill:color-mix(in srgb,var(--c-purple) 14%,var(--surface))}
-.fx-d{opacity:.88;stroke:var(--surface);stroke-width:2}
-.fx-spin{transform-box:view-box!important;transform-origin:100px 100px!important;animation:fx-r1 9s linear infinite}
-.d1{fill:#8B6CF6}.d2{fill:#5B8DEF}.d3{fill:#2BC8A8}.d4{fill:#F06FA8}
-.fx-d{animation:fx-beat 3.6s ease-in-out infinite}.d2{animation-delay:.9s}.d3{animation-delay:1.8s}.d4{animation-delay:2.7s}
-.fx-core2{fill:var(--hi);stroke:var(--ink);stroke-width:2.5;animation:fx-core 1.8s ease-in-out infinite}
-@keyframes fx-beat{0%,100%{transform:scale(1)}25%{transform:scale(1.28)}50%{transform:scale(1)}}
-@keyframes fx-core{0%,100%{transform:scale(1)}50%{transform:scale(.8)}}
-.fx-edge{fill:none;stroke:var(--ink);stroke-width:2.5}
-.fx-shine{fill:none;stroke:#fff;stroke-width:5;stroke-linecap:round;opacity:.85}
-.fx-ring1{fill:none;stroke:var(--c-blue);stroke-width:2;stroke-dasharray:3 7;stroke-linecap:round;animation:fx-r1 12s linear infinite}
-.fx-ring2{fill:none;stroke:var(--c-purple);stroke-width:1.5;opacity:.5;animation:fx-r2 4s ease-in-out infinite}
-.fx-star{fill:var(--hi);stroke:var(--ink);stroke-width:1.2;stroke-linejoin:round;animation:fx-tw 2.8s ease-in-out infinite}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .fx-base{fill:color-mix(in srgb,var(--c-purple) 18%,var(--surface))}}
-@keyframes fx-v1{0%,100%{transform:translate(0,0)}33%{transform:translate(26px,16px)}66%{transform:translate(8px,30px)}}
-@keyframes fx-v2{0%,100%{transform:translate(0,0)}33%{transform:translate(-30px,20px)}66%{transform:translate(-10px,-14px)}}
-@keyframes fx-v3{0%,100%{transform:translate(0,0)}33%{transform:translate(22px,-28px)}66%{transform:translate(-16px,-8px)}}
-@keyframes fx-v4{0%,100%{transform:translate(0,0)}50%{transform:translate(-34px,-32px)}}
-@keyframes fx-r1{to{transform:rotate(360deg)}}
-@keyframes fx-r2{0%,100%{transform:scale(.96);opacity:.25}50%{transform:scale(1.04);opacity:.6}}
-@keyframes fx-tw{0%,100%{transform:scale(.4) rotate(0deg);opacity:0}30%,60%{transform:scale(1) rotate(45deg);opacity:1}}
-@media (prefers-reduced-motion:reduce){.fx-vec *{animation:none!important}.fx-star{opacity:1}}
+/* Before a run (FriendlyRun's AuroraIdle): a flat 2D vector rocket. Flat fills and crisp ink outlines only.
+   It hovers and sways; the flame flickers; speed lines and stars stream down behind; smoke puffs drift. */
+.fx-rkt{width:220px;height:220px;flex:none;overflow:visible;margin-bottom:2px}
+.ws .fx-rkt{width:250px;height:250px}
+.fx-rkt *{transform-box:fill-box;transform-origin:center}
+.fx-sky{fill:color-mix(in srgb,var(--c-purple) 13%,var(--surface))}
+.fx-frame{fill:none;stroke:var(--ink);stroke-width:2.5}
+.fx-speed{stroke:color-mix(in srgb,var(--c-blue) 55%,transparent);stroke-width:3;stroke-linecap:round;animation:fx-fall 1.4s linear infinite}
+.fx-star{fill:var(--hi);stroke:var(--ink);stroke-width:1.1;stroke-linejoin:round;animation:fx-drift 3.2s linear infinite}
+.fx-puff{fill:var(--surface);stroke:var(--ink);stroke-width:2.2}
+.p1{animation:fx-puff 2.6s ease-in-out infinite}.p2{animation:fx-puff 2.6s ease-in-out -.6s infinite}.p3{animation:fx-puff 2.6s ease-in-out -1.3s infinite}.p4{animation:fx-puff 2.6s ease-in-out -1.9s infinite}
+.fx-rocket{transform-box:view-box!important;transform-origin:110px 110px!important;animation:fx-hover 2.6s ease-in-out infinite}
+.fx-body{fill:var(--surface);stroke:var(--ink);stroke-width:2.6;stroke-linejoin:round}
+.fx-nose{fill:#8B6CF6;stroke:var(--ink);stroke-width:2.6;stroke-linejoin:round}
+.fx-fin{fill:#F06FA8;stroke:var(--ink);stroke-width:2.6;stroke-linejoin:round}
+.fx-win{fill:#5B8DEF;stroke:var(--ink);stroke-width:2.6}
+.fx-win-shine{fill:none;stroke:#fff;stroke-width:2.4;stroke-linecap:round}
+.fx-nozzle{fill:#2BC8A8;stroke:var(--ink);stroke-width:2.4;stroke-linejoin:round}
+.fx-flame{transform-origin:50% 0!important;animation:fx-flicker .32s ease-in-out infinite alternate}
+.fx-fl-out{fill:#FF8A4C;stroke:var(--ink);stroke-width:2.2;stroke-linejoin:round}
+.fx-fl-in{fill:var(--hi)}
+@keyframes fx-fall{from{transform:translateY(-40px)}to{transform:translateY(240px)}}
+@keyframes fx-drift{from{transform:translateY(-20px) rotate(0) scale(1.3)}to{transform:translateY(240px) rotate(180deg) scale(1.3)}}
+@keyframes fx-puff{0%,100%{transform:translateX(0) scale(1)}50%{transform:translateX(5px) scale(1.12)}}
+@keyframes fx-hover{0%,100%{transform:translateY(0) rotate(-2deg) scale(1.2)}50%{transform:translateY(-8px) rotate(2deg) scale(1.2)}}
+@keyframes fx-flicker{from{transform:scaleY(.82) scaleX(1.04)}to{transform:scaleY(1.14) scaleX(.94)}}
+@media (prefers-reduced-motion:reduce){.fx-rkt *{animation:none!important}}
