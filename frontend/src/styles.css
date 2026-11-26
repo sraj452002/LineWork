@@ -4717,3 +4717,22 @@ body{background:radial-gradient(1100px 620px at 8% -10%,color-mix(in srgb,var(--
 @media (prefers-reduced-motion:reduce){.app-skel-row i{animation:none}}
 .desk .app-form .app-run{margin-top:8px;position:static}
 @media (max-width:800px){.desk .app-body{grid-template-columns:1fr}}
+
+/* Tools → Reverse engineer (ReverseDialog.jsx). */
+.t-rev .tool-ico,.t-rev{--tc:#7c3aed}
+.mbox.rev{width:min(720px,96vw);max-height:92vh;overflow:auto;display:flex;flex-direction:column;gap:12px;padding:20px 22px}
+.modal .mbox.rev{background:var(--surface)!important}
+.rev-head{display:flex;align-items:flex-start;gap:12px}
+.rev-head>i{flex:none;display:grid;place-items:center;width:42px;height:42px;border-radius:13px;font-style:normal;font-size:22px;color:#fff;background:linear-gradient(135deg,var(--c-purple),var(--c-blue));box-shadow:0 10px 22px -10px var(--c-purple)}
+.rev-head div{flex:1}.rev-head h3{margin:0 0 2px}.rev-head p{margin:0;font-size:13px}
+.rev-tabs{display:flex;gap:4px;flex-wrap:wrap;padding:4px;border-radius:14px;background:color-mix(in srgb,var(--ink) 5%,var(--surface));border:1px solid var(--hair)}
+.rev-tabs button{flex:1;min-width:120px;border:0;background:transparent;color:var(--ink2);font:600 13px var(--ui);padding:8px 10px;border-radius:10px;cursor:pointer}
+.rev-tabs button.on{background:var(--surface);color:var(--ink);box-shadow:var(--shadow-sm)}
+.rev-desc{margin:0;font-size:13px;color:var(--ink2)}
+.rev-pick{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.rev-got{font-size:12.5px;font-weight:600;color:var(--c-green)}
+.rev-f{display:grid;gap:6px;font-size:13px;font-weight:600}
+.rev-f textarea,.rev-f input{font:13px/1.55 var(--mono,ui-monospace,monospace);padding:10px 12px;border-radius:12px;border:1px solid var(--hair);background:color-mix(in srgb,var(--ink) 3%,var(--surface));color:var(--ink);resize:vertical}
+.rev-f input{font-family:var(--ui);font-size:14px}
+.rev-err{margin:0;color:var(--err);font-weight:600;font-size:13px}
+.rev-foot{display:flex;justify-content:flex-end;gap:8px}

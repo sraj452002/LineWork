@@ -9,6 +9,7 @@ import { importFlow } from '../lib/flowio.js';
 import { readZip, zipSummary } from '../lib/zipimport.js';
 import { STARTERS } from '../lib/starters.js';
 import { useUI } from './ui.jsx';
+import ReverseDialog from './ReverseDialog.jsx';
 
 /* The Tools page: every tool in Workline in one place. Each one makes a new file that opens in that tool. */
 
@@ -31,6 +32,7 @@ const ICON = {
   live: 'M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zM4 6v6c0 1.7 3.6 3 8 3M20 6v4M4 12v6c0 1.7 3.6 3 8 3M17 14l-3 4h4l-3 4',
   auto: 'M3 9h6v6H3zM15 3.5h6v6h-6zM15 14.5h6v6h-6zM9 12h3l1.5-5.5H15M12 12l1.5 5.5H15',
   zip: 'M6 3h9l4 4v14H6zM15 3v4h4M10 3v2h2v2h-2v2h2v2h-2v3h2v3h-2z',
+  rev: 'M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4M12 8v4l3 2',
 };
 
 export default function Tools({ q = '', onCreate, onGenerate, busy }) {
@@ -81,6 +83,7 @@ export default function Tools({ q = '', onCreate, onGenerate, busy }) {
     toast(`Imported ${made} file${made === 1 ? '' : 's'} from “${f.name}”.`);
   };
   const [cat, setCat] = useState('all');
+  const [rev, setRev] = useState(null); // the Reverse engineer dialog, open on a kind
   // A search shows matches in every category.
   useEffect(() => { if (q.trim()) setCat('all'); }, [q]);
   const T = key => TEMPLATES.find(t => t.key === key);
@@ -179,6 +182,12 @@ export default function Tools({ q = '', onCreate, onGenerate, busy }) {
       { k: 'auto', view: 'Workflow', name: 'Import a workflow', note: 'Open a .json workflow: Workline’s or n8n’s', act: () => flowRef.current?.click() },
       { k: 'zip', view: 'Files', name: 'Import a .zip', note: 'Workflows, sheets, SQL, docs and code from a zip, each made into a file', act: () => zipRef.current?.click() },
     ] },
+    { id: 'reverse', name: 'Reverse engineer', k: 'rev', note: 'Take something apart and see how it works: you get a report, diagrams and, for data and workflows, a workflow too.', list: [
+      { k: 'rev', view: 'Doc', name: 'Reverse engineer code', note: 'A project .zip, files or pasted code: stack, routes, data model and how the files connect', act: () => setRev('code') },
+      { k: 'rev', view: 'Doc', name: 'Reverse engineer a website', note: 'A web address: its technologies, pages, forms and API calls', act: () => setRev('site') },
+      { k: 'rev', view: 'Doc', name: 'Reverse engineer data', note: 'JSON, CSV or an API response: its schema as tables, and a workflow for it', act: () => setRev('data') },
+      { k: 'rev', view: 'Doc', name: 'Reverse engineer a workflow', note: 'n8n, Make, Zapier, Node-RED or Power Automate: the steps explained, and a Workline workflow', act: () => setRev('flow') },
+    ] },
     { id: 'code', name: 'Code', k: 'code', note: 'Write, run and understand code, all in the browser.', list: [
       { k: 'code', view: 'Code', name: 'Code editor', note: 'VS Code’s editor, with files and folders', act: () => onCreate(code('Code', null)) },
       { k: 'term', view: 'Code', name: 'Terminal', note: 'node, npm, git, grep and more', act: () => onCreate(code('Terminal', null, 'terminal')) },
@@ -219,6 +228,11 @@ export default function Tools({ q = '', onCreate, onGenerate, busy }) {
         </section>
       ))}
       {!matching.length && <div className="nofiles">No tools match “{q.trim()}”.</div>}
+      {rev && <ReverseDialog initial={rev} onClose={() => setRev(null)} onMake={m => {
+        onCreate(blank(m.title, { doc: m.doc, diagrams: m.diagrams, view: m.view || 'doc', ...(m.flow ? { flow: m.flow } : {}) }));
+        setRev(null);
+        toast(`Made “${m.title}”: the report, ${m.diagrams.length} diagram${m.diagrams.length === 1 ? '' : 's'}${m.flow ? ' and a workflow' : ''}.`);
+      }} />}
       <input ref={flowRef} type="file" accept=".json,application/json,.zip,application/zip" hidden onChange={e => { importWorkflow(e.target.files[0]); e.target.value = ''; }} />
       <input ref={zipRef} type="file" accept=".zip,application/zip,application/x-zip-compressed" hidden aria-label="Zip file to import" onChange={e => { importZip(e.target.files[0]); e.target.value = ''; }} />
       <input ref={sqlRef} type="file" accept=".sql,.ddl,.txt,.psql,.mysql,application/sql" hidden onChange={e => openSQL(e.target.files[0])} />
