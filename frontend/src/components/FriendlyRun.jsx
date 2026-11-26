@@ -118,17 +118,30 @@ export function FriendlyRun({ steps, run, done, title, secs, failed, onReplay, o
   );
 }
 
-/* Before a run: a living orb, liquid colour (violet, blue, teal, pink) swirling inside glass, breathing
-   gently, with a soft glow round it. Nothing to read in it: it just says “ready”. */
+/* Before a run: a flat 2D vector orb. Inside a circle, four flat discs (violet, blue, teal, pink) drift
+   and overlap with crisp edges; two thin rings breathe round it; little four-point stars twinkle. */
+const STAR = 'M0 -6 L1.6 -1.6 L6 0 L1.6 1.6 L0 6 L-1.6 1.6 L-6 0 L-1.6 -1.6Z';
 function AuroraIdle() {
   return (
-    <div className="fx-aurora" aria-hidden="true">
-      <i className="fx-glow" />
-      <span className="fx-orb">
-        <i className="b1" /><i className="b2" /><i className="b3" /><i className="b4" />
-        <i className="fx-gloss" />
-      </span>
-      <i className="fx-shadow" />
-    </div>
+    <svg className="fx-vec" viewBox="0 0 200 200" aria-hidden="true">
+      <defs><clipPath id="fx-clip"><circle cx="100" cy="100" r="58" /></clipPath></defs>
+      <circle cx="100" cy="100" r="84" className="fx-ring2" />
+      <circle cx="100" cy="100" r="72" className="fx-ring1" />
+      <circle cx="100" cy="100" r="58" className="fx-base" />
+      <g clipPath="url(#fx-clip)">
+        <g className="fx-spin">
+          <circle cx="100" cy="66" r="27" className="fx-d d1" />
+          <circle cx="134" cy="100" r="27" className="fx-d d2" />
+          <circle cx="100" cy="134" r="27" className="fx-d d3" />
+          <circle cx="66" cy="100" r="27" className="fx-d d4" />
+          <circle cx="100" cy="100" r="14" className="fx-core2" />
+        </g>
+      </g>
+      <circle cx="100" cy="100" r="58" className="fx-edge" />
+      <path d="M70 70 A42 42 0 0 1 104 56" className="fx-shine" />
+      {[[34, 46, 0], [168, 58, .7], [160, 156, 1.4], [40, 150, 2.1]].map(([x, y, d], i) => (
+        <path key={i} d={STAR} transform={`translate(${x} ${y}) scale(1.7)`} className="fx-star" style={{ animationDelay: `${d}s` }} />
+      ))}
+    </svg>
   );
 }
