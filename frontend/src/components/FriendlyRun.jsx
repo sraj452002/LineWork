@@ -120,29 +120,42 @@ export function FriendlyRun({ steps, run, done, title, secs, failed, onReplay, o
 }
 
 const WAVE = 'M40 60 C 78 8, 102 8, 130 60 S 182 112, 220 60';
+// Each step: its tile, the colour it lights up in, its glyph (drawn twice: in colour, and white for when lit).
+const STEPS = [
+  { x: 40, g: 'fi-g1', glyph: 'M35 52l12 8-12 8z', fill: true },
+  { x: 130, g: 'fi-g2', glyph: 'M130 48.5l2.7 6.8 6.8 2.7-6.8 2.7-2.7 6.8-2.7-6.8-6.8-2.7 6.8-2.7z', fill: true },
+  { x: 220, g: 'fi-g3', glyph: 'M211 60.5l6 6 12-12.5', tick: true },
+];
 function FlowIdle() {
-  const node = (x, cls, glyph) => (
-    <g className={'fi-node ' + cls} style={{ transformOrigin: `${x}px 60px` }}>
-      <rect x={x - 22} y="38" width="44" height="44" rx="14" className="fi-tile" />
-      <rect x={x - 22} y="38" width="44" height="44" rx="14" className="fi-edge" />
-      {glyph}
-    </g>
-  );
+  const grad = (id, a, b) => <linearGradient id={id} x1="0" y1="0" x2="1" y2="1"><stop offset="0" style={{ stopColor: `color-mix(in srgb, ${a} 55%, #fff)` }} /><stop offset="1" style={{ stopColor: b }} /></linearGradient>;
   return (
-    <svg className="fr-idle" viewBox="0 0 260 120" aria-hidden="true">
+    <svg className="fr-idle" viewBox="0 0 260 130" aria-hidden="true">
       <defs>
         <linearGradient id="fi-line" x1="0" x2="1"><stop offset="0" style={{ stopColor: 'var(--c-purple)' }} /><stop offset=".5" style={{ stopColor: 'var(--c-blue)' }} /><stop offset="1" style={{ stopColor: 'var(--c-green)' }} /></linearGradient>
-        <radialGradient id="fi-glow"><stop offset="0" stopColor="#fff" /><stop offset=".35" style={{ stopColor: 'var(--c-blue)' }} /><stop offset="1" style={{ stopColor: 'var(--c-blue)', stopOpacity: 0 }} /></radialGradient>
+        {grad('fi-g1', 'var(--c-purple)', 'var(--c-purple)')}{grad('fi-g2', 'var(--c-blue)', 'var(--c-blue)')}{grad('fi-g3', 'var(--c-green)', 'var(--c-green)')}
+        <radialGradient id="fi-glow"><stop offset="0" stopColor="#fff" /><stop offset=".3" style={{ stopColor: 'var(--c-blue)' }} /><stop offset="1" style={{ stopColor: 'var(--c-blue)', stopOpacity: 0 }} /></radialGradient>
+        <radialGradient id="fi-amb"><stop offset="0" style={{ stopColor: 'var(--c-purple)', stopOpacity: 0.22 }} /><stop offset=".55" style={{ stopColor: 'var(--c-blue)', stopOpacity: 0.1 }} /><stop offset="1" style={{ stopColor: 'var(--c-blue)', stopOpacity: 0 }} /></radialGradient>
       </defs>
-      <path d={WAVE} className="fi-rail" />
-      <path d={WAVE} className="fi-flow" />
-      {node(40, 'n1', <path className="fi-glyph" d="M35 52l12 8-12 8z" />)}
-      {node(130, 'n2', <path className="fi-glyph" d="M130 49l2.6 6.4 6.4 2.6-6.4 2.6-2.6 6.4-2.6-6.4-6.4-2.6 6.4-2.6z" />)}
-      {node(220, 'n3', <path className="fi-glyph fi-tick" d="M211 60l6 6 12-12" />)}
-      <g className="fi-spark">
-        <circle r="14" fill="url(#fi-glow)" opacity=".75" />
-        <circle r="4.5" fill="#fff" />
-        <animateMotion dur="2.8s" repeatCount="indefinite" path={WAVE} keyPoints="0;1;1" keyTimes="0;.86;1" calcMode="spline" keySplines=".45 0 .55 1;0 0 1 1" />
+      <ellipse cx="130" cy="64" rx="128" ry="62" fill="url(#fi-amb)" className="fi-amb" />
+      {[[22, 24, 0], [88, 112, 1.1], [168, 18, 2], [238, 104, .6], [60, 98, 1.6], [204, 30, 2.4]].map(([x, y, d], i) => <circle key={i} cx={x} cy={y} r={i % 2 ? 1.6 : 2.2} className="fi-dot" style={{ animationDelay: `${d}s` }} />)}
+      <g className="fi-bob">
+        <path d={WAVE} className="fi-rail" />
+        <path d={WAVE} className="fi-flow" />
+        <path d={WAVE} pathLength="100" className="fi-comet" />
+        {STEPS.map((st, i) => (
+          <g key={i} className={'fi-node n' + (i + 1)} style={{ transformOrigin: `${st.x}px 60px` }}>
+            <circle cx={st.x} cy="60" r="24" className="fi-ripple" style={{ stroke: `url(#${st.g})` }} />
+            <rect x={st.x - 22} y="38" width="44" height="44" rx="14" className="fi-tile" />
+            <rect x={st.x - 22} y="38" width="44" height="44" rx="14" className="fi-lit" fill={`url(#${st.g})`} />
+            <rect x={st.x - 22} y="38" width="44" height="44" rx="14" className="fi-edge" />
+            <path d={st.glyph} className={'fi-glyph' + (st.fill ? ' filled' : '') + (st.tick ? ' fi-tick' : '')} pathLength={st.tick ? 30 : undefined} />
+            <path d={st.glyph} className={'fi-glyph white' + (st.fill ? ' filled' : '')} />
+          </g>
+        ))}
+        <g className="fi-spark" style={{ offsetPath: `path('${WAVE}')` }}>
+          <circle r="15" fill="url(#fi-glow)" opacity=".8" />
+          <circle r="4.5" fill="#fff" />
+        </g>
       </g>
     </svg>
   );
