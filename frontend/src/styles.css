@@ -4613,3 +4613,53 @@ body{background:radial-gradient(1100px 620px at 8% -10%,color-mix(in srgb,var(--
 @media (max-width:640px){.apps-hero{padding:20px}.apps-hero h2{font-size:24px}.apps-hero-tip{max-width:none}}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .apps .app-go{color:#0E1220}}
 :root[data-theme="dark"] .apps .app-go{color:#0E1220}
+
+/* An app, opened (Apps.jsx's AppRunner, on the desktop): the page tinted in the app's colour, a bold
+   hero with chips, numbered Fill in / Result cards, a gradient Run, the result as stat tiles, and the
+   earlier runs as a tidy list. (.desk: the phone app keeps its own look.) */
+.app-run-page.desk{--tn:var(--tone,var(--c-blue))}
+.desk .app-top{margin-bottom:14px}
+.desk .app-back,.desk .app-edit{border-radius:999px;display:inline-flex;align-items:center;gap:6px}
+.desk .app-edit svg{fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.desk .app-hero{position:relative;overflow:hidden;padding:26px 28px;border-radius:24px;gap:20px;
+  border:1px solid color-mix(in srgb,var(--tn) 25%,var(--hair));
+  background:radial-gradient(520px 220px at 0% 0%,color-mix(in srgb,var(--tn) 24%,transparent),transparent 70%),radial-gradient(420px 200px at 100% 100%,color-mix(in srgb,var(--c-purple) 12%,transparent),transparent 70%),var(--surface);
+  box-shadow:0 18px 44px -28px color-mix(in srgb,var(--tn) 60%,rgba(0,0,0,.4))}
+.desk .app-hero::after{content:"";position:absolute;inset:auto -40px -60px auto;width:220px;height:220px;border-radius:50%;border:28px solid color-mix(in srgb,var(--tn) 9%,transparent)}
+.desk .app-hero .app-icon{width:72px;height:72px;font-size:38px;border-radius:22px;background:linear-gradient(145deg,color-mix(in srgb,var(--tn) 26%,var(--surface)),color-mix(in srgb,var(--tn) 8%,var(--surface)));box-shadow:0 12px 26px -12px var(--tn)}
+.desk .app-hero h2{font-size:28px}
+.app-hero-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.app-hero-chips span{font-size:12px;font-weight:600;padding:4px 10px;border-radius:999px;color:var(--ink2);background:color-mix(in srgb,var(--surface) 70%,transparent);border:1px solid var(--hair)}
+.app-hero-chips span:first-child{color:var(--tn);border-color:color-mix(in srgb,var(--tn) 30%,transparent);background:color-mix(in srgb,var(--tn) 10%,var(--surface))}
+.desk .app-body{grid-template-columns:minmax(280px,400px) minmax(0,1fr);gap:20px}
+.desk .app-form,.desk .app-result{border-radius:22px;padding:22px}
+.app-sec-h{display:flex;align-items:center;gap:10px;font-size:13px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--ink2);margin-bottom:4px}
+.app-sec-h i{font-style:normal;display:grid;place-items:center;width:24px;height:24px;border-radius:8px;font-size:12px;color:#fff;background:linear-gradient(135deg,var(--tn,var(--c-blue)),color-mix(in srgb,var(--tn,var(--c-blue)) 60%,var(--c-purple)))}
+.desk .app-f input,.desk .app-f textarea,.desk .app-f select{border-radius:12px;background:color-mix(in srgb,var(--ink) 3%,var(--surface));transition:border-color .2s,box-shadow .2s}
+.desk .app-f input:focus,.desk .app-f textarea:focus,.desk .app-f select:focus{outline:none;border-color:var(--tn);box-shadow:0 0 0 4px color-mix(in srgb,var(--tn) 16%,transparent)}
+.desk .app-run{margin-top:4px;padding:13px;border-radius:14px;border:0;color:#fff;font-weight:800;background:linear-gradient(120deg,var(--tn),color-mix(in srgb,var(--tn) 55%,var(--c-purple)));box-shadow:0 12px 26px -12px var(--tn)}
+.desk .app-run svg{fill:currentColor}
+.desk .app-run:hover:not(:disabled){filter:brightness(1.06);transform:translateY(-1px)}
+.desk .app-wait{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-height:220px;margin:0;text-align:center}
+.desk .app-wait p{margin:8px 0 0;font-weight:600}
+.app-wait-art{display:flex;gap:8px}
+.app-wait-art i{width:44px;height:44px;border-radius:14px;border:2px dashed color-mix(in srgb,var(--tn,var(--c-blue)) 35%,var(--hair));animation:app-bob 2.4s ease-in-out infinite}
+.app-wait-art i:nth-child(2){animation-delay:.3s;background:color-mix(in srgb,var(--tn,var(--c-blue)) 8%,transparent)}.app-wait-art i:nth-child(3){animation-delay:.6s}
+@keyframes app-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+.desk .app-out-head{padding-bottom:10px;margin-bottom:14px;border-bottom:1px dashed var(--hair)}
+.desk .app-cards{grid-template-columns:1fr}
+.desk .app-item{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin:0;padding:0;border:0;background:none}
+.desk .app-item>div{padding:14px 16px;border-radius:16px;border:1px solid color-mix(in srgb,var(--tn) 18%,var(--hair));background:linear-gradient(160deg,color-mix(in srgb,var(--tn) 9%,var(--surface)),var(--surface))}
+.desk .app-item dt{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink2)}
+.desk .app-item dd{margin:4px 0 0;font-size:24px;font-weight:800;letter-spacing:-.01em;color:var(--ink);word-break:break-word}
+.desk .app-history{margin-top:20px}
+.desk .app-history ul{flex-direction:column;flex-wrap:nowrap;gap:4px}
+.desk .app-history button{width:100%;border-radius:12px;padding:8px 12px;justify-content:flex-start;background:color-mix(in srgb,var(--ink) 2.5%,var(--surface))}
+.desk .app-history button small{margin-left:auto}
+.desk .app-history button:hover{border-color:color-mix(in srgb,var(--tn) 35%,var(--hair))}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .desk .app-run{color:#0E1220}:root:not([data-theme="light"]) .app-sec-h i{color:#0E1220}}
+:root[data-theme="dark"] .desk .app-run,:root[data-theme="dark"] .app-sec-h i{color:#0E1220}
+@media (prefers-reduced-motion:reduce){.app-wait-art i{animation:none}}
+.app-run-page.desk .btn.primary.app-run{color:#fff;background:linear-gradient(120deg,var(--tn),color-mix(in srgb,var(--tn) 55%,var(--c-purple)));border:0;box-shadow:0 12px 26px -12px var(--tn)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .app-run-page.desk .btn.primary.app-run{color:#0E1220}}
+:root[data-theme="dark"] .app-run-page.desk .btn.primary.app-run{color:#0E1220}

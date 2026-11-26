@@ -184,26 +184,35 @@ export function AppRunner({ file, server, onBack, onEdit, onRemove, runner, cont
   const items = useMemo(() => (run && run.status === 'success' ? run.items || resultOf(file.flow, run) : []), [run, file.flow]);
 
   return (
-    <div className="app-run-page">
+    <div className={'app-run-page t-' + (a.tone || 'blue') + (runner ? '' : ' desk')}>
       <div className="app-top">
-        <button className="btn" onClick={onBack}>{backLabel}</button>
+        <button className="btn app-back" onClick={onBack}>{backLabel}</button>
         <span className="grow" />
-        {onEdit && <button className="link" onClick={() => onEdit(file.id)}>Edit the workflow</button>}
+        {onEdit && <button className="btn app-edit" onClick={() => onEdit(file.id)}><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4" /></svg>Edit the workflow</button>}
         {onRemove && <button className="btn danger-text" onClick={onRemove}>Unpublish</button>}
       </div>
       <header className={'app-hero t-' + (a.tone || 'blue')}>
         <i className="app-icon" aria-hidden="true"><AppIcon icon={a.icon} /></i>
-        <div><h2>{a.name}</h2>{a.description && <p>{a.description}</p>}</div>
+        <div className="app-hero-text">
+          <h2>{a.name}</h2>{a.description && <p>{a.description}</p>}
+          <div className="app-hero-chips">
+            <span>Workflow app</span>
+            <span>{inputs.length ? `${inputs.length} ${inputs.length === 1 ? 'question' : 'questions'}` : 'No questions'}</span>
+            {history[0] && <span>Last run {ago(history[0].started)}</span>}
+          </div>
+        </div>
       </header>
       {server === false && !runner && <p className="fv-note">Apps run on the Workline server. Sign in to your account to run this one.</p>}
       <div className="app-body">
         <form className="app-form" onSubmit={go}>
+          <div className="app-sec-h"><i>1</i>Fill in</div>
           {inputs.map(f => <Input key={f.key} f={f} value={form[f.key]} onChange={v => setForm(x => ({ ...x, [f.key]: v }))} />)}
           {!inputs.length && <p className="muted">This app needs nothing from you: just press Run.</p>}
-          <button className="btn primary app-run" disabled={busy || (!server && !runner)}>{busy ? <><i className="spin" />Working…</> : 'Run'}</button>
+          <button className="btn primary app-run" disabled={busy || (!server && !runner)}>{busy ? <><i className="spin" />Working…</> : <><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4l13 8-13 8z" /></svg>Run</>}</button>
         </form>
         <section className="app-result" aria-live="polite" aria-label="Result">
-          {!run ? <p className="muted app-wait">The result shows here.</p>
+          <div className="app-sec-h"><i>2</i>Result</div>
+          {!run ? <div className="app-wait"><span className="app-wait-art" aria-hidden="true"><i /><i /><i /></span><p className="muted">The result shows here.</p><small className="muted">Fill in the form and press Run.</small></div>
             : run.status === 'running' ? <div className="app-working"><i className="spin" /><span>Working on it… this can take a little while.</span></div>
             : run.status === 'error' ? <div className="app-error"><b>It didn’t work.</b><p>{run.error || 'Something went wrong.'}</p></div>
             : run.status === 'waiting' ? <div className="app-waiting"><b>✎ Your turn</b><p>Edit {run.name}, then Save &amp; continue.</p><button type="button" className="btn primary" onClick={() => setEditing(lastCard)} disabled={!!editing || !lastCard}>✎ Open the editor</button></div>
