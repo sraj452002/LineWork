@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { rid } from '../lib/utils.js';
 import { useUI } from './ui.jsx';
 import { ObjArt, Thumb, boxStyle, defaultsOf, lookOf } from './CourseArt.jsx';
-import { storyNote } from './CourseStudio.jsx';
+import { storyDetails, storyNote } from './CourseStudio.jsx';
 import {
   ACTIONS, ANIMS, BUILTIN_VARS, EVENTS, KINDS, OPS, QTYPES, STATES, allSlides, cloneSlide, courseHtml, findSlide, interpolate,
   TRANSITIONS, appendCourse, courseFile, newCourse, newLayer, newObject, newScene, newSlide, pictureUrl, readCourse, scormZip,
@@ -121,7 +121,13 @@ export default function CourseView({ file, update, visible = true }) {
   const inLayer = (c, sid = slide.id, lid = layer.id) => inSlide(c, sid)?.layers.find(l => l.id === lid);
   const inObj = (c, id = sel) => inLayer(c)?.objects.find(o => o.id === id);
   const editObj = fn => write(c => { const o = inObj(c); if (o) fn(o); });
-  const setLook = (k, v) => editObj(o => { const t = editState === 'normal' ? (o.style ||= {}) : ((o.states ||= {})[editState] ||= {}); if (v === undefined) delete t[k]; else t[k] = v; });
+  const setLook = (k, v) => editObj(o => {
+    const t = editState === 'normal' ? (o.style ||= {}) : ((o.states ||= {})[editState] ||= {});
+    if (v === undefined) delete t[k]; else t[k] = v;
+    // Imported rich text: a change of size, color or weight applies to all of it.
+    const RUN = { size: 'size', color: 'color', bold: 'bold', italic: 'italic' }[k];
+    for (const rich of [editState === 'normal' ? o.rich : t.rich]) if (Array.isArray(rich)) for (const b of rich) { if (k === 'align') b.align = v; if (RUN) for (const r of b.spans) { delete r[RUN]; if (k === 'bold') delete r.weight; } }
+  });
   const openSlide = id => { setSlideId(id); setLayerId(null); setSel(null); go('slide'); };
 
   /* ---- inserting ---- */
@@ -236,8 +242,8 @@ export default function CourseView({ file, update, visible = true }) {
     if (!f) return;
     try {
       const { imported, ...c } = await readCourse(f);
-      if (how === 'replace') { write(x => { Object.keys(x).forEach(key => delete x[key]); Object.assign(x, c); if (imported) x.importNote = storyNote(imported); }); setSlideId(null); if (!imported) toast(`Opened “${c.title}”`); }
-      else { const n = c.scenes.reduce((a, sc) => a + sc.slides.length, 0); write(x => { appendCourse(x, c); if (imported) x.importNote = storyNote(imported); }); if (!imported) toast(`Added ${n} slide${n === 1 ? '' : 's'} from “${c.title}”`); }
+      if (how === 'replace') { write(x => { Object.keys(x).forEach(key => delete x[key]); Object.assign(x, c); if (imported) { x.importNote = storyNote(imported); x.importDetails = storyDetails(imported); } }); setSlideId(null); if (!imported) toast(`Opened “${c.title}”`); }
+      else { const n = c.scenes.reduce((a, sc) => a + sc.slides.length, 0); write(x => { appendCourse(x, c); if (imported) { x.importNote = storyNote(imported); x.importDetails = storyDetails(imported); } }); if (!imported) toast(`Added ${n} slide${n === 1 ? '' : 's'} from “${c.title}”`); }
     } catch (e) { toast(e.message || 'That file couldn’t be opened.'); }
   };
   const pickImport = how => { importRef.current.dataset.how = how; importRef.current.click(); };
@@ -387,7 +393,7 @@ export default function CourseView({ file, update, visible = true }) {
                   {editing === o.id
                     ? <textarea className="cv-edit" autoFocus defaultValue={s.text != null ? s.text : o.text} aria-label="Edit the text" style={{ textAlign: s.align, color: s.color, fontSize: s.size, fontWeight: s.bold ? 700 : 400 }}
                       onPointerDown={e => e.stopPropagation()} onKeyDown={e => { if (e.key === 'Escape') e.currentTarget.blur(); }}
-                      onBlur={e => { const v = e.target.value.replace(/\r\n?/g, '\n'); setEditing(null); editObj(x => { if (editState === 'normal') x.text = v; else ((x.states ||= {})[editState] ||= {}).text = v; }); }} />
+                      onBlur={e => { const v = e.target.value.replace(/\r\n?/g, '\n'); setEditing(null); editObj(x => { if (editState === 'normal') { if (v !== x.text) { x.text = v; delete x.rich; } } else { const st = ((x.states ||= {})[editState] ||= {}); if (v !== st.text) { st.text = v; delete st.rich; } } }); }} />
                     : <ObjArt o={o} st={st} vars={vars} assets={course.assets} />}
                   {o.id === sel && !editing && ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].map(h => <i key={h} className={'cv-h h-' + h} onPointerDown={e => drag(e, o, h)} />)}
                 </div>
@@ -471,7 +477,7 @@ export default function CourseView({ file, update, visible = true }) {
           {mode === 'slide' && <button className={focusMode ? 'on' : ''} aria-pressed={focusMode} title="Focus: only the slide" aria-label="Focus on the slide" onClick={() => setFocus(!focusMode)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4" /></svg></button>}
         </span>
       </div>
-      {course.importNote && <div className="sl-import" role="status"><b>Storyline import</b><span>{course.importNote}</span><button className="rs-ib" aria-label="Dismiss the import note" onClick={() => write(c => { delete c.importNote; })}>×</button></div>}
+      {course.importNote && <div className="sl-import" role="status"><b>Storyline import</b><span>{course.importNote}</span>{course.importDetails?.length > 0 && <button className="btn" onClick={() => setDialog('import')}>Details</button>}<button className="rs-ib" aria-label="Dismiss the import note" onClick={() => write(c => { delete c.importNote; delete c.importDetails; })}>×</button></div>}
       {mode === 'story' ? (
         <div className="sl-main story" style={{ gridTemplateColumns: panels.right ? undefined : 'minmax(0,1fr)' }}>
           {storyView}
@@ -510,6 +516,7 @@ export default function CourseView({ file, update, visible = true }) {
       {dialog === 'vars' && <VarsDialog course={course} write={write} onClose={() => setDialog(null)} />}
       {dialog === 'player' && <PlayerDialog course={course} write={write} onClose={() => setDialog(null)} />}
       {dialog === 'keys' && <InfoDialog title="Keyboard shortcuts" onClose={() => setDialog(null)} rows={[['Ctrl Z / Ctrl Y', 'Undo / redo'], ['Ctrl C, Ctrl X, Ctrl V', 'Copy, cut, paste an object'], ['Ctrl D', 'Duplicate the object'], ['Arrows (Shift: 10 px)', 'Nudge the object'], ['Delete', 'Delete the object (Story View: the slide)'], ['Double-click', 'Edit text · open a slide from Story View'], ['Enter', 'Story View: open the slide'], ['Alt while dragging', 'Move without snapping'], ['F12', 'Preview the entire project']]} />}
+      {dialog === 'import' && <InfoDialog title="What didn’t come over" onClose={() => setDialog(null)} rows={course.importDetails || []} />}
       {dialog === 'help' && <InfoDialog title="How it works" onClose={() => setDialog(null)} rows={[['Story View', 'Every scene and its slides. Double-click a slide to edit it.'], ['Slide View', 'The slide, its layers (right), triggers (right) and the Timeline, States, Format and Notes (below).'], ['Layers', 'Extra parts of a slide shown and hidden by triggers — pop-ups, feedback, details.'], ['States', 'How an object looks when hovered, pressed, selected, visited, disabled, or a state of your own.'], ['Triggers', '“Do this when that happens, if…”: jump, show a layer, change a state, adjust a variable…'], ['Variables', 'Remember things while the course runs; show one in text as %Name%.'], ['Publish', 'One web page, or a SCORM 1.2 zip for an LMS. Export saves a course file to open again.']]} />}
       {dialog?.preview && <Preview course={course} fileId={file.id} what={dialog.preview} onClose={() => setDialog(null)} />}
     </div>
@@ -551,7 +558,7 @@ function ObjFormat({ o, course, layer, editState, setLook, editObj, write, inLay
       <div className="cv-row"><Field label="Name" wide><input value={o.name} onChange={e => set('name', e.target.value)} aria-label="Object name" /></Field></div>
       <p className="cv-kind">{KINDS[o.kind]}{editState !== 'normal' && <> · <b>{STATE_LABEL[editState] || editState} state</b></>}</p>
       {editState === 'normal' && <div className="cv-row4"><Num label="X" value={Math.round(o.x)} onChange={v => set('x', v || 0)} /><Num label="Y" value={Math.round(o.y)} onChange={v => set('y', v || 0)} /><Num label="Width" value={Math.round(o.w)} onChange={v => set('w', Math.max(10, v || 10))} /><Num label="Height" value={Math.round(o.h)} onChange={v => set('h', Math.max(10, v || 10))} /></div>}
-      {textual && <Field label="Text" wide><textarea rows={3} value={s.text != null ? s.text : o.text || ''} onChange={e => (editState === 'normal' ? set('text', e.target.value) : setLook('text', e.target.value))} aria-label="Text" /><small>Show a variable with %Name%.</small></Field>}
+      {textual && <Field label="Text" wide><textarea rows={3} value={s.text != null ? s.text : o.text || ''} onChange={e => (editState === 'normal' ? editObj(x => { x.text = e.target.value; delete x.rich; }) : editObj(x => { const st = ((x.states ||= {})[editState] ||= {}); st.text = e.target.value; delete st.rich; }))} aria-label="Text" /><small>Show a variable with %Name%.</small></Field>}
       {(textual || ['input', 'question'].includes(o.kind)) && (
         <>
           <div className="cv-row">
@@ -685,7 +692,7 @@ function States({ o, editState, setEditState, editObj }) {
 
 /* ---- Triggers ---- */
 export function describeTrigger(t, course, slide) {
-  const objName = id => slide.layers.flatMap(l => l.objects).find(o => o.id === id)?.name || '(gone)';
+  const objName = id => ({ 'player:next': 'the Next button', 'player:prev': 'the Prev button', freeform: 'the slide’s question' }[id] || slide.layers.flatMap(l => l.objects).find(o => o.id === id)?.name || '(gone)');
   const slideName = id => ({ next: 'next slide', prev: 'previous slide', first: 'first slide', last: 'last slide' }[id] || allSlides(course).find(x => x.s.id === id)?.s.title || '(gone)');
   const layerName = id => (id === 'this' ? 'this layer' : slide.layers.find(l => l.id === id)?.name || '(gone)');
   const a = t.action, act = ACTIONS.find(x => x[0] === a)?.[1] || a;
@@ -693,7 +700,8 @@ export function describeTrigger(t, course, slide) {
     : a === 'setVar' ? `Set ${t.target || '?'} ${{ set: '=', add: '+', subtract: '−', multiply: '×', divide: '÷', toggle: 'toggle' }[t.op || 'set']} ${t.op === 'toggle' ? '' : t.value ?? ''}` : a === 'media' ? `${cap(t.value || 'play')} ${objName(t.target)}`
       : a === 'timeline' ? `${cap(t.value || 'pause')} the timeline` : a === 'submit' ? `Submit ${objName(t.target)}` : a === 'url' ? `Open ${t.value || '?'}` : act;
   const ev = EVENTS.find(x => x[0] === t.event);
-  const when = ev?.[2] === 'object' ? `${ev[1].toLowerCase()} ${objName(t.source)}${t.event === 'drop' && t.value ? ' on ' + objName(t.value) : ''}${t.event === 'stateChange' && t.value ? ' ' + (STATE_LABEL[t.value] || t.value) : ''}` : ev?.[2] === 'var' ? `${t.source || '?'} changes` : t.event === 'key' ? `the learner presses ${t.value || '?'}` : (ev?.[1] || t.event).toLowerCase();
+  const on = t.on !== undefined ? t.on : t.value;
+  const when = ev?.[2] === 'object' ? `${ev[1].toLowerCase()} ${objName(t.source)}${t.event === 'drop' && on ? ' on ' + objName(on) : ''}${t.event === 'stateChange' && on ? ' ' + (STATE_LABEL[on] || on) : ''}` : ev?.[2] === 'var' ? `${t.source || '?'} changes` : t.event === 'key' ? `the learner presses ${on || '?'}` : (ev?.[1] || t.event).toLowerCase();
   return { what, when: 'When ' + when, ifs: (t.conds || []).length };
 }
 function Triggers({ course, slide, layer, write, inLayer, open, setOpen }) {
@@ -724,9 +732,9 @@ function TriggerForm({ t, course, slide, layer, edit, onMove, onDelete }) {
   const kind = ACTIONS.find(a => a[0] === t.action)?.[2];
   const evKind = EVENTS.find(e => e[0] === t.event)?.[2];
   const objOpts = (list = objs) => list.map(o => <option key={o.id} value={o.id}>{o.name}</option>);
-  const stateOpts = id => { const o = objs.find(x => x.id === id); return [...new Set(['normal', 'hidden', 'disabled', ...STATES.filter(s => o?.states?.[s]), ...Object.keys(o?.states || {})])].map(s => <option key={s} value={s}>{STATE_LABEL[s] || s}</option>); };
+  const stateOpts = id => { if (String(id).startsWith('player:')) return ['normal', 'disabled', 'hidden'].map(st => <option key={st} value={st}>{STATE_LABEL[st]}</option>); const o = objs.find(x => x.id === id); return [...new Set(['normal', 'hidden', 'disabled', ...STATES.filter(s => o?.states?.[s]), ...Object.keys(o?.states || {})])].map(s => <option key={s} value={s}>{STATE_LABEL[s] || s}</option>); };
   const setAction = a => edit(x => { x.action = a; const kd = ACTIONS.find(y => y[0] === a)?.[2]; x.target = kd === 'slide' ? 'next' : kd === 'layer' ? (slide.layers[1]?.id || 'this') : kd === 'object' ? (objs.find(o => (a === 'media' ? ['video', 'audio'].includes(o.kind) : a === 'submit' ? o.kind === 'question' : true))?.id || '') : kd === 'var' ? (varNames[0] || '') : ''; x.value = a === 'state' ? 'normal' : a === 'media' ? 'play' : a === 'timeline' ? 'pause' : ''; x.op = 'set'; });
-  const setEvent = ev => edit(x => { x.event = ev; const kd = EVENTS.find(y => y[0] === ev)?.[2]; x.source = kd === 'object' ? (objs[0]?.id || '') : kd === 'var' ? (varNames[0] || '') : ''; x.value = ev === 'key' ? 'Enter' : ''; });
+  const setEvent = ev => edit(x => { x.event = ev; const kd = EVENTS.find(y => y[0] === ev)?.[2]; x.source = kd === 'object' ? (objs[0]?.id || '') : kd === 'var' ? (varNames[0] || '') : ''; x.on = ev === 'key' ? 'Enter' : ''; });
   const def = course.vars.find(v => v.name === t.target);
   const condLeft = [...varNames, ...BUILTIN_VARS];
   return (
@@ -734,7 +742,9 @@ function TriggerForm({ t, course, slide, layer, edit, onMove, onDelete }) {
       <Field label="Action" wide><select value={t.action} onChange={e => setAction(e.target.value)} aria-label="Action">{ACTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
       {kind === 'slide' && <Field label="Slide" wide><select value={t.target} onChange={e => edit(x => { x.target = e.target.value; })} aria-label="Slide"><option value="next">Next slide</option><option value="prev">Previous slide</option><option value="first">First slide</option><option value="last">Last slide</option>{course.scenes.map(sc => <optgroup key={sc.id} label={sc.name}>{sc.slides.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}</optgroup>)}</select></Field>}
       {kind === 'layer' && <Field label="Layer" wide><select value={t.target} onChange={e => edit(x => { x.target = e.target.value; })} aria-label="Layer"><option value="this">This layer</option>{slide.layers.slice(1).map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select>{slide.layers.length < 2 && <small>Add a layer below the slide first.</small>}</Field>}
-      {kind === 'object' && <Field label="Object" wide><select value={t.target} onChange={e => edit(x => { x.target = e.target.value; })} aria-label="Target object"><option value="">(pick one)</option>{objOpts(t.action === 'media' ? objs.filter(o => ['video', 'audio'].includes(o.kind)) : t.action === 'submit' ? objs.filter(o => o.kind === 'question') : objs)}</select></Field>}
+      {kind === 'object' && <Field label="Object" wide><select value={t.target} onChange={e => edit(x => { x.target = e.target.value; })} aria-label="Target object"><option value="">(pick one)</option>{objOpts(t.action === 'media' ? objs.filter(o => ['video', 'audio'].includes(o.kind)) : t.action === 'submit' ? objs.filter(o => o.kind === 'question') : objs)}
+        {t.action === 'state' && <optgroup label="Player"><option value="player:next">Next button</option><option value="player:prev">Prev button</option></optgroup>}
+        {t.action === 'submit' && slide.freeform && <option value="freeform">The slide’s question</option>}</select></Field>}
       {t.action === 'state' && <Field label="To the state" wide><select value={t.value || 'normal'} onChange={e => edit(x => { x.value = e.target.value; })} aria-label="To the state">{stateOpts(t.target)}</select></Field>}
       {kind === 'var' && <>
         <Field label="Variable" wide><select value={t.target} onChange={e => edit(x => { x.target = e.target.value; })} aria-label="Variable"><option value="">(pick one)</option>{varNames.map(v => <option key={v}>{v}</option>)}</select>{!varNames.length && <small>Make one in Variables first.</small>}</Field>
@@ -748,10 +758,10 @@ function TriggerForm({ t, course, slide, layer, edit, onMove, onDelete }) {
       {t.action === 'url' && <Field label="Web address" wide><input value={t.value || ''} onChange={e => edit(x => { x.value = e.target.value; })} aria-label="Web address" placeholder="https://…" /></Field>}
       <Field label="When" wide><select value={t.event} onChange={e => setEvent(e.target.value)} aria-label="When">{EVENTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
       {evKind === 'object' && <Field label="Object" wide><select value={t.source} onChange={e => edit(x => { x.source = e.target.value; })} aria-label="Source object"><option value="">(pick one)</option>{objOpts(t.event === 'mediaEnd' ? objs.filter(o => ['video', 'audio'].includes(o.kind)) : ['correct', 'incorrect'].includes(t.event) ? objs.filter(o => o.kind === 'question') : objs)}</select></Field>}
-      {t.event === 'drop' && <Field label="Dropped on" wide><select value={t.value || ''} onChange={e => edit(x => { x.value = e.target.value; })} aria-label="Dropped on"><option value="">(anything)</option>{objOpts(objs.filter(o => o.id !== t.source))}</select></Field>}
-      {t.event === 'stateChange' && <Field label="State" wide><select value={t.value || ''} onChange={e => edit(x => { x.value = e.target.value; })} aria-label="Becomes the state"><option value="">(any)</option>{stateOpts(t.source)}</select></Field>}
+      {t.event === 'drop' && <Field label="Dropped on" wide><select value={(t.on ?? t.value) || ''} onChange={e => edit(x => { x.on = e.target.value; })} aria-label="Dropped on"><option value="">(anything)</option>{objOpts(objs.filter(o => o.id !== t.source))}</select></Field>}
+      {t.event === 'stateChange' && <Field label="State" wide><select value={(t.on ?? t.value) || ''} onChange={e => edit(x => { x.on = e.target.value; })} aria-label="Becomes the state"><option value="">(any)</option>{stateOpts(t.source)}</select></Field>}
       {evKind === 'var' && <Field label="Variable" wide><select value={t.source} onChange={e => edit(x => { x.source = e.target.value; })} aria-label="Watched variable"><option value="">(pick one)</option>{varNames.map(v => <option key={v}>{v}</option>)}</select></Field>}
-      {t.event === 'key' && <Field label="Key" wide><input value={t.value || ''} onChange={e => edit(x => { x.value = e.target.value; })} aria-label="Key" placeholder="Enter, a, ArrowRight…" /></Field>}
+      {t.event === 'key' && <Field label="Key" wide><input value={(t.on ?? t.value) || ''} onChange={e => edit(x => { x.on = e.target.value; })} aria-label="Key" placeholder="Enter, a, ArrowRight…" /></Field>}
       <div className="cv-conds">
         <span>Only if</span>
         {(t.conds || []).map((c, i) => (
@@ -802,6 +812,7 @@ function Timeline({ slide, layer, sel, setSel, write, inLayer, inSlide }) {
             <p className="cv-kind">“{o.name}”</p>
             <div className="cv-row"><Num label="Appears at (s)" value={o.start || 0} step={0.25} min={0} onChange={v => set(o.id, 'start', Math.max(0, v || 0))} /><Num label="Shown for (s, blank: to the end)" value={o.dur ?? ''} step={0.25} min={0} onChange={v => set(o.id, 'dur', v || null)} /></div>
             <Field label="Comes in with" wide><select value={o.anim || 'none'} onChange={e => set(o.id, 'anim', e.target.value)} aria-label="Entrance animation">{ANIMS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
+            <Field label="Goes out with" wide><select value={o.out || 'none'} onChange={e => set(o.id, 'out', e.target.value === 'none' ? undefined : e.target.value)} aria-label="Exit animation"><option value="none">Nothing (just goes)</option><option value="fade">Fade out</option></select></Field>
           </div>
         );
       })()}

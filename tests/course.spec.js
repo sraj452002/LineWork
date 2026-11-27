@@ -244,64 +244,125 @@ test('Storyline .story files and published courses import as courses', async ({ 
 });
 
 // A Storyline 360 package as Storyline writes it (OPC parts: story/story.xml, story/slides/*.xml with _rels):
-// shapes keep their place, fill, text and font; pictures are found from the media list; layers, object
-// states (drawn by the state's own shapes), timing and triggers come over and work in the player.
-test('a Storyline 360 package imports with positions, pictures, layers, states, timing and triggers', async ({ page }) => {
+// shapes keep their place, fill, outline and rich text; pictures are found from the media list; layers (quiz feedback
+// layers too), object states drawn by their own shapes, timing and triggers come over and work in the player — the
+// player's Next button included; a quiz question drawn on the slide is scored; and every trigger is accounted for.
+test('a Storyline 360 package imports faithfully, and every trigger is accounted for', async ({ page }) => {
   test.setTimeout(60_000);
   const z = new JSZip();
-  const rich = (text, size = 24, color = '#FFFFFF', bold = 'True') => `&lt;Document&gt;&lt;Content&gt;&lt;Block&gt;&lt;Style Justification="Center" /&gt;&lt;Span Text="${text}"&gt;&lt;Style FontFamily="Arial" FontSize="${size}" FontIsBold="${bold}" ForegroundColor="${color}" /&gt;&lt;/Span&gt;&lt;/Block&gt;&lt;/Content&gt;&lt;/Document&gt;`;
-  const fill = rgb => `<bG><solidFill><clr><srgbClr val="${rgb}" /></clr></solidFill></bG>`;
+  const span = (text, size, color, bold = 'False', font = 'Aptos') => `&lt;Span Text="${text}"&gt;&lt;Style FontFamily="${font}" FontSize="${size}" FontIsBold="${bold}" ForegroundColor="${color}" /&gt;&lt;/Span&gt;`;
+  const doc = (...blocks) => `&lt;Document&gt;&lt;Content&gt;${blocks.map(b => `&lt;Block&gt;&lt;Style Justification="Left" /&gt;${b}&lt;/Block&gt;`).join('')}&lt;/Content&gt;&lt;/Document&gt;`;
+  const fill = (rgb, line = '') => `<bG><solidFill><clr><srgbClr val="${rgb}" /></clr></solidFill>${line}</bG>`;
   const tm = (start, dur, until = 'true') => `<tmCtxLst version="3"><txtTmCtx start="${start}" dur="${dur}" untilEnd="${until}" /></tmCtxLst>`;
+  const trig = (event, action, inner, extra = '') => `<trig type="user"${extra}><data enabled="true" event="${event}" action="${action}" ${inner}</data><condLst /></trig>`;
+  const choice = (g, label, z0, y) => `<roundRect g="${g}" name="${label}" zOrder="${z0}" initState="Normal">${tm(0, 0)}<trigLst />
+      <stateLst><state name="Normal"><bg><noFill /></bg><shapeLst><roundRect name="bar">${fill('0057B8')}<loc l="0" t="0" r="500" b="50" /></roundRect><rect name="t"><loc l="20" t="0" r="480" b="50" /><text>${doc(span(label, 15, 'lt1,00'))}</text><plain>${label}</plain></rect></shapeLst></state>
+        <state name="Selected"><bg /><shapeLst><roundRect name="bar2">${fill('00B9E8')}<loc l="0" t="0" r="500" b="50" /></roundRect><rect name="t2"><loc l="20" t="0" r="480" b="50" /><text>${doc(span(label, 15, 'lt1,00'))}</text><plain>${label}</plain></rect></shapeLst></state></stateLst>
+      <loc l="100" t="${y}" r="600" b="${y + 50}" /></roundRect>`;
   z.file('[Content_Types].xml', '<Types/>');
   z.file('story/story.xml', `<story><varLst><var g="v1" name="Player.Volume" dataType="num" val="1" type="builtIn" /><var g="v2" name="Clicks" dataType="num" val="0" type="user" /></varLst>
     <mediaLst><media g="m1" type="Png" bytes="${PNG.length}"><md5Checksum><stream>x</stream><source>y</source></md5Checksum></media></mediaLst>
-    <sceneLst><scene g="sc1" name="Main scene"><sldIdLst><sldId>R1</sldId></sldIdLst></scene></sceneLst><props><sz w="1366" h="768" /></props></story>`);
-  z.file('story/_rels/story.xml.rels', '<Relationships><Relationship Type="media" Target="/story/media/Rpic.png" Id="Rm" /><Relationship Type="slide" Target="/story/slides/slide.xml" Id="R1" /></Relationships>');
+    <sceneLst><scene g="sc1" name="Main scene"><sldIdLst><sldId>R1</sldId><sldId>R2</sldId><sldId>R3</sldId></sldIdLst></scene></sceneLst><props><sz w="1366" h="768" /></props></story>`);
+  z.file('story/_rels/story.xml.rels', '<Relationships><Relationship Type="slide" Target="/story/slides/slide.xml" Id="R1" /><Relationship Type="slide" Target="/story/slides/slide2.xml" Id="R2" /><Relationship Type="slide" Target="/story/slides/slide3.xml" Id="R3" /></Relationships>');
   z.file('story/media/Rpic.png', PNG);
-  z.file('story/slides/_rels/slide.xml.rels', '<Relationships><Relationship Type="media" Target="/story/media/Rpic.png" Id="Rx" /></Relationships>');
+  // Slide 1: a header with rich text (two looks), a tab drawn by its states that shows a layer, a picture, a blocker
+  // for 1 s, notes; a disabled trigger and one on a variable that isn't in the file (both do nothing in Storyline).
   z.file('story/slides/slide.xml', `<sld g="s1" name="Pick a tab"><bg><solidFill><clr><srgbClr val="F4F6FA" /></clr></solidFill></bg><shapeLst>
-    <rect g="o1" name="Header" zOrder="0" initState="">${tm(0, 0)}<trigLst />${fill('00388F')}<loc l="0" t="0" r="1366" b="80" /><text>${rich('Pick a tab')}</text><plain>Pick a tab</plain></rect>
+    <rect g="o1" name="Header" zOrder="0" vertAlign="ctr">${tm(0, 0)}<trigLst />${fill('00388F')}<loc l="0" t="0" r="1366" b="80" /><textMargin l="10" t="0" r="10" b="0" /><text>${doc(span('Module 1: ', 24, '#FFD200', 'True', 'Aptos ExtraBold') + span('Safety', 24, 'lt1,00'))}</text><plain>Module 1: Safety</plain></rect>
     <rect g="o2" name="Tab A" zOrder="1" initState="Normal">${tm(500, 0)}<trigLst>
-        <trig g="t1" type="user"><data enabled="true" event="OnClick" action="showSubSlide" actSubType="spec"><shape setStateName="" /><sldLayer showG="L1" /><other op="ass" /></data><condLst /></trig>
-        <trig g="t2" type="user"><data enabled="true" event="OnClick" action="adjustVar" actSubType="spec"><shape setStateName="" /><sldLayer /><other varG="v2" op="add" dblVal="1" /></data><condLst /></trig>
+        ${trig('OnClick', 'showSubSlide', 'actSubType="spec"><shape setStateName="" /><sldLayer showG="L1" /><other op="ass" />')}
+        ${trig('OnClick', 'adjustVar', 'actSubType="spec"><shape setStateName="" /><sldLayer /><other varG="v2" op="add" dblVal="1" />')}
+        ${trig('OnClick', 'adjustVar', 'actSubType="spec"><shape setStateName="" /><sldLayer /><other varG="v2" op="add" dblVal="5" />').replace('enabled="true"', 'enabled="false"')}
+        ${trig('OnVariableValueChange', 'PauseTimeline', 'actSubType="me"><shape setStateName="" /><sldLayer /><other varChangeG="gone-var" />')}
       </trigLst>
-      <stateLst><state name="Normal"><bg><noFill /></bg><shapeLst><rect name="bgA">${fill('0057B8')}<loc l="0" t="0" r="300" b="60" /></rect><rect name="labelA"><loc l="10" t="0" r="290" b="60" /><text>${rich('Tab A', 18)}</text><plain>Tab A</plain></rect></shapeLst></state>
-        <state name="Selected"><bg /><shapeLst><rect name="bgA2">${fill('00B9E8')}<loc l="0" t="0" r="300" b="60" /></rect><rect name="labelA2"><loc l="10" t="0" r="290" b="60" /><text>${rich('Tab A', 18)}</text><plain>Tab A</plain></rect></shapeLst></state></stateLst>
+      <stateLst><state name="Normal"><bg><noFill /></bg><shapeLst><rect name="bgA">${fill('0057B8')}<loc l="0" t="0" r="300" b="60" /></rect><rect name="labelA"><loc l="10" t="0" r="290" b="60" /><text>${doc(span('Tab A', 18, 'lt1,00'))}</text><plain>Tab A</plain></rect></shapeLst><trigLst>${trig('OnClick', 'showSubSlide', 'actSubType="spec"><shape setStateName="" /><sldLayer showG="L1" /><other op="ass" />')}</trigLst></state>
+        <state name="Selected"><bg /><shapeLst><rect name="bgA2">${fill('00B9E8')}<loc l="0" t="0" r="300" b="60" /></rect><rect name="labelA2"><loc l="10" t="0" r="290" b="60" /><text>${doc(span('Tab A', 18, 'lt1,00'))}</text><plain>Tab A</plain></rect></shapeLst></state></stateLst>
       ${fill('D8DCE1')}<loc l="100" t="150" r="520" b="234" /></rect>
     <pic g="o3" name="Photo" zOrder="2" assetG="m1">${tm(0, 0)}<trigLst /><loc l="900" t="150" r="1100" b="350" /></pic>
     <clkAreaRect g="o4" name="Blocker" zOrder="3" initState="">${tm(0, 1000, 'false')}<trigLst /><loc l="0" t="100" r="1366" b="400" /></clkAreaRect>
+  </shapeLst><trigLst>${trig('OnNextButtonClick', 'jumpToSlide', 'actSubType="next" NavigationIntent="Next"><shape setStateName="" /><sldLayer /><other op="ass" />')}</trigLst>
+  <note>${doc(span('Say hello to the learners', 12, '#000000'))}</note>
+  <sldLayerLst>
+    <sldLayer g="L1" name="Details"><shapeLst><rect g="o5" name="Panel" zOrder="0">${tm(0, 0)}<trigLst>${trig('OnClick', 'hideSubSlide', 'actSubType="me"><shape setStateName="" /><sldLayer hideG="L1" /><other op="ass" />')}</trigLst>${fill('FFFFFF', '<solidLine><clr><srgbClr val="00388F" /></clr></solidLine><lineStyle w="1.5" />')}<loc l="100" t="300" r="800" b="600" /><text>${doc(span('Details of tab A', 20, '#1F2433'))}</text><plain>Details of tab A</plain></rect></shapeLst>
+      <trigLst>${trig('OnStart', 'changeShapeState', 'actSubType="spec"><shape setStateG="o2" setStateName="Selected" /><sldLayer /><other op="ass" />')}</trigLst></sldLayer>
+  </sldLayerLst></sld>`);
+  // Slide 2: Next is disabled until the timeline ends (Storyline: "change the state of Next").
+  z.file('story/slides/slide2.xml', `<sld g="s2" name="Wait for it"><shapeLst><rect g="w1" name="Msg" zOrder="0">${tm(0, 0)}<trigLst /><loc l="100" t="100" r="900" b="200" /><text>${doc(span('Watch this', 20, '#000000'))}</text><plain>Watch this</plain></rect></shapeLst>
+    <trigLst>${trig('OnStart', 'changeShapeState', 'actSubType="next"><shape setStateName="Disabled" /><sldLayer /><other op="ass" />')}${trig('OnEnd', 'changeShapeState', 'actSubType="next"><shape setStateName="Normal" /><sldLayer /><other op="ass" />')}</trigLst>
+    <tmProps min="1000" /></sld>`);
+  // Slide 3: a pick-one question drawn on the slide; Submit turns on when any choice is selected; feedback layers.
+  z.file('story/slides/slide3.xml', `<sld g="s3" name="Quiz"><shapeLst>
+    ${choice('c1', 'Right answer', 0, 150)}${choice('c2', 'Wrong answer', 1, 220)}
+    <roundRect g="sub" name="Submit" zOrder="2" initState="Disabled">${tm(0, 0)}<trigLst>
+        <trig type="user"><data enabled="true" event="OnStateChange" action="changeShapeState" actSubType="next"><shape setStateG="sub" setStateName="Normal" stateInclude="any" statesNot="are" stateName="Selected"><stateLst><g>c1</g><g>c2</g></stateLst></shape><sldLayer /><other op="ass" /></data><condLst /></trig>
+        ${trig('OnClick', 'submitInteraction', 'actSubType="next"><shape setStateName="" /><sldLayer /><other op="ass" />')}
+      </trigLst><stateLst><state name="Disabled"><bg /></state></stateLst>${fill('0D2B4F')}<loc l="100" t="320" r="300" b="370" /><text>${doc(span('Submit', 15, '#FFFFFF'))}</text><plain>Submit</plain></roundRect>
+    <freePickOneIntr g="q1" zOrder="3"><loc l="0" t="0" r="1366" b="768" /><intrProps corPts="10" corFbG="F1" incFbG="F2" tryFbG="F3" attempts="two" /><choices>
+      <intrFreeChoice shpG="c1"><scoringData correct="true" /></intrFreeChoice><intrFreeChoice shpG="c2"><scoringData correct="false" /></intrFreeChoice></choices></freePickOneIntr>
   </shapeLst><trigLst /><sldLayerLst>
-    <sldLayer g="L1" name="Details"><shapeLst><rect g="o5" name="Panel" zOrder="0">${tm(0, 0)}<trigLst><trig g="t3" type="user"><data enabled="true" event="OnClick" action="hideSubSlide" actSubType="me"><shape setStateName="" /><sldLayer hideG="L1" /><other op="ass" /></data><condLst /></trig></trigLst>${fill('FFFFFF')}<loc l="100" t="300" r="800" b="600" /><text>${rich('Details of tab A', 20, '#1F2433', 'False')}</text><plain>Details of tab A</plain></rect></shapeLst>
-      <trigLst><trig g="t4" type="user"><data enabled="true" event="OnStart" action="changeShapeState" actSubType="spec"><shape setStateG="o2" setStateName="Selected" /><sldLayer /><other op="ass" /></data><condLst /></trig></trigLst></sldLayer>
+    <feedBackLayer g="F1" name=""><shapeLst><rect g="f1" name="ok" zOrder="0">${tm(0, 0)}<trigLst />${fill('E6F6EF')}<loc l="700" t="150" r="1200" b="300" /><text>${doc(span('Correct!', 24, '#0F6B52'))}</text><plain>Correct!</plain></rect></shapeLst><trigLst /></feedBackLayer>
+    <feedBackLayer g="F2" name=""><shapeLst><rect g="f2" name="no" zOrder="0">${tm(0, 0)}<trigLst />${fill('FDECEC')}<loc l="700" t="150" r="1200" b="300" /><text>${doc(span('Incorrect', 24, '#A8322A'))}</text><plain>Incorrect</plain></rect></shapeLst><trigLst /></feedBackLayer>
+    <feedBackLayer g="F3" name="Try Again"><shapeLst><rect g="f3" name="again" zOrder="0">${tm(0, 0)}<trigLst>${trig('OnClick', 'hideSubSlide', 'actSubType="me"><shape setStateName="" /><sldLayer hideG="F3" /><other op="ass" />')}</trigLst>${fill('FFF4E5')}<loc l="700" t="150" r="1200" b="300" /><text>${doc(span('Try again', 24, '#8A4A12'))}</text><plain>Try again</plain></rect></shapeLst><trigLst /></feedBackLayer>
   </sldLayerLst></sld>`);
   const buf = await z.generateAsync({ type: 'nodebuffer' });
 
   await page.getByRole('navigation', { name: 'Files' }).getByRole('button', { name: /^Course Studio/ }).click();
   await page.locator('.cs-new', { hasText: 'Import a course' }).click();
-  await page.getByLabel('Course to import').setInputFiles({ name: 'Tabs.story', mimeType: 'application/octet-stream', buffer: buf });
+  await page.getByLabel('Course to import').setInputFiles({ name: 'Course.story', mimeType: 'application/octet-stream', buffer: buf });
   await expect(page.getByRole('toolbar', { name: 'Course tools' })).toBeVisible();
-  await expect(page.locator('.sl-import')).toContainText('1 slide, 1 layer, 5 objects');
-  await expect(page.locator('.sl-import')).toContainText('1 picture and 4 triggers');
+  const note = page.locator('.sl-import');
+  await expect(note).toContainText('3 slides, 4 layers');
+  await expect(note).toContainText('1 quiz question and the notes of 1 slide');
+  await expect(note).toContainText('2 triggers that do nothing in Storyline either');
+  await expect(note).toContainText('All 13 triggers in the file are accounted for.');
+  await note.getByRole('button', { name: 'Details' }).click();
+  await expect(page.getByRole('dialog', { name: 'What didn’t come over' })).toContainText('turned off in Storyline');
+  await expect(page.getByRole('dialog', { name: 'What didn’t come over' })).toContainText('points at something not in the file');
+  await page.getByRole('button', { name: 'Done' }).click();
   await expect(page.locator('.sl-status')).toContainText('1366 × 768');
+
+  // Slide 1 in the editor: rich text, a tab drawn by its Normal state, the picture, the notes.
   await page.getByRole('button', { name: /^Slide 1\.1: Pick a tab/ }).dblclick();
+  await expect(page.locator('.cv-stage .cv-o[data-name="Header"] span').first()).toHaveCSS('color', 'rgb(255, 210, 0)');
+  await expect(page.locator('.cv-stage .cv-o[data-name="Header"] span').first()).toHaveCSS('font-weight', '700');
+  await expect(page.locator('.cv-stage .cv-o[data-name="Header"] span').nth(1)).toHaveCSS('color', 'rgb(255, 255, 255)');
   const tab = page.locator('.cv-stage .cv-o[data-name="Tab A"]');
   await expect(tab).toHaveCSS('left', '100px');
-  await expect(tab).toHaveCSS('background-color', 'rgb(0, 87, 184)'); // drawn by its Normal state
+  await expect(tab.locator('.cv-part').first()).toHaveCSS('background-color', 'rgb(0, 87, 184)');
   await expect(tab).toContainText('Tab A');
   await expect(page.locator('.cv-stage .cv-o[data-name="Photo"] img')).toHaveAttribute('src', /^data:image\//);
-  await expect(page.getByRole('region', { name: 'Triggers' }).locator('.cv-trig-h')).toHaveText(['Show layer DetailsWhen user clicks Tab A', 'Set Clicks + 1When user clicks Tab A']);
+  await page.locator('.sl-bottom').getByRole('tab', { name: 'Notes' }).click();
+  await expect(page.getByLabel('Slide notes')).toHaveValue('Say hello to the learners');
 
-  // In the player: the blocker goes after 1 s, the tab shows its layer and turns Selected; the panel hides it.
+  // The whole course in the player.
   await page.getByRole('button', { name: 'Preview', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'This slide' }).click();
+  await page.getByRole('menuitem', { name: 'Entire project' }).click();
   const p = page.frameLocator('iframe[title="Course preview"]');
-  await expect(p.getByText('Details of tab A')).toHaveCount(0);
-  await page.waitForTimeout(1300);
+  await page.waitForTimeout(1300); // the blocker goes after 1 s
   await p.locator('.cp-o', { hasText: /^Tab A$/ }).click();
   await expect(p.getByText('Details of tab A')).toBeVisible();
-  await expect(p.locator('.cp-o', { hasText: /^Tab A$/ })).toHaveCSS('background-color', 'rgb(0, 185, 232)');
-  await p.getByText('Details of tab A').click();
+  await expect(p.locator('.cp-o', { hasText: /^Tab A$/ }).locator('.cp-part').first()).toHaveCSS('background-color', 'rgb(0, 185, 232)'); // Selected
+  await expect(p.locator('.cp-o', { hasText: 'Details of tab A' })).toHaveCSS('border-top-color', 'rgb(0, 56, 143)');
+  await p.locator('.cp-o', { hasText: 'Details of tab A' }).click();
   await expect(p.getByText('Details of tab A')).toHaveCount(0);
+  // Slide 2: Next is off until its timeline (1 s) ends.
+  await p.getByRole('button', { name: 'Next ›' }).click();
+  await expect(p.getByText('Watch this')).toBeVisible();
+  await expect(p.getByRole('button', { name: 'Next ›' })).toBeDisabled();
+  await expect(p.getByRole('button', { name: 'Next ›' })).toBeEnabled({ timeout: 4000 });
+  await p.getByRole('button', { name: 'Next ›' }).click();
+  // Slide 3: the question. Submit turns on when a choice is picked; wrong → Try again; right → Correct.
+  const submit = p.locator('.cp-o', { hasText: /^Submit$/ });
+  await expect(submit).toHaveClass(/cp-disabled/);
+  await p.locator('.cp-o', { hasText: /^Wrong answer$/ }).click();
+  await expect(submit).not.toHaveClass(/cp-disabled/);
+  await submit.click();
+  await expect(p.getByText('Try again')).toBeVisible();
+  await p.locator('.cp-o', { hasText: /^Try again$/ }).click();
+  await p.locator('.cp-o', { hasText: /^Right answer$/ }).click();
+  await expect(p.locator('.cp-o', { hasText: /^Wrong answer$/ }).locator('.cp-part').first()).toHaveCSS('background-color', 'rgb(0, 87, 184)'); // pick one: the other is cleared
+  await submit.click();
+  await expect(p.getByText('Correct!')).toBeVisible();
 });
 
 // The ribbon folds to its tabs and each panel hides; the editor remembers both.

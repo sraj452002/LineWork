@@ -24,6 +24,7 @@ export const EVENTS = [
   ['click', 'User clicks', 'object'], ['hover', 'Mouse goes over', 'object'], ['leave', 'Mouse leaves', 'object'], ['drop', 'Object is dropped on', 'object'],
   ['timelineStart', 'Timeline starts', 'none'], ['timelineEnd', 'Timeline ends', 'none'], ['varChange', 'Variable changes', 'var'], ['stateChange', 'State becomes', 'object'],
   ['mediaEnd', 'Media ends', 'object'], ['correct', 'Answered right', 'object'], ['incorrect', 'Answered wrong', 'object'], ['key', 'User presses a key', 'none'],
+  ['nextButton', 'Learner clicks Next', 'none'], ['prevButton', 'Learner clicks Prev', 'none'],
 ];
 export const ACTIONS = [
   ['jump', 'Jump to slide', 'slide'], ['showLayer', 'Show layer', 'layer'], ['hideLayer', 'Hide layer', 'layer'], ['state', 'Change state of', 'object'],
@@ -181,8 +182,9 @@ export function player(C, env) {
   const h = (tag, cls, txt) => { const e = doc.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
   const allQuestions = () => flat.flatMap(x => x.s.layers.flatMap(l => l.objects.filter(o => o.kind === 'question')));
   const builtins = () => {
-    const qs = allQuestions(), max = qs.reduce((n, o) => n + (Number(o.q.points) || 0), 0);
-    const score = qs.reduce((n, o) => n + (results[o.id]?.correct ? Number(o.q.points) || 0 : 0), 0);
+    const qs = allQuestions(), ff = flat.filter(x => x.s.freeform);
+    const max = qs.reduce((n, o) => n + (Number(o.q.points) || 0), 0) + ff.reduce((n, x) => n + (Number(x.s.freeform.points) || 0), 0);
+    const score = qs.reduce((n, o) => n + (results[o.id]?.correct ? Number(o.q.points) || 0 : 0), 0) + ff.reduce((n, x) => n + (results['ff:' + x.s.id]?.correct ? Number(x.s.freeform.points) || 0 : 0), 0);
     const pct = max ? Math.round((score / max) * 100) : 0;
     return { 'Quiz.Score': score, 'Quiz.MaxScore': max, 'Quiz.Percent': pct, 'Quiz.Passed': max > 0 && pct >= (Number(C.quiz?.pass) || 0), 'Slide.Number': cur + 1, 'Slide.Count': flat.length, 'Slide.Title': flat[cur]?.s.title || '', 'Course.Progress': Math.round((visited.size / flat.length) * 100) };
   };
@@ -199,6 +201,8 @@ export function player(C, env) {
   const body = h('div', 'cp-body'); const menu = h('nav', 'cp-menu'); menu.setAttribute('aria-label', 'Course menu');
   const wrap = h('main', 'cp-wrap'); const stage = h('div', 'cp-stage'); stage.style.width = W + 'px'; stage.style.height = H + 'px'; stage.setAttribute('role', 'region'); stage.setAttribute('aria-label', 'Slide');
   wrap.appendChild(stage); body.append(menu, wrap);
+  // Objects can reach past the slide's edge (Storyline cuts them off there): the stage never scrolls to show them.
+  stage.addEventListener('scroll', () => { stage.scrollLeft = 0; stage.scrollTop = 0; });
   const bar = h('footer', 'cp-bar');
   const play = h('button', 'cp-ib', '❚❚'); play.setAttribute('aria-label', 'Pause');
   const seek = h('div', 'cp-seek'); const seekIn = h('i'); seek.appendChild(seekIn); seek.setAttribute('role', 'progressbar');
@@ -243,8 +247,71 @@ export function player(C, env) {
     st.display = stateOf(o) === 'hidden' ? 'none' : '';
     el.classList.toggle('cp-disabled', stateOf(o) === 'disabled');
     if (o.kind === 'image') { const img = el.firstChild; if (img) { const src = s.src || o.src || ''; img.src = src.startsWith('asset:') ? (C.assets || {})[src.slice(6)] || '' : src; img.style.objectFit = s.fit || 'cover'; } }
+    if (s.font) st.fontFamily = s.font;
+    if (s.weight) st.fontWeight = String(s.weight);
+    // An object drawn by parts (imported from Storyline states): each part placed in the object's box.
+    let partsBox = el.querySelector(':scope > .cp-parts');
+    if (!s.parts && o.parts && !(st.display === 'none')) s.parts = o.parts; // the Normal look's parts
+    if (s.parts) {
+      if (!partsBox) { partsBox = h('div', 'cp-parts'); el.appendChild(partsBox); }
+      if (el._parts !== s.parts) { el._parts = s.parts; drawParts(partsBox, s.parts); }
+    } else if (partsBox) { partsBox.remove(); el._parts = null; }
     const label = el.querySelector(':scope > .cp-t');
-    if (label) label.textContent = fill(s.text != null ? s.text : o.text);
+    if (label) label.style.display = s.parts ? 'none' : '';
+    if (label && !s.parts) {
+      if (Array.isArray(s.pad)) label.style.padding = s.pad.map(v => v + 'px').join(' ');
+      const rich = s.rich !== undefined ? s.rich : s.text != null ? null : o.rich;
+      // Redrawn only when it changes (hover and press repaint often; a redrawn span would swallow the click).
+      const sig = rich ? 'R' + JSON.stringify(rich.map(b => b.spans.map(r => fill(r.t)))) : 'T' + fill(s.text != null ? s.text : o.text);
+      if (label.dataset.sig !== sig || el._richRef !== rich) {
+        label.dataset.sig = sig; el._richRef = rich;
+        if (rich) drawRich(label, rich); else label.textContent = fill(s.text != null ? s.text : o.text);
+      }
+    }
+  };
+  const drawParts = (box, parts) => {
+    box.textContent = '';
+    for (const pt of parts) {
+      const d = h('div', 'cp-part'), st = d.style;
+      st.left = pt.x + 'px'; st.top = pt.y + 'px'; st.width = pt.w + 'px'; st.height = pt.h + 'px';
+      if (pt.fill) st.background = pt.fill;
+      st.borderRadius = pt.ellipse ? '50%' : (pt.radius || 0) + 'px';
+      if (pt.border) st.border = `${pt.borderW || 1}px solid ${pt.border}`;
+      if (pt.src) { const img = h('img'); img.alt = ''; img.src = String(pt.src).startsWith('asset:') ? (C.assets || {})[pt.src.slice(6)] || '' : pt.src; d.appendChild(img); }
+      if (pt.text) {
+        st.justifyContent = pt.valign === 'middle' ? 'center' : pt.valign === 'bottom' ? 'flex-end' : 'flex-start';
+        const t = h('div', 'cp-t');
+        if (Array.isArray(pt.pad)) t.style.padding = pt.pad.map(v => v + 'px').join(' ');
+        t.style.color = pt.color || ''; t.style.fontSize = pt.size ? pt.size + 'px' : ''; t.style.fontWeight = pt.bold ? '700' : ''; t.style.textAlign = pt.align || ''; if (pt.font) t.style.fontFamily = pt.font;
+        if (pt.rich) drawRich(t, pt.rich); else t.textContent = fill(pt.text);
+        d.appendChild(t);
+      }
+      box.appendChild(d);
+    }
+  };
+  // Rich text: blocks (paragraphs) of spans, each with its own look.
+  const drawRich = (box, rich) => {
+    box.textContent = '';
+    for (const b of rich) {
+      const p = h('div', 'cp-p');
+      p.style.textAlign = b.align || '';
+      if (b.before) p.style.marginTop = b.before + 'px';
+      if (b.after) p.style.marginBottom = b.after + 'px';
+      if (!b.spans.length) { p.textContent = '\u00a0'; if (b.size) p.style.fontSize = b.size + 'px'; }
+      if (b.bullet) p.appendChild(h('span', 'cp-bul', b.bullet));
+      for (const r of b.spans) {
+        const sp = h('span', '', fill(r.t));
+        const ss = sp.style;
+        if (r.size) ss.fontSize = r.size + 'px';
+        if (r.bold) ss.fontWeight = '700'; else if (r.weight) ss.fontWeight = String(r.weight);
+        if (r.italic) ss.fontStyle = 'italic';
+        if (r.under) ss.textDecoration = 'underline';
+        if (r.color) ss.color = r.color;
+        if (r.font) ss.fontFamily = r.font;
+        p.appendChild(sp);
+      }
+      box.appendChild(p);
+    }
   };
 
   /* triggers */
@@ -260,31 +327,63 @@ export function player(C, env) {
     const eq = n(A) != null && n(B) != null ? n(A) === n(B) : String(A).toLowerCase() === String(B).toLowerCase();
     return op === '!=' ? !eq : eq;
   };
-  const passes = conds => (conds || []).every(c => {
+  // Conditions, joined by AND (or OR where a condition says so), left to right.
+  const passes = conds => (conds || []).reduce((acc, c, i) => {
     const left = String(c.left || '').startsWith('state:') ? stateOf(findObj(c.left.slice(6)) || {}) : allVars()[c.left];
-    return cmp(left, c.op || '==', fill(c.right ?? ''));
-  });
+    const ok = cmp(left, c.op || '==', fill(c.right ?? ''));
+    return i === 0 ? ok : c.or ? acc || ok : acc && ok;
+  }, true);
   const fire = (event, source, value) => {
-    if (cur < 0) return;
+    if (cur < 0) return 0;
+    let ran = 0;
     for (const l of visibleLayers()) for (const t of l.triggers || []) {
       if (t.event !== event) continue;
       if (['click', 'hover', 'leave', 'drop', 'stateChange', 'mediaEnd', 'correct', 'incorrect', 'varChange'].includes(event) && t.source !== source) continue;
       if ((event === 'timelineStart' || event === 'timelineEnd') && source !== l.id) continue;
-      if (event === 'drop' && t.value && t.value !== value) continue;
-      if (event === 'stateChange' && t.value && t.value !== value) continue;
-      if (event === 'key' && String(t.value || '').toLowerCase() !== String(value).toLowerCase()) continue;
+      // What the event must be (the state it becomes, where it's dropped, the key): t.on (older courses: t.value).
+      const want = t.on !== undefined ? t.on : t.value;
+      if (event === 'drop' && want && want !== value) continue;
+      if (event === 'stateChange' && want && want !== value) continue;
+      if (event === 'key' && String(want || '').toLowerCase() !== String(value).toLowerCase()) continue;
       if (!passes(t.conds)) continue;
-      act(t, l);
-      if (t.action === 'jump' || t.action === 'restart') return;
+      act(t, l); ran++;
+      if (t.action === 'jump' || t.action === 'restart') return ran;
     }
+    return ran;
+  };
+  // The player's own buttons can change state (Storyline: "change the state of Next to Disabled").
+  const navBtn = { next, prev };
+  const navState = (which, st) => { const b = navBtn[which]; if (!b) return; b.dataset.state = st; b.disabled = st === 'disabled'; b.style.visibility = st === 'hidden' ? 'hidden' : ''; };
+  // A question drawn on the slide (from Storyline): its choices are objects learners select; Submit checks them.
+  const submitFreeform = () => {
+    const f = flat[cur].s.freeform; if (!f) return;
+    const r = results['ff:' + flat[cur].s.id] || { tries: 0 };
+    if (r.done) return;
+    const picked = f.choices.filter(id => stateOf(findObj(id) || {}) === 'selected');
+    if (!picked.length) return;
+    r.tries++; r.correct = picked.length === f.correct.length && picked.every(id => f.correct.includes(id));
+    r.done = r.correct || r.tries >= (f.attempts || 1);
+    results['ff:' + flat[cur].s.id] = r;
+    const L = f.layers || {};
+    showLayer(r.correct ? L.correct : r.done ? L.incorrect : (L.tryAgain || L.incorrect));
+    refresh(); save(); lockNext();
+    fire(r.correct ? 'correct' : 'incorrect', 'freeform');
   };
   const setVar = (name, v) => { if (vars[name] === v) return; vars[name] = v; refresh(); fire('varChange', name); save(); };
-  const setState = (o, st) => { if (!o || stateOf(o) === st) return; objState[o.id] = st; refresh(); fire('stateChange', o.id, st); };
+  const setState = (o, st) => {
+    if (!o || stateOf(o) === st) return;
+    objState[o.id] = st;
+    // Pick-one questions: selecting a choice clears the others.
+    const f = flat[cur]?.s.freeform;
+    if (st === 'selected' && f && !f.multi && f.choices.includes(o.id)) for (const id of f.choices) if (id !== o.id && objState[id] === 'selected') objState[id] = 'normal';
+    refresh(); fire('stateChange', o.id, st);
+  };
   const act = (t, l) => {
     const a = t.action;
     if (a === 'jump') { const i = t.target === 'next' ? cur + 1 : t.target === 'prev' ? cur - 1 : t.target === 'first' ? 0 : t.target === 'last' ? flat.length - 1 : byId(t.target); if (i >= 0 && i < flat.length) setTimeout(() => go(i)); }
     else if (a === 'showLayer') showLayer(t.target === 'this' ? l.id : t.target);
     else if (a === 'hideLayer') hideLayer(t.target === 'this' ? l.id : t.target);
+    else if (a === 'state' && String(t.target).startsWith('player:')) navState(t.target.slice(7), t.value || 'normal');
     else if (a === 'state') setState(findObj(t.target), t.value || 'normal');
     else if (a === 'setVar') {
       const def = (C.vars || []).find(v => v.name === t.target); if (!def) return;
@@ -296,6 +395,7 @@ export function player(C, env) {
     }
     else if (a === 'media') { const m = live[t.target]?.querySelector('video,audio'); if (m) (t.value === 'pause' ? m.pause() : t.value === 'stop' ? (m.pause(), m.currentTime = 0) : m.play().catch(() => {})); }
     else if (a === 'timeline') { t.value === 'resume' ? resume() : pause(); }
+    else if (a === 'submit' && t.target === 'freeform') submitFreeform();
     else if (a === 'submit') { const fn = live[t.target]?._submit; if (fn) fn(); }
     else if (a === 'resetQuiz') { for (const k in results) delete results[k]; refresh(); save(); }
     else if (a === 'url') { if (/^https?:\/\//i.test(t.value || '')) window.open(t.value, '_blank', 'noopener'); }
@@ -428,7 +528,7 @@ export function player(C, env) {
     for (const id in live) {
       const o = findObj(id); if (!o) continue;
       if (o.kind === 'result') buildResult(live[id], o);
-      else if (o.kind !== 'question') paint(live[id], o);
+      else if (o.kind !== 'question') { live[id]._parts = null; paint(live[id], o); }
     }
   };
   const ANIM = { fade: 'cp-a-fade', 'fly-left': 'cp-a-fl', 'fly-right': 'cp-a-fr', 'fly-up': 'cp-a-fu', 'fly-down': 'cp-a-fd', zoom: 'cp-a-zoom', spin: 'cp-a-spin', bounce: 'cp-a-bounce' };
@@ -455,8 +555,12 @@ export function player(C, env) {
       for (const o of l.objects) {
         const el = live[o.id]; if (!el) continue;
         const on = t >= (Number(o.start) || 0) && (o.dur == null || o.dur === '' || t < (Number(o.start) || 0) + Number(o.dur));
-        if (on && !e.shown[o.id]) { e.shown[o.id] = true; el.style.visibility = ''; if (ANIM[o.anim]) { el.classList.remove(ANIM[o.anim]); void el.offsetWidth; el.classList.add(ANIM[o.anim]); } if (o.kind === 'video' || o.kind === 'audio') { if (o.autoplay) el.querySelector('video,audio')?.play().catch(() => {}); } }
-        else if (!on && e.shown[o.id] && t > (Number(o.start) || 0)) { el.style.visibility = 'hidden'; }
+        if (on && !e.shown[o.id]) { e.shown[o.id] = true; el.style.visibility = ''; el.classList.remove('cp-x-fade'); if (ANIM[o.anim]) { el.style.animationDuration = o.animDur ? o.animDur + 's' : ''; el.classList.remove(ANIM[o.anim]); void el.offsetWidth; el.classList.add(ANIM[o.anim]); } if (o.kind === 'video' || o.kind === 'audio') { if (o.autoplay) el.querySelector('video,audio')?.play().catch(() => {}); } }
+        else if (!on && e.shown[o.id] && t > (Number(o.start) || 0) && el.style.visibility !== 'hidden' && !el._leaving) {
+          // Its exit (a fade out), then hidden.
+          if (o.out === 'fade') { const d = Number(o.outDur) || 0.5; el._leaving = true; if (ANIM[o.anim]) el.classList.remove(ANIM[o.anim]); el.style.animationDuration = d + 's'; el.classList.add('cp-x-fade'); setTimeout(() => { el._leaving = false; el.style.visibility = 'hidden'; }, d * 1000); }
+          else el.style.visibility = 'hidden';
+        }
       }
       const dur = l === s.layers[0] ? Number(s.duration) || 0 : Math.max(0, ...l.objects.map(o => (Number(o.start) || 0) + (o.dur ? Number(o.dur) : 0)));
       if (!e.ended && t >= dur) { e.ended = true; fire('timelineEnd', l.id); if (l === s.layers[0] && s.next === 'auto' && !ended) { ended = true; setTimeout(() => go(cur + 1)); } }
@@ -479,6 +583,7 @@ export function player(C, env) {
     t0 = now(); if (paused) { paused = false; play.textContent = '❚❚'; root.classList.remove('cp-paused'); }
     count.textContent = `${i + 1} / ${flat.length}`;
     prev.disabled = i === 0;
+    navState('next', 'normal'); navState('prev', 'normal');
     lockNext();
     next.textContent = i === flat.length - 1 ? 'Finish' : 'Next ›';
     drawMenu(); fit(); tick(); loop();
@@ -487,10 +592,11 @@ export function player(C, env) {
     env.onSlide?.(i, s);
   };
   // On a question slide, Next waits until its questions are answered.
-  const lockNext = () => { const s = flat[cur].s; next.disabled = s.next === 'question' && !s.layers[0].objects.filter(o => o.kind === 'question').every(o => results[o.id] && (results[o.id].correct || results[o.id].tries >= (Number(o.q.attempts) || 1))); };
+  const lockNext = () => { const s = flat[cur].s; if (next.dataset.state === 'disabled') return; next.disabled = s.next === 'question' && !s.layers[0].objects.filter(o => o.kind === 'question').every(o => results[o.id] && (results[o.id].correct || results[o.id].tries >= (Number(o.q.attempts) || 1))); };
   const finish = () => { report(true); env.exit?.(); const done = h('div', 'cp-done'); done.appendChild(h('b', '', 'You’ve reached the end of the course.')); const again = h('button', 'cp-btn', 'Start again'); again.onclick = () => { done.remove(); act({ action: 'restart' }); }; done.appendChild(again); stage.appendChild(done); };
-  prev.onclick = () => go(cur - 1);
-  next.onclick = () => (cur === flat.length - 1 ? finish() : go(cur + 1));
+  // Prev / Next: a slide's own triggers for them (imported from Storyline) run instead of the usual move.
+  prev.onclick = () => { if (!fire('prevButton')) go(cur - 1); };
+  next.onclick = () => { if (!fire('nextButton')) (cur === flat.length - 1 ? finish() : go(cur + 1)); };
   addEventListener('keydown', e => {
     if (e.target.closest && e.target.closest('input,textarea')) return;
     fire('key', null, e.key);
@@ -527,10 +633,14 @@ export const PLAYER_CSS = `
 .cp-menu button:hover{background:#f1f3fa}.cp-menu button.on{background:color-mix(in srgb,var(--acc) 14%,#fff);color:var(--acc);font-weight:700}
 .cp-menu button.seen::after{content:" ✓";color:#17836a}.cp-menu button:disabled{opacity:.45;cursor:default}
 .cp-wrap{flex:1;position:relative;overflow:hidden;min-width:0}
-.cp-stage{position:absolute;left:50%;top:50%;transform-origin:center;overflow:hidden;box-shadow:0 12px 40px rgba(20,24,60,.18);border-radius:6px;background:#fff}
+.cp-stage{position:absolute;left:50%;top:50%;transform-origin:center;overflow:hidden;overflow:clip;box-shadow:0 12px 40px rgba(20,24,60,.18);border-radius:6px;background:#fff}
 .cp-layer{position:absolute;inset:0}
 .cp-o{position:absolute;display:flex;flex-direction:column;overflow:hidden;white-space:pre-wrap;line-height:1.3}
 .cp-o .cp-t{padding:6px 10px}
+.cp-o>.cp-t{pointer-events:none}
+.cp-p{margin:0;min-height:1em}
+.cp-parts{position:absolute;inset:0;pointer-events:none}.cp-part{position:absolute;display:flex;flex-direction:column;overflow:hidden}.cp-part img{width:100%;height:100%;display:block;object-fit:fill}.cp-bul{display:inline-block;min-width:1.2em}
+@keyframes cpOut{to{opacity:0}}.cp-x-fade{animation:cpOut .5s ease forwards}
 .cp-button,.cp-hotspot{cursor:pointer;user-select:none;transition:background .15s,color .15s}.cp-button:focus-visible,.cp-hotspot:focus-visible{outline:3px solid color-mix(in srgb,var(--acc) 50%,transparent);outline-offset:2px}
 .cp-disabled{opacity:.5;cursor:not-allowed!important}
 .cp-image img,.cp-video video{width:100%;height:100%;display:block}
