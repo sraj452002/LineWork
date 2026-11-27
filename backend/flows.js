@@ -88,7 +88,7 @@ const ID = /^[\w-]{1,80}$/;
 // A page's own link name: /p/<name>.
 export const PAGE_LINK = /^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$/;
 
-export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secret = '', storeOwner = '' }) {
+export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secret = '', storeOwner = '', brevo = {} }) {
   const m = store.meta;
   // The node types a run of `flow` can use: ours, and the account's custom nodes (My nodes), the latest
   // version of each; copies a workflow file carries (flow.customNodes) fill in ones the account hasn't got.
@@ -141,7 +141,7 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
   let agentRunner = null;
 
   const ctxFor = (uid, depth = 0) => ({
-    uid, allowPrivate, mailer,
+    uid, allowPrivate, mailer, brevo,
     // The account's own files, for the Workline nodes. A save is like the app's: versions, storage, triggers.
     files: {
       async read(id) { const t = await store.readFile(uid, String(id)); return t ? JSON.parse(t) : null; },

@@ -4,6 +4,7 @@ import { syncBuiltinESMExports } from 'node:module';
 import { runFlow } from '../backend/flow-engine.js';
 import { NODE_TYPES } from '../backend/flow-nodes.js';
 import { APP_NODES } from '../backend/flow-apps.js';
+import { ACTION_NODES } from '../backend/flow-actions.js';
 import { attachments } from '../backend/flow-util.js';
 import { runFields, runValues } from '../frontend/src/lib/flows.js';
 
@@ -61,7 +62,7 @@ test('SendGrid, Resend, Postmark and Brevo send the file the way each wants it',
   dns.lookup = async () => [{ address: '93.184.216.34', family: 4 }];
   syncBuiltinESMExports();
   globalThis.fetch = async (url, init) => { calls.push({ url: String(url), body: JSON.parse(init.body) }); return new Response('{"id":"1","MessageID":"1","messageId":"1"}', { status: 200, headers: { 'content-type': 'application/json' } }); };
-  const ctx = { cred: async () => ({ apiKey: 'k', serverToken: 't', from: 'me@example.com' }) };
+  const ctx = { cred: async () => ({ apiKey: 'k', serverToken: 't', from: 'me@example.com' }), brevo: { apiKey: 'xkeysib-k', from: 'me@example.com' } };
   const params = { to: 'you@example.com', subject: 'Hi', text: 'Attached', attachments: '{{ $json.file }}' };
   try {
     for (const type of ['sendgrid', 'resend', 'postmark', 'brevo']) await run(type, params, { file: FILE }, ctx);
@@ -156,4 +157,41 @@ test('a big file is kept out of the run’s record, by name and size', async () 
     expect(item.doc).toMatchObject({ name: 'scan.pdf', size: 700000 });
     expect(item.doc.data).toMatch(/file contents, \d+ KB, not kept/);
   } finally { srv.close(); app.flows.close(); }
+});
+
+test('an email step that can’t reach its SMTP server says why and what works instead', async () => {
+  const net = await import('node:net');
+  // A port nothing listens on: the connection is refused, as a blocked email port is.
+  const server = net.createServer();
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const port = server.address().port;
+  await new Promise(r => server.close(r));
+  const ctx = { cred: async () => ({ smtpUrl: `smtp://u:p@127.0.0.1:${port}` }) };
+  const flow = { nodes: [{ id: 't', type: 'trigger.manual', name: 'Start' }, { id: 'n', type: 'app.email', name: 'Mail', params: { to: 'me@example.com', subject: 'x', text: 'y' }, credential: 'c1' }], edges: [{ from: 't', to: 'n' }] };
+  const r = await runFlow(flow, { startId: 't', input: [{ json: {} }], types: { ...NODE_TYPES, ...APP_NODES }, ctx });
+  expect(r.status).not.toBe('success');
+  expect(r.error).toContain('SMTP blocked');
+  expect(r.error).toContain('Resend, Brevo, SendGrid, Mailgun or Postmark');
+});
+
+test('Brevo takes its key and sender from the server (BREVO_API_KEY, BREVO_FROM), not a credential', async () => {
+  const flow = { nodes: [{ id: 't', type: 'trigger.manual', name: 'Start' }, { id: 'n', type: 'brevo', name: 'Brevo', params: { to: 'you@example.com', subject: 'x', text: 'y' } }, { id: 'c', type: 'brevo.contact', name: 'Contact', params: { email: 'you@example.com' } }], edges: [{ from: 't', to: 'n' }] };
+  const go = async (brevo, startAt = 'n', fetchImpl) => {
+    const real = globalThis.fetch, realLookup = dns.lookup;
+    if (fetchImpl) { globalThis.fetch = fetchImpl; dns.lookup = async () => [{ address: '93.184.216.34', family: 4 }]; syncBuiltinESMExports(); }
+    const f = { ...flow, edges: [{ from: 't', to: startAt }] };
+    try { return await runFlow(f, { startId: 't', input: [{ json: {} }], types: { ...NODE_TYPES, ...APP_NODES, ...ACTION_NODES }, ctx: { brevo } }); }
+    finally { globalThis.fetch = real; dns.lookup = realLookup; syncBuiltinESMExports(); }
+  };
+  // Not set up, or an SMTP key: a plain answer.
+  expect((await go({})).error).toContain('BREVO_API_KEY');
+  expect((await go({ apiKey: 'xsmtpsib-abc', from: 'me@example.com' })).error).toContain('xkeysib-');
+  expect((await go({ apiKey: 'xsmtpsib-abc' }, 'c')).error).toContain('xkeysib-');
+  // Set: the key (spaces and quotes taken off) and the sender go to Brevo, for the email and the contact steps.
+  const calls = [];
+  const answer = async (url, init) => { calls.push({ url: String(url), key: new Headers(init.headers).get('api-key'), body: JSON.parse(init.body) }); return new Response('{"messageId":"m1","id":1}', { status: 201, headers: { 'content-type': 'application/json' } }); };
+  expect((await go({ apiKey: ' "xkeysib-abc" ', from: 'Workline <me@example.com>' }, 'n', answer)).status).toBe('success');
+  expect((await go({ apiKey: 'xkeysib-abc' }, 'c', answer)).status).toBe('success');
+  expect(calls.map(c => [c.url, c.key])).toEqual([['https://api.brevo.com/v3/smtp/email', 'xkeysib-abc'], ['https://api.brevo.com/v3/contacts', 'xkeysib-abc']]);
+  expect(calls[0].body.sender).toEqual({ name: 'Workline', email: 'me@example.com' });
 });

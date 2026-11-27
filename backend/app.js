@@ -44,7 +44,7 @@ export function createApp(store, opts = {}) {
   const api = express.Router();
   // Workflows (flows.js). Their webhooks are called by other services, from anywhere, so they come
   // before the checks below that changes come from this site as JSON.
-  const flows = createFlows({ store, ai: { key: aiKey, base: aiBase, model: aiModel, dailyLimit: aiDailyLimit, nvidiaKey, nvidiaBase, nvidiaModels: String(nvidiaModel || '').split(',').map(m => m.trim()).filter(Boolean) }, mailer, allowPrivate: dbAllowPrivate, secret: opts.flowSecret || '', storeOwner: opts.storeOwner || '' });
+  const flows = createFlows({ store, ai: { key: aiKey, base: aiBase, model: aiModel, dailyLimit: aiDailyLimit, nvidiaKey, nvidiaBase, nvidiaModels: String(nvidiaModel || '').split(',').map(m => m.trim()).filter(Boolean) }, mailer, allowPrivate: dbAllowPrivate, secret: opts.flowSecret || '', storeOwner: opts.storeOwner || '', brevo: opts.brevo || {} });
   api.use('/hook', flows.hooks);
   api.use('/ui', flows.ui); // published custom apps: public pages, like webhooks
   api.use('/p', flows.pages); // pages made of nodes at a name of their own (/p/<name> on the site)

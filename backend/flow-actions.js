@@ -32,7 +32,8 @@ const SVC = {
   twilio: { name: 'Twilio', group: 'Communication', icon: 'sms', tone: 'pink', cred: 'twilio' },
   mailchimp: { name: 'Mailchimp', group: 'Communication', logo: 'mailchimp', tone: 'amber', cred: 'mailchimp' },
   sendgrid: { name: 'SendGrid', group: 'Communication', icon: 'mail', tone: 'sky', cred: 'sendgrid' },
-  brevo: { name: 'Brevo', group: 'Communication', logo: 'brevo', tone: 'teal', cred: 'brevo' },
+  // Brevo's key comes from the server's environment (BREVO_API_KEY), not a credential.
+  brevo: { name: 'Brevo', group: 'Communication', logo: 'brevo', tone: 'teal', env: 'brevo' },
   notion: { name: 'Notion', group: 'Productivity', logo: 'notion', tone: 'slate', cred: 'notion' },
   airtable: { name: 'Airtable', group: 'Productivity', logo: 'airtable', tone: 'amber', cred: 'airtable' },
   trello: { name: 'Trello', group: 'Productivity', logo: 'trello', tone: 'blue', cred: 'trello' },
@@ -68,6 +69,14 @@ const LIMIT = NUM('limit', 'At most', 20);
 const lim = (p, d = 20, max = 100) => Math.min(max, Math.max(1, Number(p.limit) || d));
 const list = v => (Array.isArray(v) ? v : String(v ?? '').split(',')).map(s => String(s).trim()).filter(Boolean);
 
+// A service whose key is set on the server (BREVO_API_KEY …) rather than in a credential.
+function envKey(args, s) {
+  const c = args.ctx[s.env] || {}, apiKey = String(c.apiKey || '').trim().replace(/^["']|["']$/g, '');
+  const name = `${s.env.toUpperCase()}_API_KEY`;
+  if (!apiKey) throw new FlowError(`${s.name} isn’t set up on this server: set ${name} in its environment, then restart it.`, 'no_key');
+  if (s.env === 'brevo' && /^xsmtpsib-/i.test(apiKey)) throw new FlowError('BREVO_API_KEY is a Brevo SMTP key (it starts with xsmtpsib-). It needs an API key: in Brevo open SMTP & API → API keys & MCP → Generate a new API key (it starts with xkeysib-).', 'bad_key');
+  return { ...c, apiKey };
+}
 function A(svc, key, label, note, fields, call, o = {}) {
   const s = SVC[svc], type = `${svc}.${key}`;
   const ex = o.ex || `${fields.filter(f => f.hint).slice(0, 3).map(f => `${f.label}: ${f.hint}`).join(' · ') || 'Pick the credential'} → ${o.list ? 'one item each' : 'the app’s answer'}`;
@@ -78,7 +87,7 @@ function A(svc, key, label, note, fields, call, o = {}) {
     defaults: Object.fromEntries(fields.filter(f => f.d !== undefined).map(f => [f.k, f.d])),
     guide: { what: `${note}.`, ex, out: o.out || (o.list ? LIST_OUT : ONE_OUT) },
   };
-  ACTION_NODES[type] = { run: async args => { const c = s.cred ? await cred(args) : null; return each(args, p => call(args, c, p)); } };
+  ACTION_NODES[type] = { run: async args => { const c = s.cred ? await cred(args) : s.env ? envKey(args, s) : null; return each(args, p => call(args, c, p)); } };
 }
 
 /* ================= GitHub ================= */

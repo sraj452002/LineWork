@@ -31,6 +31,8 @@ const app = createApp(store, {
   appUrl: env.APP_URL || '',
   // Let the Database view reach databases on private networks (this machine, a LAN, a VPC). Off by default.
   dbAllowPrivate: env.DB_ALLOW_PRIVATE === '1' || env.DB_ALLOW_PRIVATE === 'true',
+  // Brevo step: the API key (xkeysib-…, Brevo → SMTP & API → API keys & MCP) and a sender verified in Brevo.
+  brevo: { apiKey: env.BREVO_API_KEY || '', from: env.BREVO_FROM || '' },
   // Workflows: the key their saved credentials are encrypted with (without it, one kept in meta.json).
   flowSecret: env.FLOW_SECRET || '',
 });

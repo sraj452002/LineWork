@@ -258,7 +258,6 @@ export const CRED_SETUP = {
   header: ['For an API that wants its key in a header: Header name, e.g. X-API-Key; Value, the key.'],
   mailgun: ['app.mailgun.com → Sending → Domains → add and verify your domain (or use the sandbox domain to try).', 'API keys (under your account or the domain) → create a key → copy it into API key.', 'Domain: e.g. mg.example.com. Region: EU if your account is on Mailgun’s EU servers. From: an address on that domain.'],
   postmark: ['account.postmarkapp.com → Servers → your server → API Tokens → copy the Server API token into Server token.', 'Sender Signatures: confirm the address (or domain) you send from, and put it in From.'],
-  brevo: ['app.brevo.com → your name (top right) → SMTP & API → API Keys → Generate a new API key → copy it into API key.', 'Senders, domains & dedicated IPs → Senders: add and verify your sender, and put it in From.'],
   pushover: ['pushover.net → sign in: your User Key is on the front page → copy it into User key.', 'Create an Application/API Token (at the bottom of that page) → copy it into Application token.', 'Install the Pushover app on your phone and sign in.'],
   pagerduty: ['PagerDuty → Services → your service → Integrations → Add an integration → Events API V2.', 'Copy the Integration Key into Routing key.'],
   deepl: ['Sign up for DeepL API Free or Pro, then go to deepl.com/your-account/keys.', 'Copy the authentication key (free keys end in :fx) into API key.'],
@@ -268,6 +267,7 @@ export const CRED_SETUP = {
 
 // Extra steps for nodes that need something done in the other app, beyond the credential and the fields.
 export const NODE_SETUP = {
+  brevo: ['Brevo: SMTP & API → API keys & MCP → Generate a new API key (it starts with xkeysib-, not the SMTP key xsmtpsib-).', 'Senders, domains & dedicated IPs → Senders: add and verify the address you send from.', 'On the server (e.g. Render → Environment) set BREVO_API_KEY to the key and BREVO_FROM to the sender, e.g. Workline <you@example.com>, then redeploy. Keys never go in a step.'],
   'trigger.webhook': ['Copy the Webhook URL from the node’s settings.', 'Paste it where the other app or script sends its calls (its “webhook”, “callback” or “notification URL”).', 'Pick the method it uses, or leave Any.'],
   'trigger.schedule': ['Choose Every… (minutes, hours or days), Every day at a time in UTC, or a cron expression (UTC).'],
   'trigger.form': ['Write a title, and the fields one a line (end a name with * to make it required).', 'Turn the workflow Active, wait for Saved, then press Open to see the form and share its link.'],

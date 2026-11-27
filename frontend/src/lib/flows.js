@@ -452,7 +452,7 @@ export const NODES = {
 
   mailgun: { group: 'Communication', label: 'Mailgun', note: 'Sends an email', logo: 'mailgun', icon: I.mail, tone: 'red', credential: ['mailgun'], fields: EMAIL },
   postmark: { group: 'Communication', label: 'Postmark', note: 'Sends an email', icon: I.mail, tone: 'amber', credential: ['postmark'], fields: [...EMAIL, ATTACH] },
-  brevo: { group: 'Communication', label: 'Brevo', note: 'Sends an email (Sendinblue)', logo: 'brevo', icon: I.mail, tone: 'teal', credential: ['brevo'], fields: [...EMAIL, ATTACH] },
+  brevo: { group: 'Communication', label: 'Brevo', note: 'Sends an email (Sendinblue)', logo: 'brevo', icon: I.mail, tone: 'teal', fields: [...EMAIL.map(f => f.k === 'from' ? { ...f, label: 'From (blank: the server’s BREVO_FROM)' } : f), ATTACH] },
   pushover: { group: 'Communication', label: 'Pushover', note: 'Push notification to your phone', icon: I.bell, tone: 'sky', credential: ['pushover'],
     fields: [{ k: 'title', label: 'Title', kind: 'text' }, { k: 'message', label: 'Message', kind: 'textarea' }, { k: 'url', label: 'Link (optional)', kind: 'text' }, { k: 'priority', label: 'Priority', kind: 'select', options: [['0', 'Normal'], ['1', 'High'], ['-1', 'Quiet']] }] },
 
@@ -754,7 +754,6 @@ export const CRED_TYPES = {
   dropbox: { label: 'Dropbox', help: 'dropbox.com/developers → an app → Generate access token.', fields: [key('token', 'Access token')] },
   mailgun: { label: 'Mailgun', help: 'Sending → Domain settings → API keys.', fields: [key('apiKey', 'API key'), plain('domain', 'Domain', 'mg.example.com'), { k: 'region', label: 'Region', options: [['us', 'US'], ['eu', 'EU']] }, plain('from', 'From', 'Workline <hi@mg.example.com>')] },
   postmark: { label: 'Postmark', help: 'Servers → your server → API tokens.', fields: [key('serverToken', 'Server token'), plain('from', 'From (a confirmed sender)')] },
-  brevo: { label: 'Brevo', help: 'SMTP & API → API keys.', fields: [key('apiKey', 'API key'), plain('from', 'From', 'Workline <you@example.com>')] },
   pushover: { label: 'Pushover', help: 'pushover.net: your user key, and an application’s API token.', fields: [key('appToken', 'Application token'), key('userKey', 'User key')] },
   pagerduty: { label: 'PagerDuty', help: 'Service → Integrations → Events API v2 → integration (routing) key.', fields: [key('routingKey', 'Routing key')] },
   deepl: { label: 'DeepL', help: 'deepl.com → Account → API keys (free keys end in :fx).', fields: [key('apiKey', 'API key')] },
