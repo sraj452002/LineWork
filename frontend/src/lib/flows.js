@@ -116,7 +116,15 @@ const EMAIL = [{ k: 'to', label: 'To', kind: 'text' }, { k: 'subject', label: 'S
 const LANGS = [['EN-US', 'English (US)'], ['EN-GB', 'English (UK)'], ['HI', 'Hindi'], ['DE', 'German'], ['FR', 'French'], ['ES', 'Spanish'], ['IT', 'Italian'], ['PT-BR', 'Portuguese (Brazil)'], ['NL', 'Dutch'], ['PL', 'Polish'], ['RU', 'Russian'], ['JA', 'Japanese'], ['KO', 'Korean'], ['ZH', 'Chinese'], ['AR', 'Arabic'], ['TR', 'Turkish'], ['ID', 'Indonesian'], ['UK', 'Ukrainian']];
 
 // The small tool groups (Text, Numbers, Dates…) come after Data; Public data at the end.
-export const GROUPS = ['Triggers', 'Workline', 'Flow', 'Data', ...MORE.groups.filter(g => g !== 'Public data'), 'UI', 'Web', 'AI', 'Communication', 'Productivity', 'Developer', 'Sales & payments', 'Storage & feeds', 'Public data'];
+export const GROUPS = ['Triggers', 'Workline', 'Flow', 'Data', ...MORE.groups.filter(g => g !== 'Public data'), 'UI', 'Editors', 'Web', 'AI', 'Communication', 'Productivity', 'Developer', 'Sales & payments', 'Storage & feeds', 'Public data'];
+// The tool editor nodes' settings: what to open (a file from the step before, a Workline file, or a blank one).
+const TOOL_EDIT_FIELDS = [
+  { k: 'source', label: 'What to open', kind: 'select', options: [['input', 'A file from the step before (blank if none)'], ['file', 'One of my Workline files'], ['blank', 'A new, blank one']] },
+  { k: 'input', label: 'File (blank: the first file in the item)', kind: 'text', hint: '{{ $json.file }}', ...only('source', 'input') },
+  { k: 'fileId', label: 'File', kind: 'file', ...only('source', 'file') },
+  { k: 'title', label: 'Heading (and a new file’s name)', kind: 'text', hint: 'Check the course' },
+  { k: 'button', label: 'Button', kind: 'text', hint: 'Save & continue' },
+];
 export const NODES = {
   /* ---- triggers ---- */
   'trigger.manual': { group: 'Triggers', label: 'Run by hand', note: 'Starts when you press Run', icon: I.play, tone: 'green', trigger: true,
@@ -333,9 +341,17 @@ export const NODES = {
     ],
     help: 'When it’s sent, the workflow runs again with { action: this name, form: { answers } }: branch with an IF on {{ $json.action }}. The answers stay filled in.',
     defaults: () => ({ fields: 'Search', button: 'Search', action: 'search' }) },
+  'ui.edit.course': { group: 'Editors', label: 'Course editor', note: 'Opens a course (a Storyline .story, a SCORM or Storyline zip, a course file) in the Course editor, or starts a new one', icon: I.text, tone: 'violet', fields: TOOL_EDIT_FIELDS, defaults: () => ({ source: 'input', button: 'Save & continue' }) },
+  'ui.edit.doc': { group: 'Editors', label: 'Doc editor', note: 'Opens a Word .docx, Markdown or text file in the Doc editor, or starts a new doc', icon: I.text, tone: 'violet', fields: TOOL_EDIT_FIELDS, defaults: () => ({ source: 'input', button: 'Save & continue' }) },
+  'ui.edit.sheet': { group: 'Editors', label: 'Sheet editor', note: 'Opens an Excel .xlsx or CSV in the Sheet (formulas, charts), or starts a new sheet', icon: I.table, tone: 'violet', fields: TOOL_EDIT_FIELDS, defaults: () => ({ source: 'input', button: 'Save & continue' }) },
+  'ui.edit.diagram': { group: 'Editors', label: 'Diagram editor', note: 'Opens diagram code or a .sql schema on the Canvas, or starts a new diagram', icon: I.flow, tone: 'violet', fields: TOOL_EDIT_FIELDS, defaults: () => ({ source: 'input', button: 'Save & continue' }) },
+  'ui.edit.code': { group: 'Editors', label: 'Code editor', note: 'Opens a code or text file in the code editor (VS Code’s), or starts a new one', icon: I.code, tone: 'violet', fields: TOOL_EDIT_FIELDS, defaults: () => ({ source: 'input', button: 'Save & continue' }) },
+  'ui.edit.flow': { group: 'Editors', label: 'Workflow editor', note: 'Opens a Workline or n8n workflow .json in the Workflow editor, or starts a new one', icon: I.flow, tone: 'violet', fields: TOOL_EDIT_FIELDS, defaults: () => ({ source: 'input', button: 'Save & continue' }) },
   'ui.editor': { group: 'UI', label: 'Editor', note: 'Stops the run so you can check or change a file or the data, then goes on with it', icon: I.edit, tone: 'sky',
     fields: [
       { k: 'source', label: 'What to edit', kind: 'select', options: [['input', 'A file from the step before'], ['data', 'The data from the step before (check or change it, then go on)'], ['file', 'One of my Workline files'], ['upload', 'An upload box on a page (Page workflows)']] },
+      { k: 'open', label: 'Open it in', kind: 'select', options: [['card', 'A quick card (text or cells)'], ['tool', 'The full Workline tool (Course, Doc, Sheet, Diagram, Code, Workflow)']], ...only('source', 'input', 'file') },
+      { k: 'view', label: 'Tool', kind: 'select', options: [['auto', 'Find out from the file'], ['course', 'Course'], ['doc', 'Doc'], ['sheet', 'Sheet'], ['canvas', 'Diagram'], ['code', 'Code'], ['flow', 'Workflow']], ...only('open', 'tool') },
       { k: 'field', label: 'Field (blank: all the data, as JSON)', kind: 'text', hint: 'outline', ...only('source', 'data') },
       { k: 'input', label: 'File (blank: the first file in the item)', kind: 'text', hint: '{{ $json.file }}', ...only('source', 'input') },
       { k: 'fileId', label: 'File', kind: 'file', ...only('source', 'file') },

@@ -1,4 +1,7 @@
-import { useMemo, useState } from 'react';
+import { Suspense, lazy, useMemo, useState } from 'react';
+
+// The full Workline tool for a file (Editor “Open in: the full tool”, and the tool editor nodes): loaded when needed.
+const ToolEditor = lazy(() => import('./ToolEditor.jsx'));
 
 /* The Editor node's card, in the app (Run and the workflow editor): when a run reaches an Editor, it stops
    there and gives what to edit. A sheet shows as a grid of cells (with + Row / + Column); text, a doc, a
@@ -9,6 +12,10 @@ const addr = a => { const m = /^([A-Z]+)(\d+)$/.exec(a); if (!m) return null; le
 const KIND = { sheet: 'Sheet', doc: 'Doc', code: 'Code', diagram: 'Diagram', data: 'Data' };
 
 export default function EditorCard({ card, onSave, onClose }) {
+  if (card.tool) return <Suspense fallback={<div className="modal"><div className="mbox">Opening…</div></div>}><ToolEditor card={card} onSave={onSave} onClose={onClose} /></Suspense>;
+  return <QuickCard card={card} onSave={onSave} onClose={onClose} />;
+}
+function QuickCard({ card, onSave, onClose }) {
   const sheet = card.kind === 'sheet';
   const size = useMemo(() => {
     let rows = 0, cols = 0;
@@ -70,10 +77,11 @@ export default function EditorCard({ card, onSave, onClose }) {
 export function editorWaiting(flow, run) {
   if (!run || run.status !== 'success' || !flow) return null;
   for (const n of flow.nodes || []) {
-    const got = n.type === 'ui.editor' && run.nodes?.[n.id]?.output?.editor;
+    const got = (n.type === 'ui.editor' || String(n.type).startsWith('ui.edit.')) && run.nodes?.[n.id]?.output?.editor;
     if (got && got[0]) return { nodeId: n.id, card: got[0], runId: run.id };
   }
   return null;
 }
 // What “Save & continue” starts the run with, from the Editor.
-export const continueWith = (card, edit) => [{ _edited: { ...card, ...edit } }];
+// (A tool edit leaves out the file it opened and the Workline file's original: only the edit goes back.)
+export const continueWith = (card, edit) => [{ _edited: card.tool ? { tool: true, view: edit.view || card.view, fileId: card.fileId, ...edit } : { ...card, ...edit } }];
