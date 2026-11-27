@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react';
-import { interpolate } from '../lib/course.js';
+import { interpolate, srcOf } from '../lib/course.js';
 
 /* Drawing course slides and objects (the Course view, its slide list and Course Studio's cards). */
 
@@ -13,10 +13,10 @@ export function boxStyle(o, s) {
     justifyContent: s.valign === 'middle' ? 'center' : s.valign === 'bottom' ? 'flex-end' : 'flex-start',
   };
 }
-export function ObjArt({ o, st = 'normal', vars = {} }) {
+export function ObjArt({ o, st = 'normal', vars = {}, assets }) {
   const s = lookOf(o, st);
   const text = s.text != null ? s.text : o.text;
-  if (o.kind === 'image') return (s.src || o.src) ? <img src={s.src || o.src} alt="" style={{ objectFit: s.fit || 'cover' }} draggable={false} /> : <span className="cv-ph">Picture</span>;
+  if (o.kind === 'image') { const src = srcOf({ assets }, s.src || o.src); return src ? <img src={src} alt="" style={{ objectFit: s.fit || 'cover' }} draggable={false} /> : <span className="cv-ph">Picture</span>; }
   if (o.kind === 'input') return <span className="cv-input">{o.var ? `${o.placeholder || ''}  → %${o.var}%` : o.placeholder}</span>;
   if (o.kind === 'video') return <span className="cv-ph dark">▶ Video{o.src ? '' : ' (add a link)'}</span>;
   if (o.kind === 'audio') return <span className="cv-ph">♪ Audio{o.src ? '' : ' (add a link)'}</span>;
@@ -44,7 +44,7 @@ export function Thumb({ slide, course }) {
   return (
     <div className="cv-thumb" ref={ref} style={{ background: slide.bg, aspectRatio: `${course.size.w} / ${course.size.h}` }}>
       <div className="cv-thumb-in" style={{ width: course.size.w, height: course.size.h, transform: `scale(${k})` }}>
-        {slide.layers[0].objects.filter(o => o.initial !== 'hidden').map(o => <div key={o.id} className={'cv-o k-' + o.kind} style={boxStyle(o, lookOf(o, o.initial || 'normal'))}><ObjArt o={o} st={o.initial || 'normal'} vars={vars} /></div>)}
+        {slide.layers[0].objects.filter(o => o.initial !== 'hidden').map(o => <div key={o.id} className={'cv-o k-' + o.kind} style={boxStyle(o, lookOf(o, o.initial || 'normal'))}><ObjArt o={o} st={o.initial || 'normal'} vars={vars} assets={course.assets} /></div>)}
       </div>
     </div>
   );

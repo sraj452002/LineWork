@@ -242,7 +242,7 @@ export function player(C, env) {
     st.justifyContent = s.valign === 'middle' ? 'center' : s.valign === 'bottom' ? 'flex-end' : 'flex-start';
     st.display = stateOf(o) === 'hidden' ? 'none' : '';
     el.classList.toggle('cp-disabled', stateOf(o) === 'disabled');
-    if (o.kind === 'image') { const img = el.firstChild; if (img) { img.src = s.src || o.src || ''; img.style.objectFit = s.fit || 'cover'; } }
+    if (o.kind === 'image') { const img = el.firstChild; if (img) { const src = s.src || o.src || ''; img.src = src.startsWith('asset:') ? (C.assets || {})[src.slice(6)] || '' : src; img.style.objectFit = s.fit || 'cover'; } }
     const label = el.querySelector(':scope > .cp-t');
     if (label) label.textContent = fill(s.text != null ? s.text : o.text);
   };
@@ -690,6 +690,16 @@ export async function readCourse(file) {
 // Another course's scenes and variables added to this one (with new ids, so nothing clashes).
 export function appendCourse(into, other) {
   for (const v of other.vars || []) if (!into.vars.some(x => x.name === v.name)) into.vars.push({ ...v, id: rid('v') });
-  for (const sc of other.scenes) into.scenes.push({ id: rid('sc'), name: sc.name, slides: sc.slides.map(cloneSlide) });
+  // Its pictures come too, under new names, and its objects point at those.
+  const rename = new Map();
+  for (const [k, v] of Object.entries(other.assets || {})) { const n = rid('a'); (into.assets ||= {})[n] = v; rename.set('asset:' + k, 'asset:' + n); }
+  const fix = o => { if (rename.has(o.src)) o.src = rename.get(o.src); for (const st of Object.values(o.states || {})) if (rename.has(st.src)) st.src = rename.get(st.src); };
+  for (const sc of other.scenes) {
+    const slides = sc.slides.map(cloneSlide);
+    slides.forEach(sl => sl.layers.forEach(l => l.objects.forEach(fix)));
+    into.scenes.push({ id: rid('sc'), name: sc.name, slides });
+  }
   return into;
 }
+// A picture's address: kept in the course (asset:<id>) or written out (a data: or web address).
+export const srcOf = (course, src) => (String(src || '').startsWith('asset:') ? (course?.assets || {})[src.slice(6)] || '' : src || '');

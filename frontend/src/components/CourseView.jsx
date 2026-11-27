@@ -365,7 +365,7 @@ export default function CourseView({ file, update, visible = true }) {
       <div className={'cv-holder' + (zoom ? ' zoomed' : '')} ref={holder} onPointerDown={() => { setSel(null); setEditing(null); }}>
         <div className="cv-stage-box" style={{ width: course.size.w * k, height: course.size.h * k }}>
           <div className="cv-stage" style={{ width: course.size.w, height: course.size.h, transform: `scale(${k})`, background: slide.bg, fontFamily: course.font }} aria-label={`Slide: ${slide.title}`} role="region">
-            {baseUnder && <div className="cv-under">{slide.layers[0].objects.map(o => <div key={o.id} className={'cv-o k-' + o.kind} style={boxStyle(o, lookOf(o))}><ObjArt o={o} vars={vars} /></div>)}</div>}
+            {baseUnder && <div className="cv-under">{slide.layers[0].objects.map(o => <div key={o.id} className={'cv-o k-' + o.kind} style={boxStyle(o, lookOf(o))}><ObjArt o={o} vars={vars} assets={course.assets} /></div>)}</div>}
             {layer.objects.map(o => {
               const st = lookState(o), s = lookOf(o, st);
               return (
@@ -375,7 +375,7 @@ export default function CourseView({ file, update, visible = true }) {
                     ? <textarea className="cv-edit" autoFocus defaultValue={s.text != null ? s.text : o.text} aria-label="Edit the text" style={{ textAlign: s.align, color: s.color, fontSize: s.size, fontWeight: s.bold ? 700 : 400 }}
                       onPointerDown={e => e.stopPropagation()} onKeyDown={e => { if (e.key === 'Escape') e.currentTarget.blur(); }}
                       onBlur={e => { const v = e.target.value.replace(/\r\n?/g, '\n'); setEditing(null); editObj(x => { if (editState === 'normal') x.text = v; else ((x.states ||= {})[editState] ||= {}).text = v; }); }} />
-                    : <ObjArt o={o} st={st} vars={vars} />}
+                    : <ObjArt o={o} st={st} vars={vars} assets={course.assets} />}
                   {o.id === sel && !editing && ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].map(h => <i key={h} className={'cv-h h-' + h} onPointerDown={e => drag(e, o, h)} />)}
                 </div>
               );

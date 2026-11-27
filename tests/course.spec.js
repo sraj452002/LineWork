@@ -242,3 +242,64 @@ test('Storyline .story files and published courses import as courses', async ({ 
   await expect(page.locator('.cv-stage')).toContainText('Leave the building calmly');
   await expect(page.locator('.cv-stage img')).toHaveCount(1);
 });
+
+// A Storyline 360 package as Storyline writes it (OPC parts: story/story.xml, story/slides/*.xml with _rels):
+// shapes keep their place, fill, text and font; pictures are found from the media list; layers, object
+// states (drawn by the state's own shapes), timing and triggers come over and work in the player.
+test('a Storyline 360 package imports with positions, pictures, layers, states, timing and triggers', async ({ page }) => {
+  test.setTimeout(60_000);
+  const z = new JSZip();
+  const rich = (text, size = 24, color = '#FFFFFF', bold = 'True') => `&lt;Document&gt;&lt;Content&gt;&lt;Block&gt;&lt;Style Justification="Center" /&gt;&lt;Span Text="${text}"&gt;&lt;Style FontFamily="Arial" FontSize="${size}" FontIsBold="${bold}" ForegroundColor="${color}" /&gt;&lt;/Span&gt;&lt;/Block&gt;&lt;/Content&gt;&lt;/Document&gt;`;
+  const fill = rgb => `<bG><solidFill><clr><srgbClr val="${rgb}" /></clr></solidFill></bG>`;
+  const tm = (start, dur, until = 'true') => `<tmCtxLst version="3"><txtTmCtx start="${start}" dur="${dur}" untilEnd="${until}" /></tmCtxLst>`;
+  z.file('[Content_Types].xml', '<Types/>');
+  z.file('story/story.xml', `<story><varLst><var g="v1" name="Player.Volume" dataType="num" val="1" type="builtIn" /><var g="v2" name="Clicks" dataType="num" val="0" type="user" /></varLst>
+    <mediaLst><media g="m1" type="Png" bytes="${PNG.length}"><md5Checksum><stream>x</stream><source>y</source></md5Checksum></media></mediaLst>
+    <sceneLst><scene g="sc1" name="Main scene"><sldIdLst><sldId>R1</sldId></sldIdLst></scene></sceneLst><props><sz w="1366" h="768" /></props></story>`);
+  z.file('story/_rels/story.xml.rels', '<Relationships><Relationship Type="media" Target="/story/media/Rpic.png" Id="Rm" /><Relationship Type="slide" Target="/story/slides/slide.xml" Id="R1" /></Relationships>');
+  z.file('story/media/Rpic.png', PNG);
+  z.file('story/slides/_rels/slide.xml.rels', '<Relationships><Relationship Type="media" Target="/story/media/Rpic.png" Id="Rx" /></Relationships>');
+  z.file('story/slides/slide.xml', `<sld g="s1" name="Pick a tab"><bg><solidFill><clr><srgbClr val="F4F6FA" /></clr></solidFill></bg><shapeLst>
+    <rect g="o1" name="Header" zOrder="0" initState="">${tm(0, 0)}<trigLst />${fill('00388F')}<loc l="0" t="0" r="1366" b="80" /><text>${rich('Pick a tab')}</text><plain>Pick a tab</plain></rect>
+    <rect g="o2" name="Tab A" zOrder="1" initState="Normal">${tm(500, 0)}<trigLst>
+        <trig g="t1" type="user"><data enabled="true" event="OnClick" action="showSubSlide" actSubType="spec"><shape setStateName="" /><sldLayer showG="L1" /><other op="ass" /></data><condLst /></trig>
+        <trig g="t2" type="user"><data enabled="true" event="OnClick" action="adjustVar" actSubType="spec"><shape setStateName="" /><sldLayer /><other varG="v2" op="add" dblVal="1" /></data><condLst /></trig>
+      </trigLst>
+      <stateLst><state name="Normal"><bg><noFill /></bg><shapeLst><rect name="bgA">${fill('0057B8')}<loc l="0" t="0" r="300" b="60" /></rect><rect name="labelA"><loc l="10" t="0" r="290" b="60" /><text>${rich('Tab A', 18)}</text><plain>Tab A</plain></rect></shapeLst></state>
+        <state name="Selected"><bg /><shapeLst><rect name="bgA2">${fill('00B9E8')}<loc l="0" t="0" r="300" b="60" /></rect><rect name="labelA2"><loc l="10" t="0" r="290" b="60" /><text>${rich('Tab A', 18)}</text><plain>Tab A</plain></rect></shapeLst></state></stateLst>
+      ${fill('D8DCE1')}<loc l="100" t="150" r="520" b="234" /></rect>
+    <pic g="o3" name="Photo" zOrder="2" assetG="m1">${tm(0, 0)}<trigLst /><loc l="900" t="150" r="1100" b="350" /></pic>
+    <clkAreaRect g="o4" name="Blocker" zOrder="3" initState="">${tm(0, 1000, 'false')}<trigLst /><loc l="0" t="100" r="1366" b="400" /></clkAreaRect>
+  </shapeLst><trigLst /><sldLayerLst>
+    <sldLayer g="L1" name="Details"><shapeLst><rect g="o5" name="Panel" zOrder="0">${tm(0, 0)}<trigLst><trig g="t3" type="user"><data enabled="true" event="OnClick" action="hideSubSlide" actSubType="me"><shape setStateName="" /><sldLayer hideG="L1" /><other op="ass" /></data><condLst /></trig></trigLst>${fill('FFFFFF')}<loc l="100" t="300" r="800" b="600" /><text>${rich('Details of tab A', 20, '#1F2433', 'False')}</text><plain>Details of tab A</plain></rect></shapeLst>
+      <trigLst><trig g="t4" type="user"><data enabled="true" event="OnStart" action="changeShapeState" actSubType="spec"><shape setStateG="o2" setStateName="Selected" /><sldLayer /><other op="ass" /></data><condLst /></trig></trigLst></sldLayer>
+  </sldLayerLst></sld>`);
+  const buf = await z.generateAsync({ type: 'nodebuffer' });
+
+  await page.getByRole('navigation', { name: 'Files' }).getByRole('button', { name: /^Course Studio/ }).click();
+  await page.locator('.cs-new', { hasText: 'Import a course' }).click();
+  await page.getByLabel('Course to import').setInputFiles({ name: 'Tabs.story', mimeType: 'application/octet-stream', buffer: buf });
+  await expect(page.getByRole('toolbar', { name: 'Course tools' })).toBeVisible();
+  await expect(page.locator('.sl-import')).toContainText('1 slide, 1 layer, 5 objects');
+  await expect(page.locator('.sl-import')).toContainText('1 picture and 4 triggers');
+  await expect(page.locator('.sl-status')).toContainText('1366 × 768');
+  await page.getByRole('button', { name: /^Slide 1\.1: Pick a tab/ }).dblclick();
+  const tab = page.locator('.cv-stage .cv-o[data-name="Tab A"]');
+  await expect(tab).toHaveCSS('left', '100px');
+  await expect(tab).toHaveCSS('background-color', 'rgb(0, 87, 184)'); // drawn by its Normal state
+  await expect(tab).toContainText('Tab A');
+  await expect(page.locator('.cv-stage .cv-o[data-name="Photo"] img')).toHaveAttribute('src', /^data:image\//);
+  await expect(page.getByRole('region', { name: 'Triggers' }).locator('.cv-trig-h')).toHaveText(['Show layer DetailsWhen user clicks Tab A', 'Set Clicks + 1When user clicks Tab A']);
+
+  // In the player: the blocker goes after 1 s, the tab shows its layer and turns Selected; the panel hides it.
+  await page.getByRole('button', { name: 'Preview', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'This slide' }).click();
+  const p = page.frameLocator('iframe[title="Course preview"]');
+  await expect(p.getByText('Details of tab A')).toHaveCount(0);
+  await page.waitForTimeout(1300);
+  await p.locator('.cp-o', { hasText: /^Tab A$/ }).click();
+  await expect(p.getByText('Details of tab A')).toBeVisible();
+  await expect(p.locator('.cp-o', { hasText: /^Tab A$/ })).toHaveCSS('background-color', 'rgb(0, 185, 232)');
+  await p.getByText('Details of tab A').click();
+  await expect(p.getByText('Details of tab A')).toHaveCount(0);
+});
