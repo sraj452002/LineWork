@@ -168,6 +168,64 @@ test.describe('through the API', () => {
     expect(db.error).toMatch(/isn’t saved in the Database view/);
   });
 
+  test('Workline Course: a course from an outline or from JSON, and slides added to one', async () => {
+    const run = async (params, input) => finished((await call('POST', '/flows/f_course/run', { flow: { nodes: [node('t', 'trigger.manual'), node('c', 'workline.course', params)], edges: [edge('t', 'c')] }, ...(input ? { input } : {}) })).json.runId);
+    // An outline: a title slide, two content slides, a question, a results slide.
+    const r = await run({ operation: 'create', source: 'outline', titleSlide: true, results: true, outline: 'Course: Safety 101\n# Why it matters\n- Most accidents can be avoided\nNotes: start with a story\n# Your gear\nHelmet and boots\nQ: Which one keeps you safe?\n* A helmet\n- No gloves' });
+    expect(r.status, r.error).toBe('success');
+    const out = r.nodes.c.output.main[0];
+    expect(out).toMatchObject({ title: 'Safety 101', scenes: 1, slides: 5, questions: 1 });
+    const f = (await call('GET', `/files/${out.fileId}`)).json;
+    expect(f.view).toBe('course');
+    const slides = f.course.scenes[0].slides;
+    expect(slides.map(s => s.title)).toEqual(['Safety 101', 'Why it matters', 'Your gear', 'Question', 'Results']);
+    expect(slides[1].notes).toBe('start with a story');
+    expect(slides[1].layers[0].objects.find(o => o.name === 'Body').text).toBe('• Most accidents can be avoided');
+    const q = slides[3].layers[0].objects.find(o => o.kind === 'question').q;
+    expect(q).toMatchObject({ type: 'mc', prompt: 'Which one keeps you safe?' });
+    expect(q.choices.map(c => [c.text, c.correct])).toEqual([['A helmet', true], ['No gloves', false]]);
+    // JSON, as an AI node gives it (in a ```json block), from the item: two scenes, answers by index and by text.
+    const ai = '```json\n' + JSON.stringify({ title: 'Ignored', scenes: [{ name: 'Intro', slides: [{ title: 'Hello', bullets: ['One', 'Two'] }] }, { name: 'Check', slides: [{ question: 'Pick two', choices: ['a', 'b', 'c'], answer: [0, 2] }, { question: 'Capital of France?', answer: 'Paris' }] }] }) + '\n```';
+    const j = await run({ operation: 'create', source: 'json', json: '{{ $json.text }}', title: 'From AI' }, [{ text: ai }]);
+    expect(j.status, j.error).toBe('success');
+    const jf = (await call('GET', `/files/${j.nodes.c.output.main[0].fileId}`)).json;
+    expect(jf.title).toBe('From AI');
+    expect(jf.course.scenes.map(s => s.name)).toEqual(['Intro', 'Check']);
+    const [mr, fill] = jf.course.scenes[1].slides.filter(s => s.next === 'question').map(s => s.layers[0].objects.find(o => o.kind === 'question').q);
+    expect(mr.type).toBe('mr'); expect(mr.choices.filter(c => c.correct).map(c => c.text)).toEqual(['a', 'c']);
+    expect(fill).toMatchObject({ type: 'fill', answer: 'Paris' });
+    // Add slides to the first course.
+    const a = await run({ operation: 'append', fileId: out.fileId, source: 'outline', outline: '# One more thing\nWash your hands' });
+    expect(a.status, a.error).toBe('success');
+    expect(a.nodes.c.output.main[0]).toMatchObject({ added: 1, slides: 6 });
+    expect((await call('GET', `/files/${out.fileId}`)).json.course.scenes[0].slides.at(-1).title).toBe('One more thing');
+    // Bad JSON, an empty outline, and a file that isn't a course: plain answers.
+    expect((await run({ source: 'json', json: '{oops' })).error).toMatch(/isn’t valid JSON/);
+    expect((await run({ source: 'outline', outline: '' })).error).toMatch(/no slides/);
+  });
+
+  test('the Editor between steps: the run stops on the data, and goes on with it as edited', async () => {
+    const flow = { nodes: [node('t', 'trigger.manual'), node('e', 'ui.editor', { source: 'data', field: 'draft', title: 'Check the draft' }), node('s', 'core.set', { fields: [{ name: 'out', value: '{{ $json.draft }}!' }], keep: true })], edges: [edge('t', 'e'), edge('e', 's')] };
+    const r = await finished((await call('POST', '/flows/f_ed/run', { flow, input: [{ draft: 'Helo world', topic: 'x' }] })).json.runId);
+    expect(r.status).toBe('success');
+    const card = r.nodes.e.output.editor[0];
+    expect(card).toMatchObject({ kind: 'data', field: 'draft', text: 'Helo world', heading: 'Check the draft' });
+    expect(r.nodes.s?.status ?? 'skipped').toBe('skipped'); // stopped at the Editor
+    // Save & continue: from the Editor, with the edit; the other fields are kept.
+    const c = await finished((await call('POST', '/flows/f_ed/run', { flow, startId: 'e', input: [{ _edited: { ...card, text: 'Hello world' } }] })).json.runId);
+    expect(c.status, c.error).toBe('success');
+    expect(c.nodes.s.output.main[0]).toMatchObject({ draft: 'Hello world', topic: 'x', out: 'Hello world!' });
+    // All the data as JSON: edited items go on; broken JSON is a plain error.
+    const all = { ...flow, nodes: [flow.nodes[0], node('e', 'ui.editor', { source: 'data' }), flow.nodes[2]] };
+    const r2 = await finished((await call('POST', '/flows/f_ed/run', { flow: all, input: [{ draft: 'a' }, { draft: 'b' }] })).json.runId);
+    const card2 = r2.nodes.e.output.editor[0];
+    expect(JSON.parse(card2.text)).toEqual([{ draft: 'a' }, { draft: 'b' }]);
+    const c2 = await finished((await call('POST', '/flows/f_ed/run', { flow: all, startId: 'e', input: [{ _edited: { ...card2, text: '[{"draft":"A"},{"draft":"B"},{"draft":"C"}]' } }] })).json.runId);
+    expect(c2.nodes.s.output.main.map(j => j.out)).toEqual(['A!', 'B!', 'C!']);
+    const bad = await finished((await call('POST', '/flows/f_ed/run', { flow: all, startId: 'e', input: [{ _edited: { ...card2, text: '[{' } }] })).json.runId);
+    expect(bad.error).toMatch(/isn’t valid JSON/);
+  });
+
   test('webhooks and schedules start a saved, active workflow', async () => {
     const flow = {
       active: true,

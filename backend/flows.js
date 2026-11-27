@@ -4,6 +4,7 @@ import { FlowError, runFlow } from './flow-engine.js';
 import { NODE_TYPES } from './flow-nodes.js';
 import { APP_NODES } from './flow-apps.js';
 import { WORKLINE_NODES } from './flow-workline.js';
+import { COURSE_NODES } from './flow-course.js';
 import { POLL_EVERY, TRIGGER_TYPES, formFields } from './flow-triggers.js';
 import { analyseSite } from './reverse-site.js';
 import { MORE_TRIGGERS, cronDue, parseCron } from './flow-more-triggers.js';
@@ -16,7 +17,7 @@ import { TOOL_NODES } from './flow-tools.js';
 import { ACTION_NODES } from './flow-actions.js';
 import { customTypes } from './flow-custom.js';
 
-const TYPES = { ...NODE_TYPES, ...APP_NODES, ...WORKLINE_NODES, ...TRIGGER_TYPES, ...MORE_TRIGGERS, ...EVENT_TRIGGERS, ...WEB_NODES, ...EXTRA_NODES, ...UI_NODES, ...TOOL_NODES, ...ACTION_NODES };
+const TYPES = { ...NODE_TYPES, ...APP_NODES, ...WORKLINE_NODES, ...COURSE_NODES, ...TRIGGER_TYPES, ...MORE_TRIGGERS, ...EVENT_TRIGGERS, ...WEB_NODES, ...EXTRA_NODES, ...UI_NODES, ...TOOL_NODES, ...ACTION_NODES };
 import { DUMMY, checkPassword, hashPassword, limiter, newToken, tokenHash } from './auth.js';
 
 /* Workflows on the server: credentials, runs, webhooks and schedules. A workflow lives in a file
@@ -86,6 +87,8 @@ const UNIT = { minutes: 60_000, hours: 3_600_000, days: 86_400_000 };
 const ID = /^[\w-]{1,80}$/;
 
 // A page's own link name: /p/<name>.
+// The Editor node, and the tool editor nodes (Course editor, Sheet editor…): a run stops at them for an edit.
+const isEditorNode = t => t === 'ui.editor' || String(t).startsWith('ui.edit.');
 export const PAGE_LINK = /^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$/;
 
 export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secret = '', storeOwner = '', brevo = {} }) {
@@ -842,7 +845,7 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
       if (x.run.status === 'running' || !x.finished) return null;
       if (x.run.status !== 'success' || !x.result) return res.status(422).json({ status: 'error', error: x.run.error || 'The workflow failed.' });
       // Stopped at an Editor: the app shows its card, and continues from it (/store/:fileId/continue).
-      const ed = x.flow.nodes.find(n => n.type === 'ui.editor' && x.result.nodes?.[n.id]?.output?.editor?.length);
+      const ed = x.flow.nodes.find(n => isEditorNode(n.type) && x.result.nodes?.[n.id]?.output?.editor?.length);
       if (ed) return res.json({ status: 'edit', nodeId: ed.id, card: x.result.nodes[ed.id].output.editor[0] });
       return res.json({ status: 'success', items: shown(x.flow, x.result) });
     };
@@ -894,7 +897,7 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
       if (storeLimit.blocked(req.ip)) return res.status(429).json({ error: 'rate_limited', message: 'Too many runs from here. Try again in a few minutes.' });
       const flow = await savedFlow(uid, req.params.fileId).catch(() => null);
       if (!flow || !flow.app || !flow.app.published) return res.status(404).json({ error: 'not_found', message: 'That app isn’t published.' });
-      const b = req.body || {}, node = flow.nodes.find(n => n.id === b.nodeId && n.type === 'ui.editor');
+      const b = req.body || {}, node = flow.nodes.find(n => n.id === b.nodeId && isEditorNode(n.type));
       const edited = b.edited && typeof b.edited === 'object' ? b.edited : null;
       if (!node || !edited) return res.status(400).json({ error: 'bad_request', message: 'Nothing to continue.' });
       // Only the Workline file this Editor is set to edit can be saved back (never one the visitor names).

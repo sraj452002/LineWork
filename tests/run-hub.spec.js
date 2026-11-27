@@ -111,6 +111,10 @@ test('the run studio: dropdown, step-by-step runs with input, step output, repla
     await page.getByRole('button', { name: 'Run Greet' }).click();
     await form.getByLabel(/^Name/).fill('Ravi');
     await form.getByRole('button', { name: 'Run' }).click();
+    // The last run's result goes at once: the stage starts over, not replaying the old run.
+    await expect(panel.locator('.rv-result')).toHaveCount(0);
+    await expect(greetStage.locator('.fr-orb.st-active')).toBeVisible();
+    await expect(greetStage.locator('.fr-say')).not.toContainText('All done!');
     await expect(panel.locator('.rv-result')).toContainText('Hi Ravi', { timeout: 20_000 });
     await panel.getByRole('tab', { name: /^History/ }).click();
     await expect(panel.locator('.ws-hist li')).toHaveCount(2, { timeout: 10_000 });

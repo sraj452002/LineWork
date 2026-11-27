@@ -116,7 +116,15 @@ const EMAIL = [{ k: 'to', label: 'To', kind: 'text' }, { k: 'subject', label: 'S
 const LANGS = [['EN-US', 'English (US)'], ['EN-GB', 'English (UK)'], ['HI', 'Hindi'], ['DE', 'German'], ['FR', 'French'], ['ES', 'Spanish'], ['IT', 'Italian'], ['PT-BR', 'Portuguese (Brazil)'], ['NL', 'Dutch'], ['PL', 'Polish'], ['RU', 'Russian'], ['JA', 'Japanese'], ['KO', 'Korean'], ['ZH', 'Chinese'], ['AR', 'Arabic'], ['TR', 'Turkish'], ['ID', 'Indonesian'], ['UK', 'Ukrainian']];
 
 // The small tool groups (Text, Numbers, Dates…) come after Data; Public data at the end.
-export const GROUPS = ['Triggers', 'Workline', 'Flow', 'Data', ...MORE.groups.filter(g => g !== 'Public data'), 'UI', 'Web', 'AI', 'Communication', 'Productivity', 'Developer', 'Sales & payments', 'Storage & feeds', 'Public data'];
+export const GROUPS = ['Triggers', 'Workline', 'Flow', 'Data', ...MORE.groups.filter(g => g !== 'Public data'), 'UI', 'Editors', 'Web', 'AI', 'Communication', 'Productivity', 'Developer', 'Sales & payments', 'Storage & feeds', 'Public data'];
+// The tool editor nodes' settings: what to open (a file from the step before, a Workline file, or a blank one).
+const TOOL_EDIT_FIELDS = [
+  { k: 'source', label: 'What to open', kind: 'select', options: [['input', 'A file from the step before (blank if none)'], ['file', 'One of my Workline files'], ['blank', 'A new, blank one']] },
+  { k: 'input', label: 'File (blank: the first file in the item)', kind: 'text', hint: '{{ $json.file }}', ...only('source', 'input') },
+  { k: 'fileId', label: 'File', kind: 'file', ...only('source', 'file') },
+  { k: 'title', label: 'Heading (and a new file’s name)', kind: 'text', hint: 'Check the course' },
+  { k: 'button', label: 'Button', kind: 'text', hint: 'Save & continue' },
+];
 export const NODES = {
   /* ---- triggers ---- */
   'trigger.manual': { group: 'Triggers', label: 'Run by hand', note: 'Starts when you press Run', icon: I.play, tone: 'green', trigger: true,
@@ -249,6 +257,18 @@ export const NODES = {
       { k: 'title', label: 'Title', kind: 'text', ...only('operation', 'create') },
       { k: 'text', label: 'Text (markdown)', kind: 'textarea', hint: '## {{ $json.title }} … {{ $json.summary }}', ...only('operation', 'append', 'replace', 'create') }],
     defaults: () => ({ operation: 'append' }) },
+  'workline.course': { group: 'Workline', label: 'Workline Course', note: 'Makes a Course Studio course from an outline or JSON (an AI node’s answer), or adds slides to one', icon: I.text, tone: 'brand',
+    fields: [opSel(['create', 'Make a new course'], ['append', 'Add slides to a course']),
+      { k: 'fileId', label: 'Course file', kind: 'file', ...only('operation', 'append') },
+      { k: 'title', label: 'Title (blank: from the outline)', kind: 'text', hint: '{{ $json.topic }}' },
+      { k: 'source', label: 'From', kind: 'select', options: [['outline', 'An outline (one line each)'], ['json', 'JSON (e.g. from an AI node)']] },
+      { k: 'outline', label: 'Outline', kind: 'textarea', hint: '# Why safety matters\n- Wear a helmet\nQ: Which one is safe?\n* Wear a helmet\n- Skip it', ...only('source', 'outline') },
+      { k: 'json', label: 'Course JSON', kind: 'text', hint: '{{ $json.text }}  ({ title, slides: [{ title, bullets }, { question, choices, answer }] })', ...only('source', 'json') },
+      { k: 'titleSlide', label: 'Start with a title slide', kind: 'bool', ...only('operation', 'create') },
+      { k: 'results', label: 'End with a results slide (when it has questions)', kind: 'bool' },
+      { k: 'points', label: 'Points a question', kind: 'number' },
+      { k: 'pass', label: 'Pass mark (%)', kind: 'number', ...only('operation', 'create') }],
+    defaults: () => ({ operation: 'create', source: 'outline', titleSlide: true, results: true, points: 10, pass: 80, outline: 'Course: Workplace safety\n# Why safety matters\n- Accidents cost time and health\n- Most are preventable\n# Your gear\n- Helmet, gloves, boots\nQ: Which one keeps you safe?\n* Wearing a helmet\n- Skipping the gloves' }) },
   'workline.diagram': { group: 'Workline', label: 'Workline Diagram', note: 'Draws a diagram from code in a file, or reads one', icon: I.flow, tone: 'brand',
     fields: [opSel(['write', 'Draw (add or replace)'], ['read', 'Read diagrams']), { k: 'fileId', label: 'File', kind: 'file' },
       { k: 'name', label: 'Diagram (tab) name', kind: 'text', hint: 'a tab with this name is replaced; else one is added' },
@@ -321,9 +341,18 @@ export const NODES = {
     ],
     help: 'When it’s sent, the workflow runs again with { action: this name, form: { answers } }: branch with an IF on {{ $json.action }}. The answers stay filled in.',
     defaults: () => ({ fields: 'Search', button: 'Search', action: 'search' }) },
-  'ui.editor': { group: 'UI', label: 'Editor', note: 'Opens a file in an editor card, then passes the whole edited file on', icon: I.edit, tone: 'sky',
+  'ui.edit.course': { group: 'Editors', label: 'Course editor', note: 'Opens a course (a Storyline .story, a SCORM or Storyline zip, a course file) in the Course editor, or starts a new one', icon: I.text, tone: 'violet', fields: TOOL_EDIT_FIELDS, defaults: () => ({ source: 'input', button: 'Save & continue' }) },
+  'ui.edit.doc': { group: 'Editors', label: 'Doc editor', note: 'Opens a Word .docx, Markdown or text file in the Doc editor, or starts a new doc', icon: I.text, tone: 'violet', fields: TOOL_EDIT_FIELDS, defaults: () => ({ source: 'input', button: 'Save & continue' }) },
+  'ui.edit.sheet': { group: 'Editors', label: 'Sheet editor', note: 'Opens an Excel .xlsx or CSV in the Sheet (formulas, charts), or starts a new sheet', icon: I.table, tone: 'violet', fields: TOOL_EDIT_FIELDS, defaults: () => ({ source: 'input', button: 'Save & continue' }) },
+  'ui.edit.diagram': { group: 'Editors', label: 'Diagram editor', note: 'Opens diagram code or a .sql schema on the Canvas, or starts a new diagram', icon: I.flow, tone: 'violet', fields: TOOL_EDIT_FIELDS, defaults: () => ({ source: 'input', button: 'Save & continue' }) },
+  'ui.edit.code': { group: 'Editors', label: 'Code editor', note: 'Opens a code or text file in the code editor (VS Code’s), or starts a new one', icon: I.code, tone: 'violet', fields: TOOL_EDIT_FIELDS, defaults: () => ({ source: 'input', button: 'Save & continue' }) },
+  'ui.edit.flow': { group: 'Editors', label: 'Workflow editor', note: 'Opens a Workline or n8n workflow .json in the Workflow editor, or starts a new one', icon: I.flow, tone: 'violet', fields: TOOL_EDIT_FIELDS, defaults: () => ({ source: 'input', button: 'Save & continue' }) },
+  'ui.editor': { group: 'UI', label: 'Editor', note: 'Stops the run so you can check or change a file or the data, then goes on with it', icon: I.edit, tone: 'sky',
     fields: [
-      { k: 'source', label: 'Which file', kind: 'select', options: [['input', 'A file from the step before'], ['file', 'One of my Workline files'], ['upload', 'An upload box on a page (Page workflows)']] },
+      { k: 'source', label: 'What to edit', kind: 'select', options: [['input', 'A file from the step before'], ['data', 'The data from the step before (check or change it, then go on)'], ['file', 'One of my Workline files'], ['upload', 'An upload box on a page (Page workflows)']] },
+      { k: 'open', label: 'Open it in', kind: 'select', options: [['card', 'A quick card (text or cells)'], ['tool', 'The full Workline tool (Course, Doc, Sheet, Diagram, Code, Workflow)']], ...only('source', 'input', 'file') },
+      { k: 'view', label: 'Tool', kind: 'select', options: [['auto', 'Find out from the file'], ['course', 'Course'], ['doc', 'Doc'], ['sheet', 'Sheet'], ['canvas', 'Diagram'], ['code', 'Code'], ['flow', 'Workflow']], ...only('open', 'tool') },
+      { k: 'field', label: 'Field (blank: all the data, as JSON)', kind: 'text', hint: 'outline', ...only('source', 'data') },
       { k: 'input', label: 'File (blank: the first file in the item)', kind: 'text', hint: '{{ $json.file }}', ...only('source', 'input') },
       { k: 'fileId', label: 'File', kind: 'file', ...only('source', 'file') },
       { k: 'part', label: 'What to edit', kind: 'select', ...only('source', 'file'), options: [['auto', 'Find out from the file'], ['doc', 'The doc (text)'], ['sheet', 'A sheet (cells)'], ['diagram', 'A diagram’s code'], ['code', 'A code file']] },

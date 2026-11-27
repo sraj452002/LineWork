@@ -201,8 +201,82 @@ const toCsv = (cells, sep = ',') => {
 const MIME = { js: 'text/javascript', mjs: 'text/javascript', ts: 'text/plain', jsx: 'text/plain', tsx: 'text/plain', py: 'text/x-python', html: 'text/html', css: 'text/css', json: 'application/json', md: 'text/markdown', csv: 'text/csv', xml: 'application/xml', svg: 'image/svg+xml', yml: 'text/yaml', yaml: 'text/yaml', sql: 'text/plain', txt: 'text/plain' };
 const mimeOf = path => MIME[(String(path).split('.').pop() || '').toLowerCase()] || 'text/plain';
 
+// The data from the step before, to check or change (Editor “Which: The data from the step before”): all
+// the items as JSON, or one field of the first item as text. Save & continue passes the edited data on.
+const JSON_MAX = 400_000;
+function editData(args, p, item) {
+  const e = item._edited;
+  if (e && typeof e === 'object' && e.kind === 'data') {
+    if (e.field) {
+      const base = e.base && typeof e.base === 'object' ? e.base : {};
+      return { main: [{ json: { ...base, [e.field]: String(e.text ?? '').replace(/\r\n?/g, '\n') } }] };
+    }
+    let v;
+    try { v = JSON.parse(String(e.text ?? '')); } catch (x) { throw new FlowError(`The edited data isn’t valid JSON (${x.message}). Run it again and fix it in the card.`, 'bad_param'); }
+    const list = Array.isArray(v) ? v : [v];
+    return { main: list.map(j => ({ json: j && typeof j === 'object' && !Array.isArray(j) ? j : { value: j } })) };
+  }
+  const items = args.items.map(i => i.json || {});
+  const field = String(p.field || '').trim();
+  let card;
+  if (field) {
+    const base = items[0] || {}, v = base[field];
+    card = { kind: 'data', field, base, text: v == null ? '' : typeof v === 'object' ? JSON.stringify(v, null, 2) : String(v), name: field, mono: typeof v === 'object' };
+  } else {
+    const text = JSON.stringify(items.length === 1 ? items[0] : items, null, 2);
+    if (text.length > JSON_MAX) throw new FlowError('That’s too much data to edit in a card (over 400 KB). Pick one field to edit (Field), or fewer items.', 'too_big');
+    card = { kind: 'data', text, name: items.length === 1 ? 'The data' : `${items.length} items`, mono: true };
+  }
+  card.title = card.name;
+  return { main: [], editor: [{ json: { ...card, button: p.button || 'Save & continue', heading: p.title || '' } }] };
+}
+
+/* The full Workline tool for a file (Editor “Open in: the full Workline tool”, and the Course / Doc / Sheet /
+   Diagram / Code / Workflow editor nodes): the run stops and the app opens the file in its own tool (the
+   Course editor for a course, the Sheet for a spreadsheet…). The app turns the file into a Workline file and,
+   on Save & continue, back into a file of its kind ({_edited: {tool, file}}); a Workline file is saved back. */
+export const TOOL_VIEWS = ['course', 'doc', 'sheet', 'canvas', 'code', 'flow'];
+const TOOL_MAX = 20 * 2 ** 20;
+const isUpload = v => v && typeof v === 'object' && typeof v.data === 'string' && typeof v.name === 'string';
+async function toolEditor(args, p, view) {
+  const item = args.items[0]?.json || {}, e = item._edited;
+  const want = TOOL_VIEWS.includes(view) ? view : TOOL_VIEWS.includes(p.view) ? p.view : 'auto';
+  if (e && typeof e === 'object' && e.tool) {
+    let fileId = null;
+    // Only the Workline file this node is set to edit is saved back (never one the edit names).
+    if (p.source === 'file' && e.wfile && typeof e.wfile === 'object' && p.fileId) {
+      const f = await fileOf(args, p.fileId);
+      const next = { ...e.wfile, id: f.id, created: f.created };
+      if (JSON.stringify(next).length > 4_000_000) throw new FlowError(`“${f.title}” would be over 4 MB.`, 'too_large');
+      await args.ctx.files.save(next); fileId = f.id;
+    }
+    const file = isUpload(e.file) ? { name: String(e.file.name).slice(0, 200), type: String(e.file.type || 'application/octet-stream').slice(0, 120), size: Number(e.file.size) || Math.round(e.file.data.length * 0.75), data: e.file.data } : null;
+    if (file && file.data.length > TOOL_MAX * 1.4) throw new FlowError('The edited file is over 20 MB.', 'too_large');
+    return { main: [{ json: { file, name: file?.name || '', kind: e.view || want, ...(fileId ? { fileId } : {}), saved: true } }] };
+  }
+  const card = { tool: true, view: want, button: p.button || 'Save & continue', heading: p.title || '' };
+  if (p.source === 'file') {
+    const f = await fileOf(args, p.fileId);
+    Object.assign(card, { wfile: f, fileId: f.id, name: f.title, title: f.title });
+  } else if (p.source === 'blank') {
+    Object.assign(card, { blank: true, name: p.title || 'Untitled', title: p.title || 'Untitled' });
+  } else {
+    const up = isUpload(p.input) ? p.input : fileIn(item);
+    if (!up) {
+      if (want === 'auto') throw new FlowError('No file reached the Editor. Add a file field to Run by hand (like “File* (file)”), or set its File to {{ $json.yourField }}.', 'missing');
+      Object.assign(card, { blank: true, name: p.title || 'Untitled', title: p.title || 'Untitled' });
+    } else {
+      if (up.data.length > TOOL_MAX * 1.4) throw new FlowError(`“${up.name}” is over 20 MB: too big to open here.`, 'too_large');
+      Object.assign(card, { upload: { name: up.name, type: up.type || '', size: up.size || 0, data: up.data }, name: up.name, title: up.name });
+    }
+  }
+  return { main: [], editor: [{ json: card }] };
+}
+
 async function editInApp(args, p) {
   const item = args.items[0]?.json || {};
+  if (p.open === 'tool' || item._edited?.tool) return toolEditor(args, p);
+  if (p.source === 'data' || item._edited?.kind === 'data') return editData(args, p, item);
   if (item._edited && typeof item._edited === 'object') {
     const e = item._edited, cells = e.cells && typeof e.cells === 'object' ? e.cells : {}, text = String(e.text ?? '').replace(/\r\n?/g, '\n');
     let file;
@@ -310,7 +384,7 @@ export const UI_NODES = {
     // Not on a page (Run, Run by hand, a schedule…): the run stops here and the app shows an editor card.
     // “Save & continue” runs it again from this node with what was edited ({_edited}): the node then gives
     // the whole file, edited, to the next steps (and saves a Workline file back).
-    if (page.action == null) return editInApp(args, p);
+    if (page.action == null || p.source === 'data' || p.open === 'tool') return editInApp(args, p);
     let f, qs = '';
     if (p.source === 'upload') {
       // A file uploaded here: the upload box until one is sent, then its editor (on its own link).
@@ -467,3 +541,6 @@ ${blocks.map(b => { const html = block(b, query); return html ? `<div class="nod
 <footer>Made with Workline</footer>
 </main></body></html>`;
 }
+
+// The tool editor nodes: one per Workline tool, the file (or a blank one) opened in that tool.
+for (const v of TOOL_VIEWS) UI_NODES[`ui.edit.${v === 'canvas' ? 'diagram' : v}`] = { run: async args => toolEditor(args, first(args), v) };

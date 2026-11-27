@@ -14,6 +14,8 @@ const word = n => (n === 1 ? 'step' : 'steps');
 const took = secs => { const v = parseFloat(secs); return !secs || Number.isNaN(v) ? '' : v < 1 ? ' in under a second' : ` in ${v.toFixed(1)} seconds`; };
 export function FriendlyRun({ steps, run, done, title, secs, failed, onReplay, onResult, onFix, wantsInput, last, onWatch, waiting, onEdit }) {
   const [all, setAll] = useState(false);
+  // Each run starts with its steps folded again.
+  useEffect(() => { setAll(false); }, [run?.id]);
   const doneSteps = steps.filter(s => s.st === 'success');
   const active = steps.find(s => s.st === 'active');
   const seen = steps.filter(s => s.st !== 'skipped' && s.st !== 'unreached');
@@ -30,7 +32,9 @@ export function FriendlyRun({ steps, run, done, title, secs, failed, onReplay, o
     if (state !== 'active') return undefined;
     setT0(Date.now()); setNow(Date.now());
     const t = setInterval(() => setNow(Date.now()), 100); return () => clearInterval(t);
-  }, [state, run?.id]);
+    // (From when it went active: the press of Run, or Watch again. Not restarted when the starting run gets
+    // its id from the server.)
+  }, [state]);
   const clock = state === 'active' ? Math.max(0, (now - t0) / 1000).toFixed(1) + 's' : '';
   // The track: every step that runs as a stop on a line, a light running along it to the step at work.
   // Long workflows show a window of 9 stops around the current one.

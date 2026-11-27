@@ -187,14 +187,16 @@ export default function RunHub({ files, q = '', onOpen, onUpdate, menuHidden, on
   const finished = !!shown && shown.status !== 'running';
   const playing = !!shown && upto < reached;
   const done = !!shown && finished && !playing;
-  // Play the run back one step at a time.
+  // Play the run back one step at a time. (Keyed on the run and how far it has got, not on each poll's
+  // fresh copy of it: a poll mustn't restart the step that's playing, or the animation stalls while it runs.)
+  const shownRef = useRef(shown); shownRef.current = shown;
   useEffect(() => {
-    if (!shown || upto >= reached) return undefined;
+    if (!shownRef.current || upto >= reached) return undefined;
     // Steps that didn't run (a branch not taken) pass in a blink; the ones that ran take their turn.
-    const quick = ['skipped', 'unreached'].includes(shown.nodes?.[pipe[upto]?.id]?.status);
+    const quick = ['skipped', 'unreached'].includes(shownRef.current.nodes?.[pipe[upto]?.id]?.status);
     const t = setTimeout(() => setUpto(u => Math.min(u + 1, reached)), upto === 0 ? 300 : quick ? 40 : STEP_MS);
     return () => clearTimeout(t);
-  }, [shown, upto, reached]);
+  }, [shown?.id, upto, reached]); // eslint-disable-line react-hooks/exhaustive-deps
   // A run that has just played to a happy end: confetti from its last step.
   useEffect(() => {
     if (!done || shown.status !== 'success' || upto === Infinity || editorWaiting(sel?.flow, shown)) return;
@@ -220,6 +222,10 @@ export default function RunHub({ files, q = '', onOpen, onUpdate, menuHidden, on
     const start = startId ? { id: startId } : startOf(file.flow);
     if (!start) { toast('Add a trigger to this workflow first (Run by hand is fine).'); return; }
     setSelId(file.id); setBusy(file.id); setPickStep(null); setUpto(0); setTab(null); setQuiet(false);
+    // A fresh start: the last run's result, error, fix card and Editor card go at once (not when the
+    // server answers), so nothing of it plays again or stays on screen while the new run starts.
+    setEditing(null); setCreds(null); setCredPick('');
+    setRun({ id: 'starting', fileId: file.id, status: 'running', nodes: {} });
     try {
       const id = await startRun(file.id, file.flow, start.id, input);
       let r = { id, fileId: file.id, status: 'running', nodes: {} };
@@ -229,7 +235,7 @@ export default function RunHub({ files, q = '', onOpen, onUpdate, menuHidden, on
         r = await getRun(id);
         setRun(r);
       }
-    } catch (e) { toast(e.message || 'Couldn’t run the workflow.'); }
+    } catch (e) { setRun(null); toast(e.message || 'Couldn’t run the workflow.'); }
     setBusy(null);
     loadRuns(file.id);
   };
