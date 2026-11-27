@@ -4,6 +4,7 @@ import { FlowError, runFlow } from './flow-engine.js';
 import { NODE_TYPES } from './flow-nodes.js';
 import { APP_NODES } from './flow-apps.js';
 import { WORKLINE_NODES } from './flow-workline.js';
+import { COURSE_NODES } from './flow-course.js';
 import { POLL_EVERY, TRIGGER_TYPES, formFields } from './flow-triggers.js';
 import { analyseSite } from './reverse-site.js';
 import { MORE_TRIGGERS, cronDue, parseCron } from './flow-more-triggers.js';
@@ -16,7 +17,7 @@ import { TOOL_NODES } from './flow-tools.js';
 import { ACTION_NODES } from './flow-actions.js';
 import { customTypes } from './flow-custom.js';
 
-const TYPES = { ...NODE_TYPES, ...APP_NODES, ...WORKLINE_NODES, ...TRIGGER_TYPES, ...MORE_TRIGGERS, ...EVENT_TRIGGERS, ...WEB_NODES, ...EXTRA_NODES, ...UI_NODES, ...TOOL_NODES, ...ACTION_NODES };
+const TYPES = { ...NODE_TYPES, ...APP_NODES, ...WORKLINE_NODES, ...COURSE_NODES, ...TRIGGER_TYPES, ...MORE_TRIGGERS, ...EVENT_TRIGGERS, ...WEB_NODES, ...EXTRA_NODES, ...UI_NODES, ...TOOL_NODES, ...ACTION_NODES };
 import { DUMMY, checkPassword, hashPassword, limiter, newToken, tokenHash } from './auth.js';
 
 /* Workflows on the server: credentials, runs, webhooks and schedules. A workflow lives in a file

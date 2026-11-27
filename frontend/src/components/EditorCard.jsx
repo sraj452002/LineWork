@@ -6,7 +6,7 @@ import { useMemo, useState } from 'react';
    goes on from the Editor, which gives the whole file, edited, to the next steps. */
 const COL = n => { let s = ''; for (n += 1; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + ((n - 1) % 26)) + s; return s; };
 const addr = a => { const m = /^([A-Z]+)(\d+)$/.exec(a); if (!m) return null; let c = 0; for (const ch of m[1]) c = c * 26 + ch.charCodeAt(0) - 64; return { c: c - 1, r: Number(m[2]) - 1 }; };
-const KIND = { sheet: 'Sheet', doc: 'Doc', code: 'Code', diagram: 'Diagram' };
+const KIND = { sheet: 'Sheet', doc: 'Doc', code: 'Code', diagram: 'Diagram', data: 'Data' };
 
 export default function EditorCard({ card, onSave, onClose }) {
   const sheet = card.kind === 'sheet';
@@ -18,12 +18,19 @@ export default function EditorCard({ card, onSave, onClose }) {
   const [rows, setRows] = useState(size.rows), [cols, setCols] = useState(size.cols);
   const [cells, setCells] = useState(() => ({ ...(card.cells || {}) }));
   const [text, setText] = useState(card.text || '');
-  const save = e => { e.preventDefault(); onSave(sheet ? { cells } : { text }); };
+  const [bad, setBad] = useState('');
+  // Data as JSON (not one field): checked here, so a typo is fixed before the run goes on.
+  const json = card.kind === 'data' && !card.field;
+  const save = e => {
+    e.preventDefault();
+    if (json) { try { JSON.parse(text); } catch (x) { setBad(`That isn’t valid JSON: ${x.message}`); return; } }
+    onSave(sheet ? { cells } : { text });
+  };
   return (
     <div className="modal" onPointerDown={e => { if (e.target === e.currentTarget) onClose(); }}>
       <form className={`mbox ed-card k-${card.kind || 'doc'}`} role="dialog" aria-modal="true" aria-label={`Edit ${card.name}`} onSubmit={save} onKeyDown={e => { if (e.key === 'Escape') onClose(); }}>
         <header className="ed-card-head">
-          <i className="ed-card-ico" aria-hidden="true">{{ sheet: '▦', doc: '¶', code: '</>', diagram: '◇' }[card.kind] || '✎'}</i>
+          <i className="ed-card-ico" aria-hidden="true">{{ sheet: '▦', doc: '¶', code: '</>', diagram: '◇', data: '{ }' }[card.kind] || '✎'}</i>
           <div className="ed-card-ttl"><h3>{card.heading || card.title || card.name}</h3><small>{card.name} <b className="ed-card-kind">{KIND[card.kind] || 'File'}</b></small></div>
           <button type="button" className="rs-ib" aria-label="Close" onClick={onClose}>×</button>
         </header>
@@ -46,10 +53,11 @@ export default function EditorCard({ card, onSave, onClose }) {
             </div>
           </>
         ) : (
-          <textarea className={'ed-card-text' + (card.kind === 'doc' ? '' : ' mono')} aria-label={card.name} spellCheck={card.kind === 'doc'} value={text} onChange={e => setText(e.target.value)} autoFocus />
+          <textarea className={'ed-card-text' + (card.kind === 'doc' || (card.kind === 'data' && !card.mono) ? '' : ' mono')} aria-label={card.name} spellCheck={card.kind === 'doc' || (card.kind === 'data' && !card.mono)} value={text} onChange={e => { setText(e.target.value); setBad(''); }} autoFocus aria-invalid={!!bad} />
         )}
+        {bad && <p className="rev-err" role="alert">{bad}</p>}
         <footer className="ed-card-foot">
-          <span className="muted">{card.fileId ? `Saves back to “${card.title}”, then the workflow goes on.` : 'The workflow goes on with the edited file.'}</span>
+          <span className="muted">{card.fileId ? `Saves back to “${card.title}”, then the workflow goes on.` : card.kind === 'data' ? 'The workflow goes on with the data as you leave it.' : 'The workflow goes on with the edited file.'}</span>
           <button type="button" className="btn" onClick={onClose}>Cancel</button>
           <button className="btn primary ed-card-go">{card.button || 'Save & continue'}</button>
         </footer>

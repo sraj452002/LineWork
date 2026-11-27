@@ -601,6 +601,16 @@ const WORKFLOWS = [
     ];
     return flowFile('Failure alerts', nodes);
   } },
+  { k: 'w-course', name: 'Course from a topic', note: 'AI drafts a course outline, you check it in the Editor, and it becomes a Course Studio course with a quiz', make: () => {
+    const nodes = [
+      node('trigger.manual', 'Topic', 80, { fields: 'Topic*\nWho it’s for' }),
+      node('ai.claude', 'Draft the course', 340, { system: 'You write short e-learning courses as an outline, nothing else. The format, one thing a line: “Course: the title”, then for each slide “# Slide title” and 2-4 lines starting with “- ”, then 2-3 questions as “Q: the question” with choices “* right answer” and “- wrong answer”.',
+        prompt: 'A course of about 6 slides on: {{ $json.topic }}. For: {{ $json.whoItSFor || "everyone" }}. End with 3 questions.' }),
+      node('ui.editor', 'Check the outline', 600, { source: 'data', field: 'text', title: 'Check the course outline', button: 'Make the course' }),
+      node('workline.course', 'Make the course', 860, { operation: 'create', source: 'outline', outline: '{{ $json.text }}', titleSlide: true, results: true, points: 10, pass: 80 }),
+    ];
+    return flowFile('Course from a topic', nodes);
+  } },
   { k: 'w-editor', name: 'Edit any file', note: 'Pick a file, edit it in a card right here, get the edited file back in the same format', make: () => {
     const nodes = [
       node('trigger.manual', 'Pick a file', 80, { fields: 'File* (file)' }),
