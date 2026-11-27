@@ -5,7 +5,7 @@ import { ObjArt, Thumb, boxStyle, defaultsOf, lookOf } from './CourseArt.jsx';
 import { storyDetails, storyNote } from './CourseStudio.jsx';
 import {
   ACTIONS, ANIMS, BUILTIN_VARS, EVENTS, KINDS, OPS, QTYPES, STATES, allSlides, cloneSlide, courseHtml, findSlide, interpolate,
-  TRANSITIONS, appendCourse, courseFile, newCourse, newLayer, newObject, newScene, newSlide, pictureUrl, readCourse, scormZip,
+  TRANSITIONS, appendCourse, courseFile, feedbackOf, newCourse, newLayer, newObject, newScene, newSlide, pictureUrl, readCourse, scormZip,
 } from '../lib/course.js';
 
 /* The Course view: e-learning made of scenes and slides (see lib/course.js), laid out like a desktop authoring
@@ -58,17 +58,39 @@ const ICO = {
   import: '<path d="M6 4h13l7 7v17H6z" fill="#fff" stroke="#6b7591"/><path d="M16 12v11M11 18l5 5 5-5" stroke="#3d6fd6" stroke-width="2.2" fill="none"/>',
   export: '<path d="M6 4h13l7 7v17H6z" fill="#fff" stroke="#6b7591"/><path d="M16 23V12M11 17l5-5 5 5" stroke="#17a05b" stroke-width="2.2" fill="none"/>',
 };
+Object.assign(ICO, {
+  banks: '<path d="M4 12L16 5l12 7z" fill="#e9ebf3" stroke="#6b7591"/><path d="M7 13v11M12 13v11M20 13v11M25 13v11M4 26h24" stroke="#6b7591" stroke-width="1.6"/><text x="16" y="22" font-size="9" font-weight="700" text-anchor="middle" fill="#b07d00">?</text>',
+  record: '<rect x="3" y="7" width="22" height="15" rx="2" fill="#fff" stroke="#6b7591"/><path d="M10 26h8M14 22v4" stroke="#6b7591"/><circle cx="25" cy="9" r="4.5" fill="#e5484d"/>',
+  slideLayer: '<rect x="8" y="4" width="20" height="15" rx="1.5" fill="#fff" stroke="#6b7591"/><rect x="4" y="10" width="20" height="15" rx="1.5" fill="#dfe8fb" stroke="#3d6fd6"/>',
+  freeform: '<rect x="4" y="5" width="24" height="20" rx="2" fill="#fff" stroke="#6b7591"/><path d="M11 13l4 8 1.5-3.5 3.5-1.5z" fill="#1f2433"/><path d="M20 8l1 2 2 .5-2 .5-1 2-1-2-2-.5 2-.5z" fill="#f5b400"/>',
+  zoomRegion: '<rect x="3" y="6" width="26" height="19" rx="2" fill="#fff" stroke="#6b7591"/><rect x="12" y="11" width="11" height="8" fill="none" stroke="#3d6fd6" stroke-width="1.6" stroke-dasharray="2 1.5"/>',
+  character: '<circle cx="16" cy="10" r="5" fill="#f2c9a5" stroke="#9a6b47"/><path d="M7 28c0-6 4-10 9-10s9 4 9 10" fill="#4f5bd5"/>',
+  caption: '<path d="M4 6h24v14H14l-6 5v-5H4z" fill="#fff4dc" stroke="#d99a00"/><path d="M8 11h16M8 15h10" stroke="#b07d00"/>',
+  web: '<circle cx="16" cy="16" r="11" fill="#eef4ff" stroke="#3d6fd6" stroke-width="1.6"/><path d="M5 16h22M16 5c4 4 4 18 0 22M16 5c-4 4-4 18 0 22" stroke="#3d6fd6" fill="none"/>',
+  table: '<rect x="4" y="6" width="24" height="20" rx="1.5" fill="#fff" stroke="#6b7591"/><path d="M4 12h24M4 19h24M12 6v20M20 6v20" stroke="#6b7591"/>',
+  slider: '<path d="M4 16h24" stroke="#6b7591" stroke-width="2.4" stroke-linecap="round"/><circle cx="13" cy="16" r="5" fill="#3d6fd6"/>',
+  dial: '<circle cx="16" cy="17" r="10" fill="#fff" stroke="#6b7591" stroke-width="1.6"/><path d="M16 17l5-6" stroke="#3d6fd6" stroke-width="2.4" stroke-linecap="round"/><circle cx="16" cy="17" r="2" fill="#3d6fd6"/>',
+  marker: '<path d="M16 28s9-9 9-15a9 9 0 0 0-18 0c0 6 9 15 9 15z" fill="#e5484d"/><circle cx="16" cy="13" r="3.5" fill="#fff"/>',
+  templates: '<rect x="4" y="5" width="24" height="22" rx="2" fill="#fff" stroke="#6b7591"/><rect x="7" y="8" width="18" height="5" fill="#dfe8fb"/><rect x="7" y="15" width="8" height="9" fill="#dfe8fb"/><path d="M18 16h7M18 20h7M18 24h4" stroke="#6b7591"/>',
+  graded: '<rect x="5" y="4" width="22" height="24" rx="2" fill="#fff" stroke="#6b7591"/><path d="M9 11l2 2 4-4M9 19l2 2 4-4" stroke="#17a05b" stroke-width="2" fill="none"/><path d="M18 11h6M18 19h6" stroke="#6b7591"/>',
+  survey: '<rect x="5" y="4" width="22" height="24" rx="2" fill="#fff" stroke="#6b7591"/><circle cx="16" cy="14" r="6" fill="#eef4ff" stroke="#3d6fd6"/><text x="16" y="17.5" font-size="9" font-weight="700" text-anchor="middle" fill="#3d6fd6">?</text><path d="M10 24h12" stroke="#6b7591"/>',
+  results: '<rect x="5" y="4" width="22" height="24" rx="2" fill="#fff" stroke="#6b7591"/><path d="M10 20l4-5 3 3 5-7" stroke="#e5484d" stroke-width="2" fill="none"/><path d="M9 24h14" stroke="#6b7591"/>',
+  gear: '<circle cx="16" cy="16" r="4" fill="none" stroke="#6b7591" stroke-width="2"/><path d="M16 4v4M16 24v4M4 16h4M24 16h4M7.5 7.5l2.8 2.8M21.7 21.7l2.8 2.8M7.5 24.5l2.8-2.8M21.7 10.3l2.8-2.8" stroke="#6b7591" stroke-width="2"/>',
+});
 const TR_ICON = { none: '<rect x="4" y="7" width="24" height="18" rx="2" fill="#fff" stroke="#6b7591"/><path d="M8 25L24 7" stroke="#c0353a" stroke-width="2"/>', fade: '<rect x="4" y="7" width="24" height="18" rx="2" fill="url(#f)" stroke="#6b7591"/><defs><linearGradient id="f" x1="0" x2="1"><stop offset="0" stop-color="#3d6fd6" stop-opacity=".1"/><stop offset="1" stop-color="#3d6fd6"/></linearGradient></defs>', push: '<rect x="4" y="7" width="14" height="18" fill="#dfe8fb" stroke="#3d6fd6"/><rect x="18" y="7" width="10" height="18" fill="#3d6fd6"/><path d="M8 16h6M12 13l3 3-3 3" stroke="#3d6fd6" stroke-width="1.6" fill="none"/>', pushUp: '<rect x="4" y="7" width="24" height="11" fill="#dfe8fb" stroke="#3d6fd6"/><rect x="4" y="18" width="24" height="7" fill="#3d6fd6"/>', cover: '<rect x="4" y="7" width="24" height="18" fill="#dfe8fb" stroke="#6b7591"/><rect x="4" y="7" width="15" height="18" fill="#3d6fd6"/>', zoom: '<rect x="4" y="7" width="24" height="18" rx="2" fill="#fff" stroke="#6b7591"/><rect x="11" y="12" width="10" height="8" fill="#3d6fd6"/><path d="M7 10l3 3M25 10l-3 3M7 22l3-3M25 22l-3-3" stroke="#3d6fd6"/>' };
 const AN_ICON = { none: TR_ICON.none, fade: '<circle cx="16" cy="16" r="10" fill="#3d6fd6" opacity=".35"/><circle cx="16" cy="16" r="6" fill="#3d6fd6"/>', 'fly-left': '<rect x="15" y="10" width="12" height="12" rx="2" fill="#3d6fd6"/><path d="M4 16h8M9 13l3 3-3 3" stroke="#6b7591" stroke-width="2" fill="none"/>', 'fly-right': '<rect x="5" y="10" width="12" height="12" rx="2" fill="#3d6fd6"/><path d="M28 16h-8M23 13l-3 3 3 3" stroke="#6b7591" stroke-width="2" fill="none"/>', 'fly-up': '<rect x="10" y="5" width="12" height="12" rx="2" fill="#3d6fd6"/><path d="M16 28v-8M13 23l3-3 3 3" stroke="#6b7591" stroke-width="2" fill="none"/>', 'fly-down': '<rect x="10" y="15" width="12" height="12" rx="2" fill="#3d6fd6"/><path d="M16 4v8M13 9l3 3 3-3" stroke="#6b7591" stroke-width="2" fill="none"/>', zoom: '<rect x="11" y="11" width="10" height="10" rx="2" fill="#3d6fd6"/><rect x="6" y="6" width="20" height="20" rx="3" fill="none" stroke="#3d6fd6" stroke-dasharray="3 2"/>', spin: '<rect x="10" y="10" width="12" height="12" rx="2" fill="#3d6fd6" transform="rotate(25 16 16)"/><path d="M6 12a11 11 0 0 1 16-6" stroke="#6b7591" stroke-width="2" fill="none"/>', bounce: '<circle cx="16" cy="9" r="5" fill="#3d6fd6"/><path d="M6 27h20M12 21q4-6 8 0" stroke="#6b7591" stroke-width="2" fill="none"/>' };
 const Svg = ({ d, s = 32 }) => <svg viewBox="0 0 32 32" width={s} height={s} fill="none" strokeWidth="1.4" aria-hidden="true" dangerouslySetInnerHTML={{ __html: d }} />;
-function Big({ icon, label, onClick, menu, on, disabled, small }) {
+const SOON = 'Not in Course Studio yet';
+function Big({ icon, label, onClick, menu, on, disabled, small, title }) {
   return (
-    <button type="button" className={'sl-big' + (on ? ' on' : '') + (small ? ' small' : '')} onClick={e => onClick?.(e.currentTarget)} disabled={disabled} aria-haspopup={menu ? 'menu' : undefined} aria-pressed={on === undefined ? undefined : !!on}>
+    <button type="button" className={'sl-big' + (on ? ' on' : '') + (small ? ' small' : '')} onClick={e => onClick?.(e.currentTarget)} disabled={disabled} title={title || (disabled ? SOON : undefined)} aria-haspopup={menu ? 'menu' : undefined} aria-pressed={on === undefined ? undefined : !!on}>
       <Svg d={icon} s={small ? 20 : 26} />
       <span>{label}{menu && <i aria-hidden="true"> ▾</i>}</span>
     </button>
   );
 }
+// A small ribbon button (an icon and a word), in a column of two or three.
+const Sm = ({ icon, label, onClick, disabled, menu }) => <button className="sl-sm" onClick={e => onClick?.(e.currentTarget)} disabled={disabled} title={disabled ? SOON : undefined} aria-haspopup={menu ? 'menu' : undefined}>{icon && <Svg d={icon} s={16} />}{label}{menu && <i aria-hidden="true"> ▾</i>}</button>;
 const Group = ({ label, children }) => <div className="sl-group" role="group" aria-label={label}><div className="sl-gbody">{children}</div><span className="sl-glabel">{label}</span></div>;
 const TABS = ['HOME', 'INSERT', 'SLIDES', 'DESIGN', 'TRANSITIONS', 'ANIMATIONS', 'VIEW', 'HELP'];
 const readPref = (k, d) => { try { return localStorage.getItem(k) || d; } catch (e) { return d; } };
@@ -159,6 +181,17 @@ export default function CourseView({ file, update, visible = true }) {
       sc.slides.splice(at, 0, s);
     });
     setSlideId(s.id); setLayerId(null); setSel(null);
+  };
+  // A question slide of a kind (Graded Question), or a survey (no right answer, no points).
+  const addQuestionSlide = (qt, survey) => {
+    const sl = newSlide(survey ? 'Survey question' : 'Question', 'question');
+    const q = sl.layers[0].objects.find(o => o.kind === 'question').q;
+    q.type = qt;
+    if (qt === 'tf') q.choices = [{ id: rid('c'), text: 'True', correct: true }, { id: rid('c'), text: 'False', correct: false }];
+    if (qt === 'fill') { q.answer = 'answer'; q.choices = []; }
+    if (survey) { q.points = 0; q.choices.forEach(c => { c.correct = true; }); q.right = 'Thanks for your answer.'; q.wrong = 'Thanks for your answer.'; q.prompt = 'How sure do you feel about this?'; }
+    write(c => { const sc = c.scenes.find(x => x.id === here.sc.id); sc.slides.splice(here.i + 1, 0, sl); });
+    setSlideId(sl.id); setLayerId(null); setSel(null);
   };
   const addScene = () => { const sc = newScene(`Scene ${course.scenes.length + 1}`, [newSlide('Untitled slide', 'blank')]); write(c => { c.scenes.push(sc); }); setSlideId(sc.slides[0].id); };
   const dupSlide = x => { const n = cloneSlide(x.s); n.title += ' copy'; write(c => { const sc = c.scenes.find(s => s.id === x.sc.id); sc.slides.splice(sc.slides.findIndex(s => s.id === x.s.id) + 1, 0, n); }); setSlideId(n.id); };
@@ -290,26 +323,33 @@ export default function CourseView({ file, update, visible = true }) {
   /* ---- the ribbon ---- */
   const ribbonBody = {
     HOME: <>
-      <Group label="Clipboard"><Big icon={ICO.paste} label="Paste" onClick={pasteObj} /><div className="sl-col"><button className="sl-sm" onClick={cutObj} disabled={!obj}>✂ Cut</button><button className="sl-sm" onClick={copyObj} disabled={!obj}>⧉ Copy</button></div></Group>
-      <Group label="Scenes"><Big icon={ICO.scene} label="New Scene" onClick={addScene} /><Big icon={ICO.flag} label="Starting Scene" on={false} onClick={btn => popup(btn, course.scenes.map(sc => ({ label: (sc.id === startScene ? '✓ ' : '') + sc.name, act: () => write(c => { c.start = sc.id; }) })))} menu /></Group>
-      <Group label="Slide"><Big icon={ICO.slide} label="New Slide" onClick={newSlideMenu} menu /><div className="sl-col"><button className="sl-sm" onClick={() => dupSlide(here)}>⧉ Duplicate</button><button className="sl-sm" onClick={() => delSlide(here)}>🗑 Delete</button></div></Group>
+      <Group label="Clipboard"><Big icon={ICO.paste} label="Paste" onClick={pasteObj} /><div className="sl-col"><Sm label="✂ Cut" onClick={cutObj} disabled={!obj} /><Sm label="⧉ Copy" onClick={copyObj} disabled={!obj} /></div></Group>
+      <Group label="Scenes"><Big icon={ICO.scene} label="New Scene" onClick={addScene} /><Big icon={ICO.flag} label="Starting Scene" on={false} onClick={btn => popup(btn, course.scenes.map(sc => ({ label: (sc.id === startScene ? '✓ ' : '') + sc.name, act: () => write(c => { c.start = sc.id; }) })))} menu /><Big icon={ICO.banks} label="Question Banks" disabled menu /></Group>
+      <Group label="Slide"><Big icon={ICO.slide} label="New Slide" onClick={newSlideMenu} menu /><div className="sl-col"><Sm icon={ICO.templates} label="Apply Layout" disabled menu /><Sm icon={ICO.fit} label="Reset" disabled /><Sm icon={ICO.dup} label="Duplicate" onClick={() => dupSlide(here)} /></div></Group>
+      <Group label="Record"><Big icon={ICO.record} label="Record Screen" disabled menu /></Group>
       <Group label="Triggers"><Big icon={ICO.vars} label="Variables" onClick={() => setDialog('vars')} /></Group>
       <Group label="Publish"><Big icon={ICO.player} label="Player" onClick={() => setDialog('player')} /><Big icon={ICO.preview} label="Preview" onClick={previewMenu} menu /><Big icon={ICO.publish} label="Publish" onClick={publish} menu /></Group>
     </>,
     INSERT: <>
-      <Group label="Text"><Big icon={ICO.text} label="Text Box" onClick={() => insert('text')} /></Group>
-      <Group label="Objects"><Big icon={ICO.shape} label="Shape" onClick={shapeMenu} menu /><Big icon={ICO.button} label="Button" onClick={() => insert('button')} /><Big icon={ICO.hotspot} label="Hotspot" onClick={() => insert('hotspot')} /><Big icon={ICO.input} label="Text Entry" onClick={() => insert('input')} /></Group>
-      <Group label="Media"><Big icon={ICO.picture} label="Picture" onClick={() => { picFor.current = null; picRef.current?.click(); }} /><Big icon={ICO.video} label="Video" onClick={() => insertMedia('video')} /><Big icon={ICO.audio} label="Audio" onClick={() => insertMedia('audio')} /></Group>
+      <Group label="Slide"><Big icon={ICO.slideLayer} label="Slide Layer" onClick={() => { go('slide'); const l = newLayer(`Layer ${slide.layers.length}`); write(c => { inSlide(c).layers.push(l); }); setLayerId(l.id); setSel(null); }} /><Big icon={ICO.freeform} label="Convert to Freeform" disabled /><Big icon={ICO.zoomRegion} label="Zoom Region" disabled /></Group>
+      <Group label="Media"><Big icon={ICO.character} label="Character" disabled menu /><Big icon={ICO.picture} label="Picture" onClick={() => { picFor.current = null; picRef.current?.click(); }} menu /><Big icon={ICO.shape} label="Shape" onClick={shapeMenu} menu /><Big icon={ICO.caption} label="Caption" onClick={() => insert('shape', { name: 'Caption', text: 'Caption', w: 240, h: 90, style: { ...newObject('shape').style, fill: '#fff4dc', border: '#d99a00', borderW: 1, radius: 12, color: '#5b3a00' } })} menu /><Big icon={ICO.video} label="Video" onClick={() => insertMedia('video')} menu /><Big icon={ICO.audio} label="Audio" onClick={() => insertMedia('audio')} menu /><Big icon={ICO.web} label="Web Object" disabled /></Group>
+      <Group label="Text"><Big icon={ICO.text} label="Text Box" onClick={() => insert('text')} /><Big icon={ICO.table} label="Table" disabled menu /><div className="sl-col"><Sm label="Ω Symbol" onClick={btn => popup(btn, ['©', '®', '™', '•', '→', '←', '✓', '✗', '★', '°', '€', '£', '₹', '…'].map(sym => ({ label: sym, act: () => insert('text', { text: sym, name: 'Symbol', w: 80, h: 70, style: { ...newObject('text').style, size: 40, align: 'center' } }) })))} menu /></div></Group>
+      <Group label="Interactive Objects"><Big icon={ICO.button} label="Button" onClick={() => insert('button')} menu /><Big icon={ICO.slider} label="Slider" disabled menu /><Big icon={ICO.dial} label="Dial" disabled menu /><Big icon={ICO.hotspot} label="Hotspot" onClick={() => insert('hotspot')} menu /><Big icon={ICO.input} label="Input" onClick={() => insert('input')} menu /><Big icon={ICO.marker} label="Marker" disabled menu />
+        <div className="sl-col"><Sm label="⚡ Trigger" onClick={() => { go('slide'); togglePanel('right', true); const t = { id: rid('t'), event: 'click', source: obj?.id || layer.objects[0]?.id || '', action: 'jump', target: 'next', conds: [] }; write(c => { inLayer(c).triggers.push(t); }); setOpenTrig(t.id); }} /><Sm label="▤ Scrolling Panel" disabled /><Sm label="➚ Mouse" disabled menu /></div></Group>
       <Group label="Quiz"><Big icon={ICO.question} label="Question" onClick={questionMenu} menu /><Big icon={ICO.result} label="Result" onClick={() => insert('result')} /></Group>
+      <Group label="Publish"><Big icon={ICO.preview} label="Preview" onClick={previewMenu} menu /></Group>
     </>,
     SLIDES: <>
-      <Group label="Slides"><Big icon={ICO.slide} label="New Slide" onClick={newSlideMenu} menu /><Big icon={ICO.question} label="Question Slide" onClick={() => addSlide('question')} /><Big icon={ICO.result} label="Results Slide" onClick={() => addSlide('result')} /></Group>
-      <Group label="Edit"><Big icon={ICO.dup} label="Duplicate" onClick={() => dupSlide(here)} /><Big icon={ICO.del} label="Delete" onClick={() => delSlide(here)} /><Big icon={ICO.layer} label="New Layer" onClick={() => { go('slide'); const l = newLayer(`Layer ${slide.layers.length}`); write(c => { inSlide(c).layers.push(l); }); setLayerId(l.id); setSel(null); }} /></Group>
-      <Group label="Import & export"><Big icon={ICO.import} label="Import" onClick={btn => popup(btn, [{ label: 'Import slides…', act: () => pickImport('append') }, { label: 'Open a course over this one…', act: () => pickImport('replace') }])} menu /><Big icon={ICO.export} label="Export" onClick={exportFile} /></Group>
+      <Group label="Slide"><Big icon={ICO.templates} label="My Templates" onClick={newSlideMenu} /><Big icon={ICO.slide} label="New Slide" onClick={newSlideMenu} menu /><Big icon={ICO.import} label="Import" onClick={btn => popup(btn, [{ label: 'Import slides…', act: () => pickImport('append') }, { label: 'Open a course over this one…', act: () => pickImport('replace') }])} menu /></Group>
+      <Group label="Quizzing"><Big icon={ICO.graded} label="Graded Question" onClick={btn => popup(btn, QTYPES.map(([qt, l]) => ({ label: l, act: () => addQuestionSlide(qt) })))} menu /><Big icon={ICO.survey} label="Survey Question" onClick={() => addQuestionSlide('mc', true)} /><Big icon={ICO.freeform} label="Freeform Question" disabled /><Big icon={ICO.results} label="Results" onClick={() => addSlide('result')} /><Big icon={ICO.banks} label="Question Banks" disabled menu /></Group>
+      <Group label="Edit"><Big icon={ICO.dup} label="Duplicate" onClick={() => dupSlide(here)} /><Big icon={ICO.del} label="Delete" onClick={() => delSlide(here)} /><Big icon={ICO.export} label="Export" onClick={exportFile} /></Group>
+      <Group label="Record"><Big icon={ICO.record} label="Record Screen" disabled menu /></Group>
+      <Group label="Publish"><Big icon={ICO.preview} label="Preview" onClick={previewMenu} menu /></Group>
     </>,
     DESIGN: <>
       <Group label="Setup"><Big icon={ICO.size} label="Slide Size" onClick={btn => popup(btn, [['960x540', '16:9 (960 × 540)'], ['720x540', '4:3 (720 × 540)'], ['1280x720', '16:9 large (1280 × 720)'], ['1920x1080', 'Full HD (1920 × 1080)'], ['540x960', 'Phone, portrait (540 × 960)']].map(([v, l]) => ({ label: (v === `${course.size.w}x${course.size.h}` ? '✓ ' : '') + l, act: () => { const [w, h] = v.split('x').map(Number); write(c => { c.size = { w, h }; }); } })))} menu /></Group>
       <Group label="Background"><label className="sl-colorbig"><Svg d={ICO.bg} /><span>Slide color</span><input type="color" value={hex(slide.bg)} onChange={e => setSlideProp('bg', e.target.value)} aria-label="Slide background color" /></label><Big icon={ICO.dup} label="Apply to All" onClick={() => write(c => { allSlides(c).forEach(x => { x.s.bg = slide.bg; }); })} /></Group>
+      <Group label="Masters"><Big icon={ICO.result} label="Feedback Master" onClick={() => setDialog('feedback')} /><Big icon={ICO.text} label="Notes Format" onClick={() => setDialog('notes')} /></Group>
       <Group label="Theme"><label className="sl-colorbig"><Svg d={ICO.theme} /><span>Accent</span><input type="color" value={hex(course.accent)} onChange={e => write(c => { c.accent = e.target.value; })} aria-label="Accent color" /></label>
         <Big icon={ICO.font} label="Fonts" onClick={btn => popup(btn, [['Inter, system-ui, sans-serif', 'Inter'], ['Georgia, serif', 'Georgia'], ['"Trebuchet MS", sans-serif', 'Trebuchet'], ['"Segoe UI", Roboto, sans-serif', 'Segoe UI'], ['"Courier New", monospace', 'Courier']].map(([v, l]) => ({ label: (course.font === v ? '✓ ' : '') + l, act: () => write(c => { c.font = v; }) })))} menu /></Group>
     </>,
@@ -414,7 +454,7 @@ export default function CourseView({ file, update, visible = true }) {
           {bottom === 'format' && (obj ? <ObjFormat o={obj} course={course} layer={layer} editState={editState} setLook={setLook} editObj={editObj} write={write} inLayer={inLayer} setSel={setSel} duplicate={duplicate}
             onPicture={() => { picFor.current = obj.id; picRef.current?.click(); }} onTrigger={() => { const t = { id: rid('t'), event: 'click', source: obj.id, action: 'jump', target: 'next', conds: [] }; write(c => { inLayer(c).triggers.push(t); }); setOpenTrig(t.id); togglePanel('right', true); }} />
             : <SlideFormat slide={slide} write={write} inSlide={inSlide} />)}
-          {bottom === 'notes' && <textarea className="sl-notes" value={slide.notes || ''} onChange={e => setSlideProp('notes', e.target.value)} aria-label="Slide notes" placeholder="Notes for this slide (not shown to learners)" />}
+          {bottom === 'notes' && <textarea className="sl-notes" style={{ fontFamily: course.notesStyle?.font, fontSize: course.notesStyle?.size, color: course.notesStyle?.color }} value={slide.notes || ''} onChange={e => setSlideProp('notes', e.target.value)} aria-label="Slide notes" placeholder="Notes for this slide (not shown to learners)" />}
         </div>
       </div>}
     </div>
@@ -440,18 +480,28 @@ export default function CourseView({ file, update, visible = true }) {
       </div>
     </section>
   );
+  const nav = { prev: true, next: true, submit: false, ...(slide.nav || {}) }, swipe = { prev: true, next: true, ...(slide.swipe || {}) };
   const slideProps = (
     <section className="sl-pane" aria-label="Slide Properties">
       <header><h4>Slide Properties</h4></header>
-      <div className="sl-pbody">
-        <label className="cv-f"><span>Title</span><input value={slide.title} onChange={e => setSlideProp('title', e.target.value)} aria-label="Slide title" /></label>
-        <label className="cv-f"><span>Slide advances</span><select value={slide.next} onChange={e => setSlideProp('next', e.target.value)} aria-label="Slide advances"><option value="user">By the learner (Next)</option><option value="auto">Automatically</option><option value="question">When the question is answered</option></select></label>
-        <label className="cv-f"><span>Timeline (s)</span><input type="number" min="0" step="0.5" value={slide.duration} onChange={e => setSlideProp('duration', Math.max(0, Number(e.target.value) || 0))} aria-label="Slide timeline" /></label>
-        <label className="cv-f"><span>Transition</span><select value={slide.transition?.type || 'none'} onChange={e => setSlideProp('transition', { type: e.target.value, dur: slide.transition?.dur || 0.6 })} aria-label="Transition">{TRANSITIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
-        <p className="cv-kind">{slide.layers.length - 1} layer{slide.layers.length === 2 ? '' : 's'} · {slide.layers.reduce((n, l) => n + l.triggers.length, 0)} triggers · double-click to edit</p>
+      <div className="sl-pbody sl-props">
+        <p className="sl-props-for">Properties for “{sceneNo}.{here.i + 1} {slide.title}”</p>
+        <label className="sl-prow"><span>Slide advances:</span><select value={slide.next} onChange={e => setSlideProp('next', e.target.value)} aria-label="Slide advances"><option value="user">By user</option><option value="auto">Automatically</option><option value="question">When the question is answered</option></select></label>
+        <label className="sl-prow"><span>When revisiting:</span><select value={slide.revisit || 'auto'} onChange={e => setSlideProp('revisit', e.target.value)} aria-label="When revisiting"><option value="auto">Automatically decide</option><option value="resume">Resume saved state</option><option value="reset">Reset to initial state</option></select></label>
+        <h5>Slide navigation and gestures</h5>
+        <div className="sl-checks"><span>Buttons:</span>{[['prev', 'Prev'], ['next', 'Next'], ['submit', 'Submit']].map(([k, l]) => <label key={k}><input type="checkbox" checked={!!nav[k]} onChange={e => setSlideProp('nav', { ...nav, [k]: e.target.checked })} aria-label={`${l} button`} />{l}</label>)}</div>
+        <div className="sl-checks"><span>Swipe:</span>{[['prev', 'Prev'], ['next', 'Next']].map(([k, l]) => <label key={k}><input type="checkbox" checked={!!swipe[k]} onChange={e => setSlideProp('swipe', { ...swipe, [k]: e.target.checked })} aria-label={`Swipe ${l}`} />{l}</label>)}</div>
+        <h5>Player features</h5>
+        <select value="defaults" onChange={() => setDialog('player')} aria-label="Player features"><option value="defaults">Player defaults</option><option value="edit">Change the player…</option></select>
+        <details className="sl-more"><summary>More</summary>
+          <label className="cv-f"><span>Title</span><input value={slide.title} onChange={e => setSlideProp('title', e.target.value)} aria-label="Slide title" /></label>
+          <label className="cv-f"><span>Timeline (s)</span><input type="number" min="0" step="0.5" value={slide.duration} onChange={e => setSlideProp('duration', Math.max(0, Number(e.target.value) || 0))} aria-label="Slide timeline" /></label>
+          <label className="cv-f"><span>Transition</span><select value={slide.transition?.type || 'none'} onChange={e => setSlideProp('transition', { type: e.target.value, dur: slide.transition?.dur || 0.6 })} aria-label="Transition">{TRANSITIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
+        </details>
       </div>
     </section>
   );
+  const trigHead = <header><h4>Triggers</h4><span className="sl-hbtns"><button className="sl-x" aria-label="Hide the right panel" title="Hide this panel" onClick={() => togglePanel('right', false)}>×</button></span></header>;
 
   return (
     <div className="cv sl" data-course>
@@ -470,6 +520,10 @@ export default function CourseView({ file, update, visible = true }) {
       <div className="sl-viewbar">
         <button className={mode === 'story' ? 'on' : ''} onClick={() => go('story')}><Svg d={ICO.story} s={16} />STORY VIEW</button>
         <button className={mode === 'slide' ? 'on' : ''} onClick={() => go('slide')}><Svg d={ICO.slideview} s={16} />{here.sc.name.toUpperCase()} · {sceneNo}.{here.i + 1} {slide.title}</button>
+        <span className="sl-devices" role="group" aria-label="Preview on a device">
+          {[['desktop', 'Desktop', '<rect x="2" y="4" width="16" height="10" rx="1"/><path d="M7 17h6M10 14v3"/>'], ['tablet-l', 'Tablet, landscape', '<rect x="2" y="5" width="16" height="11" rx="1.5"/>'], ['tablet-p', 'Tablet, portrait', '<rect x="4.5" y="2" width="11" height="16" rx="1.5"/>'], ['phone-l', 'Phone, landscape', '<rect x="2" y="7" width="16" height="7" rx="1.5"/>'], ['phone-p', 'Phone, portrait', '<rect x="6.5" y="2" width="7" height="16" rx="1.5"/>']].map(([k, l, d]) => <button key={k} title={`Preview: ${l}`} aria-label={`Preview on ${l.toLowerCase()}`} onClick={() => setDialog({ preview: 'all', device: k })}><svg viewBox="0 0 20 20" aria-hidden="true" dangerouslySetInnerHTML={{ __html: d }} /></button>)}
+          <button title="Player" aria-label="Player settings" onClick={() => setDialog('player')}><Svg d={ICO.gear} s={18} /></button>
+        </span>
         <span className="sl-toggles" role="group" aria-label="Panels">
           {mode === 'slide' && <button className={panels.slides ? 'on' : ''} aria-pressed={panels.slides} title="Slide list" aria-label="Slide list panel" onClick={() => togglePanel('slides')}><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2" y="3" width="16" height="14" rx="2" /><path d="M7 3v14" /></svg></button>}
           {mode === 'slide' && <button className={panels.bottom ? 'on' : ''} aria-pressed={panels.bottom} title="Timeline, States, Format, Notes" aria-label="Timeline panel" onClick={() => togglePanel('bottom')}><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2" y="3" width="16" height="14" rx="2" /><path d="M2 12h16" /></svg></button>}
@@ -483,8 +537,8 @@ export default function CourseView({ file, update, visible = true }) {
           {storyView}
           {panels.right && <aside className="sl-right" aria-label="Properties">
             <section className="sl-pane sl-trigpane" aria-label="Triggers">
-              <header><h4>Triggers</h4><span className="sl-hbtns"><button className="sl-ico" aria-label="Variables" title="Variables" onClick={() => setDialog('vars')}>%x%</button><button className="sl-x" aria-label="Hide the right panel" title="Hide this panel" onClick={() => togglePanel('right', false)}>×</button></span></header>
-              <div className="sl-pbody"><Triggers course={course} slide={slide} layer={slide.layers[0]} write={write} inLayer={(c) => inLayer(c, slide.id, slide.layers[0].id)} open={openTrig} setOpen={setOpenTrig} /></div>
+              {trigHead}
+              <div className="sl-pbody"><Triggers course={course} slide={slide} layer={slide.layers[0]} write={write} inLayer={(c) => inLayer(c, slide.id, slide.layers[0].id)} open={openTrig} setOpen={setOpenTrig} onVars={() => setDialog('vars')} /></div>
             </section>
             {slideProps}
           </aside>}
@@ -495,16 +549,20 @@ export default function CourseView({ file, update, visible = true }) {
           {stage}
           {panels.right && <aside className="sl-right" aria-label="Properties">
             <section className="sl-pane sl-trigpane" aria-label="Triggers">
-              <header><h4>Triggers</h4><span className="sl-hbtns"><button className="sl-ico" aria-label="Variables" title="Variables" onClick={() => setDialog('vars')}>%x%</button><button className="sl-x" aria-label="Hide the right panel" title="Hide this panel" onClick={() => togglePanel('right', false)}>×</button></span></header>
-              <div className="sl-pbody"><Triggers course={course} slide={slide} layer={layer} write={write} inLayer={inLayer} open={openTrig} setOpen={setOpenTrig} /></div>
+              {trigHead}
+              <div className="sl-pbody"><Triggers course={course} slide={slide} layer={layer} write={write} inLayer={inLayer} open={openTrig} setOpen={setOpenTrig} onVars={() => setDialog('vars')} /></div>
             </section>
             {layersPane}
           </aside>}
         </div>
       )}
       <footer className="sl-status">
-        <span>Scene {sceneNo} of {course.scenes.length}</span><span>{course.size.w} × {course.size.h}</span><span>“{slide.title}”</span>
-        <span>{flat.length} slides · {course.vars.length} variables</span>
+        <span>{mode === 'slide' ? `Slide ${flat.findIndex(x => x.s.id === slide.id) + 1} of ${flat.length}` : `Scene ${sceneNo} of ${course.scenes.length}`}</span><span>{course.size.w} × {course.size.h}</span><span>“{slide.title}”</span>
+        <span className="sl-views" role="group" aria-label="Views">
+          <button className={mode === 'story' ? 'on' : ''} title="Story View" aria-label="Story View" onClick={() => go('story')}>▦</button>
+          <button className={mode === 'slide' ? 'on' : ''} title="Slide View" aria-label="Slide View" onClick={() => go('slide')}>▭</button>
+          <button title="Preview this slide" aria-label="Preview this slide" onClick={() => setDialog({ preview: slide.id })}>▶</button>
+        </span>
         <span className="sl-zoom">
           <button aria-label="Zoom out" onClick={() => (mode === 'story' ? setStoryZoom(z => Math.max(40, z - 10)) : setZoom(z => Math.max(15, (z || Math.round(fitK * 100)) - 10)))}>−</button>
           <input type="range" min={mode === 'story' ? 40 : 15} max={mode === 'story' ? 200 : 300} value={mode === 'story' ? storyZoom : (zoom || Math.round(fitK * 100))} onChange={e => (mode === 'story' ? setStoryZoom(Number(e.target.value)) : setZoom(Number(e.target.value)))} aria-label="Zoom" />
@@ -515,11 +573,48 @@ export default function CourseView({ file, update, visible = true }) {
       </footer>
       {dialog === 'vars' && <VarsDialog course={course} write={write} onClose={() => setDialog(null)} />}
       {dialog === 'player' && <PlayerDialog course={course} write={write} onClose={() => setDialog(null)} />}
+      {dialog === 'feedback' && <FeedbackDialog course={course} write={write} onClose={() => setDialog(null)} />}
+      {dialog === 'notes' && <NotesDialog course={course} write={write} onClose={() => setDialog(null)} />}
       {dialog === 'keys' && <InfoDialog title="Keyboard shortcuts" onClose={() => setDialog(null)} rows={[['Ctrl Z / Ctrl Y', 'Undo / redo'], ['Ctrl C, Ctrl X, Ctrl V', 'Copy, cut, paste an object'], ['Ctrl D', 'Duplicate the object'], ['Arrows (Shift: 10 px)', 'Nudge the object'], ['Delete', 'Delete the object (Story View: the slide)'], ['Double-click', 'Edit text · open a slide from Story View'], ['Enter', 'Story View: open the slide'], ['Alt while dragging', 'Move without snapping'], ['F12', 'Preview the entire project']]} />}
       {dialog === 'import' && <InfoDialog title="What didn’t come over" onClose={() => setDialog(null)} rows={course.importDetails || []} />}
       {dialog === 'help' && <InfoDialog title="How it works" onClose={() => setDialog(null)} rows={[['Story View', 'Every scene and its slides. Double-click a slide to edit it.'], ['Slide View', 'The slide, its layers (right), triggers (right) and the Timeline, States, Format and Notes (below).'], ['Layers', 'Extra parts of a slide shown and hidden by triggers — pop-ups, feedback, details.'], ['States', 'How an object looks when hovered, pressed, selected, visited, disabled, or a state of your own.'], ['Triggers', '“Do this when that happens, if…”: jump, show a layer, change a state, adjust a variable…'], ['Variables', 'Remember things while the course runs; show one in text as %Name%.'], ['Publish', 'One web page, or a SCORM 1.2 zip for an LMS. Export saves a course file to open again.']]} />}
-      {dialog?.preview && <Preview course={course} fileId={file.id} what={dialog.preview} onClose={() => setDialog(null)} />}
+      {dialog?.preview && <Preview course={course} fileId={file.id} what={dialog.preview} device={dialog.device} onClose={() => setDialog(null)} />}
     </div>
+  );
+}
+function FeedbackDialog({ course, write, onClose }) {
+  const fb = feedbackOf(course);
+  const set = (k, key, v) => write(c => { ((c.feedback ||= {})[k] ||= {})[key] = v; });
+  return (
+    <Modal title="Feedback Master" onClose={onClose}>
+      <p className="cv-note">How every question’s feedback looks: its title and colors. Questions can still write their own feedback text.</p>
+      <label className="cv-checks"><span><input type="checkbox" checked={!!course.feedback?.theme} onChange={e => write(c => { (c.feedback ||= {}).theme = e.target.checked; if (e.target.checked) for (const k of ['correct', 'incorrect', 'tryAgain']) if (c.feedback[k]) { delete c.feedback[k].fill; delete c.feedback[k].color; } })} aria-label="Feedback theme colors" /> Use the theme’s colors (the course’s accent)</span></label>
+      {[['correct', 'Correct'], ['tryAgain', 'Try again'], ['incorrect', 'Incorrect']].map(([k, l]) => (
+        <div key={k} className="cv-fbrow">
+          <div className="cv-fbprev" style={{ background: fb[k].fill, color: fb[k].color }}>{fb[k].title || l}</div>
+          <Field label={`${l}: title`}><input value={fb[k].title || ''} placeholder={`The question’s own text (e.g. ${l})`} onChange={e => set(k, 'title', e.target.value)} aria-label={`${l} title`} /></Field>
+          <Color label={`${l} fill`} value={fb[k].fill.startsWith('#') ? fb[k].fill : '#ffffff'} onChange={v => set(k, 'fill', v)} clear={false} />
+          <Color label={`${l} text`} value={fb[k].color} onChange={v => set(k, 'color', v)} clear={false} />
+        </div>
+      ))}
+      <footer className="cv-dlg-f"><button className="btn primary" onClick={onClose}>Done</button></footer>
+    </Modal>
+  );
+}
+// Global notes formatting: one look for every slide's notes (in the editor and the player's Notes).
+function NotesDialog({ course, write, onClose }) {
+  const ns = course.notesStyle || {};
+  const set = (k, v) => write(c => { (c.notesStyle ||= {})[k] = v; });
+  return (
+    <Modal title="Notes Format" onClose={onClose}>
+      <p className="cv-note">One format for the notes of every slide.</p>
+      <div className="cv-form">
+        <Field label="Font" wide><select value={ns.font || ''} onChange={e => set('font', e.target.value || undefined)} aria-label="Notes font"><option value="">The course font</option><option value="Georgia, serif">Georgia</option><option value="Inter, system-ui, sans-serif">Inter</option><option value='"Segoe UI", Roboto, sans-serif'>Segoe UI</option><option value='"Courier New", monospace'>Courier</option></select></Field>
+        <div className="cv-row"><Num label="Size (px)" value={ns.size || 14} min={9} onChange={v => set('size', Math.max(9, Math.min(40, v || 14)))} /><Color label="Color" value={ns.color || '#1f2433'} onChange={v => set('color', v)} clear={false} /></div>
+        <p className="cv-note" style={{ fontFamily: ns.font, fontSize: ns.size, color: ns.color, border: '1px solid var(--hair)', borderRadius: 8, padding: 10 }}>Notes will look like this.</p>
+      </div>
+      <footer className="cv-dlg-f"><button className="btn primary" onClick={onClose}>Done</button></footer>
+    </Modal>
   );
 }
 function InfoDialog({ title, rows, onClose }) {
@@ -573,6 +668,10 @@ function ObjFormat({ o, course, layer, editState, setLook, editObj, write, inLay
           </div>
         </>
       )}
+      {textual && <div className="cv-row">
+        <Field label="Autofit"><select value={s.autofit || 'none'} onChange={e => setLook('autofit', e.target.value === 'none' ? undefined : e.target.value)} aria-label="Autofit"><option value="none">Do not autofit</option><option value="shrink">Shrink text on overflow</option><option value="shape">Resize shape to fit text</option></select></Field>
+        <Field label="Scrollbar if it overflows"><input type="checkbox" checked={!!s.scroll} onChange={e => setLook('scroll', e.target.checked || undefined)} aria-label="Text scrollbar" /></Field>
+      </div>}
       {o.kind !== 'audio' && (
         <div className="cv-row">
           <Color label="Fill" value={s.fill} onChange={v => setLook('fill', v)} />
@@ -704,25 +803,55 @@ export function describeTrigger(t, course, slide) {
   const when = ev?.[2] === 'object' ? `${ev[1].toLowerCase()} ${objName(t.source)}${t.event === 'drop' && on ? ' on ' + objName(on) : ''}${t.event === 'stateChange' && on ? ' ' + (STATE_LABEL[on] || on) : ''}` : ev?.[2] === 'var' ? `${t.source || '?'} changes` : t.event === 'key' ? `the learner presses ${on || '?'}` : (ev?.[1] || t.event).toLowerCase();
   return { what, when: 'When ' + when, ifs: (t.conds || []).length };
 }
-function Triggers({ course, slide, layer, write, inLayer, open, setOpen }) {
+let trigClip = null; // a copied trigger, for Paste
+const TB = { new: '<path d="M6 3h7l4 4v10H6z" fill="#fff" stroke="#6b7591"/><path d="M12 10v6M9 13h6" stroke="#17a05b" stroke-width="1.6"/>', edit: '<path d="M6 3h7l4 4v10H6z" fill="#fff" stroke="#6b7591"/><path d="M8.5 14.5l1-3 5-5 2 2-5 5z" fill="#f5b400" stroke="#b07d00" stroke-width=".8"/>', copy: '<rect x="4" y="3" width="9" height="11" fill="#fff" stroke="#6b7591"/><rect x="8" y="7" width="9" height="11" fill="#fff" stroke="#6b7591"/>', paste: '<rect x="4" y="4" width="10" height="13" rx="1" fill="#e9ebf3" stroke="#6b7591"/><rect x="9" y="8" width="8" height="10" fill="#fff" stroke="#3d6fd6"/>', del: '<path d="M6 6h9l-1 11H7z" fill="#fff" stroke="#6b7591"/><path d="M5 6h11M8.5 6V4h4v2" stroke="#6b7591"/>', up: '<path d="M10 5l5 7H5z" fill="#6b7591"/>', down: '<path d="M10 15l5-7H5z" fill="#6b7591"/>', vars: '<rect x="3" y="4" width="14" height="12" rx="1.5" fill="#fff" stroke="#6b7591"/><text x="10" y="13.2" font-size="7.5" font-weight="700" font-family="monospace" text-anchor="middle" fill="#7a45b8">(x)</text>' };
+const TBtn = ({ k, label, onClick, disabled }) => <button className="sl-tb" title={label} aria-label={label} onClick={onClick} disabled={disabled}><svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" dangerouslySetInnerHTML={{ __html: TB[k] }} /></button>;
+function Triggers({ course, slide, layer, write, inLayer, open, setOpen, onVars }) {
   const edit = (id, fn) => write(c => { const t = inLayer(c).triggers.find(x => x.id === id); if (t) fn(t); });
   const add = () => { const t = { id: rid('t'), event: 'click', source: layer.objects[0]?.id || '', action: 'jump', target: 'next', conds: [] }; write(c => { inLayer(c).triggers.push(t); }); setOpen(t.id); };
+  const selected = layer.triggers.find(t => t.id === open);
+  const idx = selected ? layer.triggers.indexOf(selected) : -1;
+  const move = dir => write(c => { const l = inLayer(c), i = l.triggers.findIndex(x => x.id === open), j = i + dir; if (i >= 0 && j >= 0 && j < l.triggers.length) [l.triggers[i], l.triggers[j]] = [l.triggers[j], l.triggers[i]]; });
+  const remove = () => { if (!selected) return; write(c => { const l = inLayer(c); l.triggers = l.triggers.filter(x => x.id !== open); }); setOpen(null); };
+  const paste = () => { if (!trigClip) return; const t = { ...JSON.parse(trigClip), id: rid('t') }; write(c => { inLayer(c).triggers.push(t); }); setOpen(t.id); };
+  // Grouped as Storyline shows them: the player's buttons, the slide (or layer), then each object.
+  const objOf = id => [...slide.layers.flatMap(l => l.objects)].find(o => o.id === id);
+  const groups = [];
+  const put = (key, title, t) => { let g = groups.find(x => x.key === key); if (!g) groups.push(g = { key, title, list: [] }); g.list.push(t); };
+  for (const t of layer.triggers) {
+    if (t.event === 'nextButton' || t.event === 'prevButton' || String(t.target).startsWith('player:')) put('player', 'Player Triggers', t);
+    else if (objOf(t.source) && EVENTS.find(e => e[0] === t.event)?.[2] === 'object') put('o:' + t.source, objOf(t.source).name, t);
+    else put('slide', layer === slide.layers[0] ? 'Slide Triggers' : `${layer.name} Triggers`, t);
+  }
+  groups.sort((a, b) => (a.key === 'player' ? -1 : b.key === 'player' ? 1 : a.key === 'slide' ? -1 : b.key === 'slide' ? 1 : 0));
+  const row = t => {
+    const d = describeTrigger(t, course, slide), i = layer.triggers.indexOf(t);
+    return (
+      <div key={t.id} className={'cv-trig' + (open === t.id ? ' on' : '')}>
+        <button className="cv-trig-h" aria-expanded={open === t.id} onClick={() => setOpen(open === t.id ? null : t.id)}><b>{d.what}</b><span>{d.when}{d.ifs ? ` · if ${d.ifs} condition${d.ifs === 1 ? '' : 's'}` : ''}</span></button>
+        {open === t.id && <TriggerForm t={t} course={course} slide={slide} layer={layer} edit={fn => edit(t.id, fn)}
+          onMove={dir => write(c => { const l = inLayer(c), j = i + dir; if (j >= 0 && j < l.triggers.length) [l.triggers[i], l.triggers[j]] = [l.triggers[j], l.triggers[i]]; })}
+          onDelete={() => write(c => { const l = inLayer(c); l.triggers = l.triggers.filter(x => x.id !== t.id); })} />}
+      </div>
+    );
+  };
+  const hasPlayer = groups.some(g => g.key === 'player');
   return (
     <div className="cv-trigs">
-      <p className="cv-kind">Triggers on <b>{layer.name}</b>: do something when something happens.</p>
-      {!layer.triggers.length && <p className="cv-empty">No triggers yet. A trigger is “do <i>this</i> when <i>that</i> happens” — for example, jump to the next slide when the learner clicks a button.</p>}
-      {layer.triggers.map((t, i) => {
-        const d = describeTrigger(t, course, slide);
-        return (
-          <div key={t.id} className={'cv-trig' + (open === t.id ? ' on' : '')}>
-            <button className="cv-trig-h" aria-expanded={open === t.id} onClick={() => setOpen(open === t.id ? null : t.id)}><b>{d.what}</b><span>{d.when}{d.ifs ? ` · if ${d.ifs} condition${d.ifs === 1 ? '' : 's'}` : ''}</span></button>
-            {open === t.id && <TriggerForm t={t} course={course} slide={slide} layer={layer} edit={fn => edit(t.id, fn)}
-              onMove={dir => write(c => { const l = inLayer(c), j = i + dir; if (j >= 0 && j < l.triggers.length) [l.triggers[i], l.triggers[j]] = [l.triggers[j], l.triggers[i]]; })}
-              onDelete={() => write(c => { const l = inLayer(c); l.triggers = l.triggers.filter(x => x.id !== t.id); })} />}
-          </div>
-        );
-      })}
-      <button className="btn primary" onClick={add}>＋ New trigger</button>
+      <div className="sl-trigbar" role="toolbar" aria-label="Trigger tools">
+        <TBtn k="new" label="New trigger" onClick={add} /><TBtn k="edit" label="Edit trigger" onClick={() => selected && setOpen(open)} disabled={!selected} />
+        <TBtn k="copy" label="Copy trigger" onClick={() => { if (selected) trigClip = JSON.stringify(selected); }} disabled={!selected} /><TBtn k="paste" label="Paste trigger" onClick={paste} />
+        <TBtn k="del" label="Delete trigger" onClick={remove} disabled={!selected} /><TBtn k="up" label="Move trigger up" onClick={() => move(-1)} disabled={idx <= 0} /><TBtn k="down" label="Move trigger down" onClick={() => move(1)} disabled={idx < 0 || idx >= layer.triggers.length - 1} />
+        <span className="sl-tb-sp" /><TBtn k="vars" label="Manage project variables" onClick={onVars} />
+      </div>
+      {!hasPlayer && layer === slide.layers[0] && (
+        <section className="sl-tgroup"><h5>Player Triggers</h5>
+          <div className="cv-trig static"><div className="cv-trig-h"><b>Jump to <u>next slide</u></b><span>When the user clicks the next button or swipes next</span></div></div>
+          <div className="cv-trig static"><div className="cv-trig-h"><b>Jump to <u>previous slide</u></b><span>When the user clicks the previous button or swipes previous</span></div></div>
+        </section>
+      )}
+      {groups.map(g => <section key={g.key} className="sl-tgroup"><h5>{g.title}</h5>{g.list.map(row)}</section>)}
+      {!layer.triggers.length && <p className="cv-empty">No triggers on <b>{layer.name}</b> yet. A trigger is “do <i>this</i> when <i>that</i> happens”: click New trigger above.</p>}
     </div>
   );
 }
@@ -860,11 +989,14 @@ function PlayerDialog({ course, write, onClose }) {
       <div className="cv-form">
         <Field label="Course title" wide><input value={course.title} onChange={e => write(c => { c.title = e.target.value; })} aria-label="Course title" /></Field>
         <div className="cv-checks">
-          {[['title', 'Title bar'], ['menu', 'Menu of slides'], ['freeNav', 'Learners may jump to any slide in the menu'], ['seekbar', 'Seekbar and play / pause'], ['prevNext', 'Prev and Next buttons'], ['resume', 'Offer to carry on where they left off']].map(([kk, l]) => <label key={kk}><input type="checkbox" checked={p[kk] !== false && !!p[kk]} onChange={() => tog(kk)} />{l}</label>)}
+          {[['title', 'Title bar'], ['menu', 'Menu of slides'], ['freeNav', 'Learners may jump to any slide in the menu'], ['seekbar', 'Seekbar and play / pause'], ['prevNext', 'Prev and Next buttons'], ['resume', 'Offer to carry on where they left off'], ['notes', 'Notes (each slide’s notes, beside the slide)']].map(([kk, l]) => <label key={kk}><input type="checkbox" checked={p[kk] !== false && !!p[kk]} onChange={() => tog(kk)} />{l}</label>)}
+          <label><input type="checkbox" checked={p.sharpText !== false} onChange={() => write(c => { c.player.sharpText = c.player.sharpText === false; })} />Better font scaling (text stays sharp at any player size)</label>
+          <label><input type="checkbox" checked={!!course.quiz.lockRevisit} onChange={() => write(c => { c.quiz.lockRevisit = !c.quiz.lockRevisit; })} />Disable navigation within a question when it’s revisited (answers can’t change)</label>
         </div>
         <div className="cv-row">
           <Color label="Accent color" value={course.accent} onChange={v => write(c => { c.accent = v === 'transparent' ? '#4f5bd5' : v; })} clear={false} />
           <Num label="Pass mark (%)" value={course.quiz.pass} min={0} onChange={v => write(c => { c.quiz.pass = Math.max(0, Math.min(100, v || 0)); })} />
+          <Num label="Player font scale (%)" value={p.fontScale || 100} min={50} onChange={v => write(c => { c.player.fontScale = Math.max(50, Math.min(200, v || 100)); })} />
         </div>
         <Field label="Size" wide><select value={`${course.size.w}x${course.size.h}`} onChange={e => { const [w, h] = e.target.value.split('x').map(Number); write(c => { c.size = { w, h }; }); }} aria-label="Slide size"><option value="960x540">16:9 (960 × 540)</option><option value="720x540">4:3 (720 × 540)</option><option value="1280x720">16:9 large (1280 × 720)</option><option value="540x960">Phone, portrait (540 × 960)</option></select></Field>
         <Field label="In an LMS, the course is complete when" wide><select value={course.complete} onChange={e => write(c => { c.complete = e.target.value; })} aria-label="Completion"><option value="viewed">Every slide has been seen</option><option value="quiz">The quiz is passed</option></select></Field>
@@ -873,7 +1005,7 @@ function PlayerDialog({ course, write, onClose }) {
     </Modal>
   );
 }
-function Preview({ course, fileId, what, onClose }) {
+function Preview({ course, fileId, what, device = 'desktop', onClose }) {
   const html = useMemo(() => {
     let c = { ...course, id: 'preview-' + fileId };
     if (what !== 'all') {
@@ -894,7 +1026,7 @@ function Preview({ course, fileId, what, onClose }) {
   }, []);
   return (
     <Modal title="Preview" onClose={onClose} full boxRef={box} tools={<button className="btn cv-fs" onClick={toggleFs} aria-pressed={fs}>{fs ? '⤡ Exit full screen' : '⤢ Full screen'}</button>}>
-      <iframe key={n} className="cv-preview" title="Course preview" srcDoc={html} sandbox="allow-scripts allow-popups" allow="fullscreen" />
+      <div className={'cv-device dev-' + device}><iframe key={n} className="cv-preview" title="Course preview" srcDoc={html} sandbox="allow-scripts allow-popups" allow="fullscreen" /></div>
       <footer className="cv-dlg-f"><span className="cv-note">{what === 'all' ? 'The whole course' : what.startsWith('scene:') ? 'This scene' : 'This slide'}, as learners will see it.</span><button className="btn" onClick={() => setN(x => x + 1)}>Replay</button><button className="btn primary" onClick={onClose}>Close preview</button></footer>
     </Modal>
   );

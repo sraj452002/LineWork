@@ -108,8 +108,8 @@ test('build a slide: insert, format, a state, a layer and triggers; publish HTML
   await panel.getByRole('button', { name: '＋ Trigger' }).click();
   const trig = right.getByRole('region', { name: 'Triggers' });
   await trig.getByLabel('Action').selectOption('showLayer');
-  await expect(trig.locator('.cv-trig-h')).toContainText('Show layer Layer 1');
-  await expect(trig.locator('.cv-trig-h')).toContainText('When user clicks Reveal');
+  await expect(trig.locator('.cv-trig:not(.static) .cv-trig-h')).toContainText('Show layer Layer 1');
+  await expect(trig.locator('.cv-trig:not(.static) .cv-trig-h')).toContainText('When user clicks Reveal');
 
   // Preview this slide: clicking shows the layer.
   await page.getByRole('tab', { name: 'HOME' }).click();
@@ -123,12 +123,12 @@ test('build a slide: insert, format, a state, a layer and triggers; publish HTML
 
   // Undo: first the action goes back to Jump, then the trigger goes; redo brings both back.
   await page.keyboard.press('Control+z');
-  await expect(trig.locator('.cv-trig-h')).toContainText('Jump to slide');
+  await expect(trig.locator('.cv-trig:not(.static) .cv-trig-h')).toContainText('Jump to slide');
   await page.keyboard.press('Control+z');
-  await expect(trig.locator('.cv-trig')).toHaveCount(0);
+  await expect(trig.locator('.cv-trig:not(.static)')).toHaveCount(0);
   await page.keyboard.press('Control+y');
   await page.keyboard.press('Control+y');
-  await expect(trig.locator('.cv-trig-h')).toContainText('Show layer Layer 1');
+  await expect(trig.locator('.cv-trig:not(.static) .cv-trig-h')).toContainText('Show layer Layer 1');
 
   // Publish: one HTML page, and a SCORM 1.2 zip with its manifest.
   await page.getByRole('button', { name: 'Publish', exact: true }).click();
@@ -236,7 +236,7 @@ test('Storyline .story files and published courses import as courses', async ({ 
   await page.getByRole('menuitem', { name: /Import slides/ }).click();
   await page.getByLabel('Course file to import').setInputFiles({ name: 'Fire drill.zip', mimeType: 'application/zip', buffer: pubBuf });
   await expect(page.locator('.sl-import')).toContainText('published Storyline course: 1 scene, 2 slides');
-  await page.getByRole('button', { name: 'STORY VIEW' }).click();
+  await page.getByRole('button', { name: 'STORY VIEW', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Scene 3: Drill' })).toBeVisible();
   await page.getByRole('button', { name: /^Slide 3\.1: Alarm sounds/ }).dblclick();
   await expect(page.locator('.cv-stage')).toContainText('Leave the building calmly');
@@ -399,4 +399,91 @@ test('the ribbon folds and every panel can be hidden, and stays so', async ({ pa
   await expect(page.getByRole('complementary', { name: 'Slides' })).toBeVisible();
   await expect(page.getByRole('complementary', { name: 'Properties' })).toBeVisible();
   await expect(page.locator('.sl-bottom')).toBeVisible();
+});
+
+// Slide Properties as in desktop authoring tools: which player buttons a slide shows, and what happens when it's revisited.
+test('Slide Properties choose the slide’s buttons and how it is revisited', async ({ page }) => {
+  await studio(page, 'Quiz');
+  await page.getByRole('button', { name: /^Slide 1\.2:/ }).click();
+  const props = page.getByRole('region', { name: 'Slide Properties' });
+  await expect(props).toContainText('Properties for “1.2');
+  await props.getByLabel('Next button').uncheck();
+  await props.getByLabel('Submit button').check();
+  await props.getByLabel('When revisiting').selectOption('reset');
+  await page.getByRole('button', { name: 'Preview', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'This slide' }).click();
+  const p = page.frameLocator('iframe[title="Course preview"]');
+  await expect(p.getByRole('button', { name: 'Submit', exact: true }).last()).toBeVisible();
+  await expect(p.locator('.cp-bar').getByRole('button', { name: /Next|Finish/ })).toBeHidden();
+  // The player's Submit sends the question.
+  await p.locator('.cp-qo').first().click();
+  await p.locator('.cp-bar').getByRole('button', { name: 'Submit' }).click();
+  await expect(p.locator('.cp-fb.on')).toBeVisible();
+});
+
+// The newer authoring features: text autofit and scrollbars, corner radius, the feedback master (and theme colors),
+// global notes formatting with the player's Notes, sharper font scaling, and answered questions locked on revisit.
+test('autofit, scrollbars, corner radius, feedback master, notes format, font scaling and locked questions', async ({ page }) => {
+  test.setTimeout(60_000);
+  await studio(page, 'Quiz');
+  // Slide 1: a text box that grows with its text, one that shrinks its text, one that scrolls.
+  await page.getByRole('button', { name: /^Slide 1\.1:/ }).dblclick();
+  const ribbon = page.getByRole('toolbar', { name: 'Course tools' });
+  const panel = page.locator('.sl-bottom');
+  const long = Array(30).fill('A long line of text that keeps going').join(' ');
+  const addText = async (fit, scroll) => {
+    await page.getByRole('tab', { name: 'INSERT' }).click();
+    await ribbon.getByRole('button', { name: 'Text Box' }).click();
+    await panel.getByLabel('Text', { exact: true }).fill(long);
+    await panel.getByLabel('Autofit').selectOption(fit);
+    if (scroll) await panel.getByLabel('Text scrollbar').check();
+    await panel.getByLabel('Corners').fill('20');
+  };
+  await addText('shape'); await addText('shrink'); await addText('none', true);
+  // Feedback master with theme colors; notes format; the player's notes, locked questions.
+  await page.getByRole('tab', { name: 'DESIGN' }).click();
+  await ribbon.getByRole('button', { name: 'Feedback Master' }).click();
+  const fbd = page.getByRole('dialog', { name: 'Feedback Master' });
+  await fbd.getByLabel('Correct title', { exact: true }).fill('Well done!');
+  await fbd.getByLabel('Feedback theme colors').check();
+  await fbd.getByRole('button', { name: 'Done' }).click();
+  await ribbon.getByRole('button', { name: 'Notes Format' }).click();
+  await page.getByRole('dialog', { name: 'Notes Format' }).getByLabel('Size (px)').fill('20');
+  await page.getByRole('dialog', { name: 'Notes Format' }).getByRole('button', { name: 'Done' }).click();
+  await panel.getByRole('tab', { name: 'Notes' }).click();
+  await page.getByLabel('Slide notes').fill('Remember to smile');
+  await expect(page.getByLabel('Slide notes')).toHaveCSS('font-size', '20px');
+  await page.getByRole('tab', { name: 'HOME' }).click();
+  await ribbon.getByRole('button', { name: 'Player', exact: true }).click();
+  const pd = page.getByRole('dialog', { name: 'Player' });
+  await pd.getByText('Notes (each slide’s notes, beside the slide)').click();
+  await pd.getByText('Disable navigation within a question when it’s revisited').click();
+  await pd.getByRole('button', { name: 'Done' }).click();
+
+  await page.getByRole('button', { name: 'Preview', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Entire project' }).click();
+  const p = page.frameLocator('iframe[title="Course preview"]');
+  // The preview fills the window (not a 150px-tall strip).
+  expect(await page.locator('iframe[title="Course preview"]').evaluate(e => e.offsetHeight)).toBeGreaterThan(400);
+  const boxes = p.locator('.cp-o.cp-text', { hasText: 'A long line of text' });
+  await expect(boxes).toHaveCount(3);
+  // Grows: taller than its box; shrinks: its text is zoomed down; scrolls: a scrollbar.
+  expect(await boxes.nth(0).evaluate(e => e.offsetHeight)).toBeGreaterThan(70);
+  await expect.poll(() => boxes.nth(1).locator('.cp-t').evaluate(e => Number(e.style.zoom || 1))).toBeLessThan(1);
+  expect(await boxes.nth(2).locator('.cp-t').evaluate(e => getComputedStyle(e).overflowY)).toBe('auto');
+  await expect(boxes.nth(0)).toHaveCSS('border-top-left-radius', '20px');
+  // Sharper font scaling: the slide is zoomed, not scaled as a picture.
+  expect(await p.locator('.cp-stage').evaluate(e => e.style.zoom)).not.toBe('');
+  // Notes, in their format.
+  await p.getByRole('button', { name: 'Notes' }).click();
+  await expect(p.getByRole('complementary', { name: 'Notes' })).toHaveText('Remember to smile');
+  await expect(p.getByRole('complementary', { name: 'Notes' })).toHaveCSS('font-size', '20px');
+  // The feedback master's title, and a question locked once answered.
+  await p.locator('.cp-menu button', { hasText: 'Question 1' }).click();
+  await p.locator('.cp-qo').first().click();
+  await p.locator('.cp-question').getByRole('button', { name: 'Submit' }).click();
+  await expect(p.locator('.cp-fb.on')).toContainText('Well done!');
+  await p.locator('.cp-menu button', { hasText: 'Quiz' }).first().click();
+  await p.locator('.cp-menu button', { hasText: 'Question 1' }).click();
+  await expect(p.locator('.cp-question').getByRole('button', { name: 'Submit' })).toBeDisabled();
 });

@@ -197,25 +197,41 @@ export function player(C, env) {
   root.style.setProperty('--acc', C.accent || '#4f5bd5');
   root.style.fontFamily = C.font || 'system-ui, sans-serif';
   const top = h('header', 'cp-top'); const ttl = h('b', '', C.title || 'Course'); top.appendChild(ttl);
+  if (Number(C.player?.fontScale) && Number(C.player.fontScale) !== 100) root.style.fontSize = Number(C.player.fontScale) + '%';
+  // Notes (global notes formatting: one font, size and color for every slide's notes).
+  const notesBtn = h('button', 'cp-btn cp-notes-btn', 'Notes'); notesBtn.setAttribute('aria-expanded', 'false');
+  const notesBox = h('aside', 'cp-notes'); notesBox.setAttribute('aria-label', 'Notes');
+  const ns = C.notesStyle || {}; if (ns.font) notesBox.style.fontFamily = ns.font; if (ns.size) notesBox.style.fontSize = ns.size + 'px'; if (ns.color) notesBox.style.color = ns.color;
+  notesBtn.onclick = () => { const on = !root.classList.contains('cp-shownotes'); root.classList.toggle('cp-shownotes', on); notesBtn.setAttribute('aria-expanded', String(on)); };
+  if (C.player?.notes) top.appendChild(notesBtn);
   const menuBtn = h('button', 'cp-ib', '☰'); menuBtn.setAttribute('aria-label', 'Menu'); top.prepend(menuBtn);
   const body = h('div', 'cp-body'); const menu = h('nav', 'cp-menu'); menu.setAttribute('aria-label', 'Course menu');
   const wrap = h('main', 'cp-wrap'); const stage = h('div', 'cp-stage'); stage.style.width = W + 'px'; stage.style.height = H + 'px'; stage.setAttribute('role', 'region'); stage.setAttribute('aria-label', 'Slide');
-  wrap.appendChild(stage); body.append(menu, wrap);
+  wrap.appendChild(stage); body.append(menu, wrap, notesBox);
   // Objects can reach past the slide's edge (Storyline cuts them off there): the stage never scrolls to show them.
   stage.addEventListener('scroll', () => { stage.scrollLeft = 0; stage.scrollTop = 0; });
   const bar = h('footer', 'cp-bar');
   const play = h('button', 'cp-ib', '❚❚'); play.setAttribute('aria-label', 'Pause');
   const seek = h('div', 'cp-seek'); const seekIn = h('i'); seek.appendChild(seekIn); seek.setAttribute('role', 'progressbar');
   const count = h('span', 'cp-count');
-  const prev = h('button', 'cp-btn', '‹ Prev'); const next = h('button', 'cp-btn cp-next', 'Next ›');
-  bar.append(play, seek, count, prev, next);
+  const prev = h('button', 'cp-btn', '‹ Prev'); const next = h('button', 'cp-btn cp-next', 'Next ›'); const submitBtn = h('button', 'cp-btn cp-next', 'Submit');
+  submitBtn.style.display = 'none';
+  bar.append(play, seek, count, prev, next, submitBtn);
   root.append(top, body, bar);
   if (C.player?.title === false) top.style.display = 'none';
   if (!C.player?.menu) { menu.style.display = 'none'; menuBtn.style.display = 'none'; }
   if (C.player?.seekbar === false) { seek.style.visibility = 'hidden'; play.style.visibility = 'hidden'; }
   if (C.player?.prevNext === false) { prev.style.display = 'none'; next.style.display = 'none'; }
   menuBtn.onclick = () => root.classList.toggle('cp-nomenu');
-  const fit = () => { const r = wrap.getBoundingClientRect(); if (!r.width || !r.height) return; const k = Math.min(r.width / W, r.height / H); stage.style.transform = `translate(-50%,-50%) scale(${k})`; };
+  // Better font scaling: the slide is zoomed (text is laid out again at the new size, so it stays sharp) where the
+  // browser can; else scaled as a picture.
+  const sharp = C.player?.sharpText !== false && CSS.supports && CSS.supports('zoom', '2');
+  const fit = () => {
+    const r = wrap.getBoundingClientRect(); if (!r.width || !r.height) return;
+    const k = Math.min(r.width / W, r.height / H);
+    if (sharp) { stage.style.transform = 'none'; stage.style.zoom = k; stage.style.left = ((r.width - W * k) / 2) / k + 'px'; stage.style.top = ((r.height - H * k) / 2) / k + 'px'; }
+    else { stage.style.zoom = ''; stage.style.left = '50%'; stage.style.top = '50%'; stage.style.transform = `translate(-50%,-50%) scale(${k})`; }
+  };
   addEventListener('resize', fit);
   if (window.ResizeObserver) new ResizeObserver(fit).observe(wrap);
   const drawMenu = () => {
@@ -266,8 +282,20 @@ export function player(C, env) {
       if (label.dataset.sig !== sig || el._richRef !== rich) {
         label.dataset.sig = sig; el._richRef = rich;
         if (rich) drawRich(label, rich); else label.textContent = fill(s.text != null ? s.text : o.text);
+        el._fitted = false;
       }
+      // Text scrollbars: a scrollbar where the text is longer than its box.
+      label.classList.toggle('cp-scroll', !!s.scroll && s.autofit !== 'shrink');
+      // Autofit: the box grows with its text, or the text shrinks to fit the box.
+      st.height = s.autofit === 'shape' ? 'auto' : o.h + 'px'; st.minHeight = s.autofit === 'shape' ? o.h + 'px' : '';
+      if (s.autofit === 'shrink' && !el._fitted) { el._fitted = true; requestAnimationFrame(() => shrink(el, label)); }
     }
+  };
+  // Shrink text on overflow: make the text smaller (down to 40%) until it fits its box.
+  const shrink = (el, label) => {
+    label.style.zoom = '';
+    let k = 1;
+    for (let n = 0; n < 12 && label.scrollHeight > el.clientHeight + 1 && k > 0.4; n++) { k = Math.max(0.4, k * Math.min(0.95, Math.sqrt(el.clientHeight / label.scrollHeight))); label.style.zoom = k; }
   };
   const drawParts = (box, parts) => {
     box.textContent = '';
@@ -355,6 +383,13 @@ export function player(C, env) {
   const navBtn = { next, prev };
   const navState = (which, st) => { const b = navBtn[which]; if (!b) return; b.dataset.state = st; b.disabled = st === 'disabled'; b.style.visibility = st === 'hidden' ? 'hidden' : ''; };
   // A question drawn on the slide (from Storyline): its choices are objects learners select; Submit checks them.
+  // Revisiting an answered question (when the course says so): its answers can't change and the player's Submit is off.
+  const lockAnswered = () => {
+    const s = flat[cur].s, f = s.freeform, r = f && results['ff:' + s.id];
+    if (!C.quiz?.lockRevisit || !r?.done) return false;
+    for (const id of f.choices) { const el = live[id]; if (el) { el.classList.add('cp-disabled'); el.style.pointerEvents = 'none'; } }
+    submitBtn.disabled = true; return true;
+  };
   const submitFreeform = () => {
     const f = flat[cur].s.freeform; if (!f) return;
     const r = results['ff:' + flat[cur].s.id] || { tries: 0 };
@@ -501,15 +536,21 @@ export function player(C, env) {
       r.tries = (r.tries || 0) + 1; r.correct = ok; results[o.id] = r;
       const left = max - r.tries;
       fb.className = 'cp-fb on ' + (ok ? 'ok' : 'bad');
+      const fm = (C.feedback || {})[ok ? 'correct' : left > 0 ? 'tryAgain' : 'incorrect'];
+      if (fm) { fb.style.background = fm.fill || ''; fb.style.color = fm.color || ''; }
       fb.innerHTML = '';
-      fb.appendChild(h('b', '', ok ? '✓ ' + fill(Q.right || 'Correct') : '✗ ' + fill(Q.wrong || 'Incorrect')));
+      // The feedback master's title, then the question's own message.
+      const fmT = (C.feedback || {})[ok ? 'correct' : left > 0 ? 'tryAgain' : 'incorrect']?.title;
+      const msg = fill(ok ? Q.right || '' : Q.wrong || '');
+      fb.appendChild(h('b', '', (ok ? '✓ ' : '✗ ') + (fmT || msg || (ok ? 'Correct' : 'Incorrect'))));
+      if (fmT && msg && msg !== fmT) fb.appendChild(h('span', 'cp-fbmsg', ' ' + msg));
       if (!ok && left > 0) { fb.appendChild(h('span', '', ` You have ${left} more ${left === 1 ? 'try' : 'tries'}.`)); const again = h('button', 'cp-btn', 'Try again'); again.onclick = () => buildQuestion(el, o); fb.appendChild(again); }
       else { sub.disabled = true; list.querySelectorAll('input,button').forEach(x => { x.disabled = true; }); const cont = h('button', 'cp-btn cp-next', 'Continue ›'); cont.onclick = () => go(cur + 1); fb.appendChild(cont); }
       refresh(); save(); lockNext();
       fire(ok ? 'correct' : 'incorrect', o.id);
     };
     sub.onclick = submit; el._submit = submit;
-    if (r.tries >= max) { sub.disabled = true; list.querySelectorAll('input,button').forEach(x => { x.disabled = true; }); fb.className = 'cp-fb on ' + (r.correct ? 'ok' : 'bad'); fb.textContent = r.correct ? '✓ Answered correctly' : '✗ Answered'; }
+    if (r.tries >= max || (C.quiz?.lockRevisit && r.correct)) { sub.disabled = true; list.querySelectorAll('input,button').forEach(x => { x.disabled = true; }); fb.className = 'cp-fb on ' + (r.correct ? 'ok' : 'bad'); fb.textContent = r.correct ? '✓ Answered correctly' : '✗ Answered'; }
   };
   const buildResult = (el, o) => {
     el.innerHTML = '';
@@ -575,15 +616,25 @@ export function player(C, env) {
     cur = i; ended = false; layerOn = []; live = {};
     for (const k in layerEls) delete layerEls[k];
     stage.innerHTML = '';
-    const s = flat[i].s; visited.add(s.id);
+    const s = flat[i].s;
+    // Coming back: "reset to initial state" forgets what changed on the slide.
+    if (visited.has(s.id) && s.revisit === 'reset') { for (const l of s.layers) for (const o of l.objects) delete objState[o.id]; delete results['ff:' + s.id]; for (const l of s.layers) for (const o of l.objects) if (o.kind === 'question') delete results[o.id]; }
+    visited.add(s.id);
     stage.style.background = s.bg || '#fff';
     drawLayer(s.layers[0]);
     const tr = s.transition?.type; const box0 = layerEls[s.layers[0].id]?.box;
     if (tr && tr !== 'none' && box0) { box0.style.animationDuration = (Number(s.transition.dur) || 0.6) + 's'; box0.classList.add('cp-tr-' + tr); }
     t0 = now(); if (paused) { paused = false; play.textContent = '❚❚'; root.classList.remove('cp-paused'); }
     count.textContent = `${i + 1} / ${flat.length}`;
+    notesBox.textContent = s.notes || 'No notes for this slide.';
     prev.disabled = i === 0;
     navState('next', 'normal'); navState('prev', 'normal');
+    submitBtn.disabled = false; setTimeout(lockAnswered);
+    // The slide's own navigation: which of Prev / Next / Submit show.
+    const nav = s.nav || {};
+    prev.style.display = nav.prev === false || C.player?.prevNext === false ? 'none' : '';
+    next.style.display = nav.next === false || C.player?.prevNext === false ? 'none' : '';
+    submitBtn.style.display = nav.submit ? '' : 'none';
     lockNext();
     next.textContent = i === flat.length - 1 ? 'Finish' : 'Next ›';
     drawMenu(); fit(); tick(); loop();
@@ -595,6 +646,15 @@ export function player(C, env) {
   const lockNext = () => { const s = flat[cur].s; if (next.dataset.state === 'disabled') return; next.disabled = s.next === 'question' && !s.layers[0].objects.filter(o => o.kind === 'question').every(o => results[o.id] && (results[o.id].correct || results[o.id].tries >= (Number(o.q.attempts) || 1))); };
   const finish = () => { report(true); env.exit?.(); const done = h('div', 'cp-done'); done.appendChild(h('b', '', 'You’ve reached the end of the course.')); const again = h('button', 'cp-btn', 'Start again'); again.onclick = () => { done.remove(); act({ action: 'restart' }); }; done.appendChild(again); stage.appendChild(done); };
   // Prev / Next: a slide's own triggers for them (imported from Storyline) run instead of the usual move.
+  submitBtn.onclick = () => { const s = flat[cur].s; if (s.freeform) submitFreeform(); else for (const l of visibleLayers()) for (const o of l.objects) if (o.kind === 'question') live[o.id]?._submit?.(); };
+  // Swipe on touch screens, where the slide allows it.
+  let touchX = null;
+  wrap.addEventListener('touchstart', e => { touchX = e.touches[0].clientX; }, { passive: true });
+  wrap.addEventListener('touchend', e => {
+    if (touchX == null) return; const dx = e.changedTouches[0].clientX - touchX; touchX = null;
+    const sw = flat[cur].s.swipe || {};
+    if (dx < -60 && sw.next !== false && !next.disabled) next.onclick(); else if (dx > 60 && sw.prev !== false && !prev.disabled) prev.onclick();
+  });
   prev.onclick = () => { if (!fire('prevButton')) go(cur - 1); };
   next.onclick = () => { if (!fire('nextButton')) (cur === flat.length - 1 ? finish() : go(cur + 1)); };
   addEventListener('keydown', e => {
@@ -638,6 +698,9 @@ export const PLAYER_CSS = `
 .cp-o{position:absolute;display:flex;flex-direction:column;overflow:hidden;white-space:pre-wrap;line-height:1.3}
 .cp-o .cp-t{padding:6px 10px}
 .cp-o>.cp-t{pointer-events:none}
+.cp-o>.cp-t.cp-scroll{pointer-events:auto;overflow:auto;max-height:100%;scrollbar-width:thin}
+.cp-notes{display:none;width:280px;flex:none;overflow:auto;background:#fff;border-left:1px solid #e1e4ee;padding:14px;white-space:pre-wrap;font-size:14px;line-height:1.5}
+.cp-shownotes .cp-notes{display:block}.cp-notes-btn{margin-left:auto;padding:5px 12px}
 .cp-p{margin:0;min-height:1em}
 .cp-parts{position:absolute;inset:0;pointer-events:none}.cp-part{position:absolute;display:flex;flex-direction:column;overflow:hidden}.cp-part img{width:100%;height:100%;display:block;object-fit:fill}.cp-bul{display:inline-block;min-width:1.2em}
 @keyframes cpOut{to{opacity:0}}.cp-x-fade{animation:cpOut .5s ease forwards}
@@ -714,9 +777,15 @@ const ENV = {
     };
   })()`,
 };
+// Feedback master: the title and colors of every question's Correct / Try again / Incorrect feedback; or the theme's.
+export const feedbackOf = c => {
+  const acc = c.accent || '#4f5bd5', th = c.feedback?.theme;
+  const def = { correct: { fill: th ? `color-mix(in srgb, ${acc} 14%, #fff)` : '#e6f6ef', color: th ? acc : '#0f6b52' }, tryAgain: { fill: '#fff4e5', color: '#8a4a12' }, incorrect: { fill: th ? '#f3f4f8' : '#fdecec', color: th ? '#3a3f55' : '#a8322a' } };
+  return Object.fromEntries(Object.entries(def).map(([k, v]) => [k, { ...v, ...(c.feedback?.[k] || {}) }]));
+};
 // The whole course as one web page.
 export function courseHtml(course, mode = 'web') {
-  const data = JSON.stringify({ ...course, id: course.id || 'course' }).replace(/</g, '\\u003c').split(String.fromCharCode(0x2028)).join('\\u2028').split(String.fromCharCode(0x2029)).join('\\u2029');
+  const data = JSON.stringify({ ...course, id: course.id || 'course', feedback: feedbackOf(course) }).replace(/</g, '\\u003c').split(String.fromCharCode(0x2028)).join('\\u2028').split(String.fromCharCode(0x2029)).join('\\u2029');
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(course.title || 'Course')}</title><style>${PLAYER_CSS}</style></head>
 <body><script>const COURSE = ${data};
 (${player.toString()})(COURSE, ${ENV[mode] || ENV.web});
