@@ -5,6 +5,7 @@ import { NODE_TYPES } from './flow-nodes.js';
 import { APP_NODES } from './flow-apps.js';
 import { WORKLINE_NODES } from './flow-workline.js';
 import { POLL_EVERY, TRIGGER_TYPES, formFields } from './flow-triggers.js';
+import { analyseSite } from './reverse-site.js';
 import { MORE_TRIGGERS, cronDue, parseCron } from './flow-more-triggers.js';
 import { EVENT_TRIGGERS } from './flow-event-triggers.js';
 import { WEB_NODES } from './flow-web.js';
@@ -87,7 +88,7 @@ const ID = /^[\w-]{1,80}$/;
 // A page's own link name: /p/<name>.
 export const PAGE_LINK = /^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$/;
 
-export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secret = '', storeOwner = '' }) {
+export function createFlows({ store, drive = null, ai = {}, mailer, allowPrivate = false, secret = '', storeOwner = '' }) {
   const m = store.meta;
   // The node types a run of `flow` can use: ours, and the account's custom nodes (My nodes), the latest
   // version of each; copies a workflow file carries (flow.customNodes) fill in ones the account hasn't got.
@@ -154,6 +155,8 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
         reindex(uid, file.id, file);
       },
     },
+    // Storage (drive.js): the account's common place for files, for the Storage node.
+    drive: drive ? drive.forUser(uid) : null,
     // A connection saved in the Database view (by id or name), with its password if it was remembered.
     dbConnection(id) { const list = m.userdata[uid]?.['db-connections']; return Array.isArray(list) ? list.find(c => c.id === id || c.name === id) || null : null; },
     // Another workflow file of this account, run on these items: what its last steps produce.
@@ -788,6 +791,16 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
     });
     // Run one of the account's saved workflows with some input and answer with its output in full: what a
     // custom app (the App view) does while it's being built.
+    // Reverse engineer → a website: one page read as a visitor would, and what it shows (reverse-site.js).
+    const siteLimit = limiter({ max: 20, windowMs: 60_000 });
+    api.get('/reverse/site', signedIn, async (req, res) => {
+      const url = String(req.query.url || '').trim();
+      if (!url) return res.status(400).json({ error: 'missing', message: 'Give a web address.' });
+      if (siteLimit.blocked(req.user.id)) return res.status(429).json({ error: 'rate_limited', message: 'Too many sites at once. Try again in a minute.' });
+      siteLimit.fail(req.user.id);
+      try { res.json(await analyseSite(url, { allowPrivate })); }
+      catch (e) { res.status(e.code === 'private_host' || e.code === 'bad_url' ? 400 : 502).json({ error: e.code || 'site', message: e.message }); }
+    });
     api.post('/flows/:fileId/call', signedIn, async (req, res) => {
       if (!ID.test(req.params.fileId)) return res.status(400).json({ error: 'bad_id' });
       const flow = await savedFlow(req.user.id, req.params.fileId).catch(() => null);

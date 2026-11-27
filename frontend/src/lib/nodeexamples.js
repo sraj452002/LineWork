@@ -127,6 +127,7 @@ export const NODE_EXAMPLE = {
   'core.note': { text: 'Sends the daily report. Ask Asha before changing it.' },
   'core.pivot': { rows: 'country', columns: 'status', value: 'amount', total: true },
   'core.textsplit': { text: '{{ $json.text }}', by: 'paragraph', size: 1000, overlap: 100 },
+  'core.storage': { operation: 'save', source: 'file', file: '{{ $json.invoice }}', folder: 'Invoices/2026', replace: false, output: 'file' },
   'core.kv': { operation: 'increment', key: 'visits:{{ $json.page }}', by: 1, output: 'visits' },
 
   /* ---- page and UI ---- */
