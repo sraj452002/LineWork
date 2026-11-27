@@ -90,7 +90,7 @@ function Big({ icon, label, onClick, menu, on, disabled, small, title }) {
   );
 }
 // A small ribbon button (an icon and a word), in a column of two or three.
-const Sm = ({ icon, label, onClick, disabled, menu }) => <button className="sl-sm" onClick={e => onClick?.(e.currentTarget)} disabled={disabled} title={disabled ? SOON : undefined} aria-haspopup={menu ? 'menu' : undefined}>{icon && <Svg d={icon} s={16} />}{label}{menu && <i aria-hidden="true"> ▾</i>}</button>;
+const Sm = ({ icon, label, onClick, disabled, menu, title }) => <button className="sl-sm" onClick={e => onClick?.(e.currentTarget)} disabled={disabled} title={title || (disabled ? SOON : undefined)} aria-haspopup={menu ? 'menu' : undefined}>{icon && <Svg d={icon} s={16} />}{label}{menu && <i aria-hidden="true"> ▾</i>}</button>;
 const Group = ({ label, children }) => <div className="sl-group" role="group" aria-label={label}><div className="sl-gbody">{children}</div><span className="sl-glabel">{label}</span></div>;
 const TABS = ['HOME', 'INSERT', 'SLIDES', 'DESIGN', 'TRANSITIONS', 'ANIMATIONS', 'VIEW', 'HELP'];
 const readPref = (k, d) => { try { return localStorage.getItem(k) || d; } catch (e) { return d; } };
@@ -122,6 +122,18 @@ export default function CourseView({ file, update, visible = true }) {
   const [panels, setPanels] = useState(() => { try { return { slides: true, right: true, bottom: true, ...JSON.parse(readPref('linework:course-panels', '{}')) }; } catch (e) { return { slides: true, right: true, bottom: true }; } });
   const togglePanel = (key, v) => setPanels(p => { const n = { ...p, [key]: v ?? !p[key] }; savePref('linework:course-panels', JSON.stringify(n)); return n; });
   const focusMode = !panels.slides && !panels.right && !panels.bottom;
+  // More objects selected with the first (Shift-click, or a box dragged round them).
+  const [extra, setExtra] = useState([]);
+  // The Timeline's playhead (null: every object shows): objects not on the slide at that time are dimmed.
+  const [tlTime, setTlTime] = useState(null);
+  // Rulers, gridlines and snapping guides (kept for next time).
+  const [view, setView] = useState(() => { try { return { rulers: true, grid: false, guides: true, ...JSON.parse(readPref('linework:course-view', '{}')) }; } catch (e) { return { rulers: true, grid: false, guides: true }; } });
+  const toggleView = key => setView(v => { const n = { ...v, [key]: !v[key] }; savePref('linework:course-view', JSON.stringify(n)); return n; });
+  // The bottom panel's height (drag its top edge), or folded down to its tabs.
+  const [bottomH, setBottomH] = useState(() => Math.max(90, Number(readPref('linework:course-bottomh', '190')) || 190));
+  const [bottomFold, setBottomFold] = useState(() => readPref('linework:course-bottomfold', '0') === '1');
+  const foldBottom = v => { setBottomFold(v); savePref('linework:course-bottomfold', v ? '1' : '0'); };
+  const guideRef = useRef(null);
   const setFocus = on => setPanels(() => { const n = { slides: !on, right: !on, bottom: !on }; savePref('linework:course-panels', JSON.stringify(n)); return n; });
 
   const flat = course ? allSlides(course) : [];
@@ -129,7 +141,15 @@ export default function CourseView({ file, update, visible = true }) {
   const slide = here?.s;
   const layer = slide && (slide.layers.find(l => l.id === layerId) || slide.layers[0]);
   const obj = layer && sel ? (layer.objects.find(o => o.id === sel) || null) : null;
-  useEffect(() => { if (obj?.id !== sel) setSel(obj?.id || null); setEditState('normal'); }, [slide?.id, layer?.id]); // eslint-disable-line
+  useEffect(() => { if (obj?.id !== sel) setSel(obj?.id || null); setEditState('normal'); setExtra([]); setTlTime(null); }, [slide?.id, layer?.id]); // eslint-disable-line
+  const chosen = new Set([sel, ...extra].filter(id => id && layer?.objects.some(o => o.id === id)));
+  const pick = (id, add) => {
+    if (!add) { setSel(id); setExtra([]); return; }
+    if (!id) return;
+    if (id === sel) { const [n, ...rest] = extra; setSel(n || null); setExtra(rest); }
+    else if (extra.includes(id)) setExtra(extra.filter(x => x !== id));
+    else if (sel) setExtra([...extra, id]); else setSel(id);
+  };
 
   // A change to the course: one step to undo. (The snapshot is taken here: React may run an updater twice.)
   const now = useRef(course); now.current = course;
@@ -202,6 +222,7 @@ export default function CourseView({ file, update, visible = true }) {
   const copyObj = () => { if (obj) { clip.current = JSON.stringify(obj); toast('Copied'); } };
   const cutObj = () => { if (!obj) return; clip.current = JSON.stringify(obj); write(c => { const l = inLayer(c); l.objects = l.objects.filter(o => o.id !== obj.id); }); setSel(null); };
   const pasteObj = () => { if (!clip.current) return toast('Copy or cut an object first.'); if (mode !== 'slide') go('slide'); const o = { ...JSON.parse(clip.current), id: rid('o') }; o.x += 20; o.y += 20; write(c => { inLayer(c).objects.push(o); }); setSel(o.id); };
+  const removeChosen = () => { const ids = new Set(chosen); write(c => { const l = inLayer(c); l.objects = l.objects.filter(o => !ids.has(o.id)); l.triggers = l.triggers.filter(t => !ids.has(t.source)); }); setSel(null); setExtra([]); };
   const duplicate = o => { const n = { ...JSON.parse(JSON.stringify(o)), id: rid('o'), x: o.x + 20, y: o.y + 20, name: o.name + ' copy' }; write(c => { inLayer(c).objects.push(n); }); setSel(n.id); };
   useEffect(() => {
     if (!visible || !course) return undefined;
@@ -217,11 +238,13 @@ export default function CourseView({ file, update, visible = true }) {
         return;
       }
       if (mod && k === 'v') { e.preventDefault(); pasteObj(); return; }
+      if (mod && k === 'a') { e.preventDefault(); const ids = layer.objects.filter(o => !o.hideEdit).map(o => o.id); setSel(ids[0] || null); setExtra(ids.slice(1)); return; }
+      if (e.key === 'Escape') { setSel(null); setExtra([]); return; }
       if (!obj) return;
-      if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); write(c => { const l = inLayer(c); l.objects = l.objects.filter(o => o.id !== obj.id); }); setSel(null); }
+      if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); removeChosen(); }
       else if (e.key.startsWith('Arrow')) {
         e.preventDefault(); const d = e.shiftKey ? 10 : 1;
-        editObj(o => { if (e.key === 'ArrowLeft') o.x -= d; if (e.key === 'ArrowRight') o.x += d; if (e.key === 'ArrowUp') o.y -= d; if (e.key === 'ArrowDown') o.y += d; });
+        write(c => { for (const o of inLayer(c).objects) if (chosen.has(o.id) && !o.locked) { if (e.key === 'ArrowLeft') o.x -= d; if (e.key === 'ArrowRight') o.x += d; if (e.key === 'ArrowUp') o.y -= d; if (e.key === 'ArrowDown') o.y += d; } });
       } else if (mod && k === 'd') { e.preventDefault(); duplicate(obj); }
       else if (mod && k === 'c') copyObj();
       else if (mod && k === 'x') { e.preventDefault(); cutObj(); }
@@ -235,33 +258,149 @@ export default function CourseView({ file, update, visible = true }) {
   const [fitK, setFitK] = useState(0.6);
   useLayoutEffect(() => {
     const el = holder.current; if (!el || !course) return undefined;
-    const fit = () => { const r = el.getBoundingClientRect(); if (r.width && r.height) setFitK(Math.max(0.15, Math.min((r.width - 24) / course.size.w, (r.height - 20) / course.size.h, 2))); };
+    const m = view.rulers ? 52 : 28;
+    const fit = () => { const r = el.getBoundingClientRect(); if (r.width && r.height) setFitK(Math.max(0.15, Math.min((r.width - m) / course.size.w, (r.height - m) / course.size.h, 2))); };
     fit(); const ro = new ResizeObserver(fit); ro.observe(el); return () => ro.disconnect();
-  }, [course?.size?.w, course?.size?.h, visible, mode, panels.slides, panels.right, panels.bottom, ribbonOpen]); // eslint-disable-line
+  }, [course?.size?.w, course?.size?.h, visible, mode, panels.slides, panels.right, panels.bottom, ribbonOpen, view.rulers, bottomH, bottomFold]); // eslint-disable-line
   const k = zoom ? zoom / 100 : fitK;
+  const showGuides = (xs, ys) => { const g = guideRef.current; if (g) g.innerHTML = xs.map(x => `<i class="gv" style="left:${x}px"></i>`).join('') + ys.map(y => `<i class="gh" style="top:${y}px"></i>`).join(''); };
   const drag = (e, o, how) => {
+    if (e.button === 2) return; // the right-click menu
     e.stopPropagation(); e.preventDefault();
-    setSel(o.id);
-    if (editing) return;
+    if (how === 'move' && (e.shiftKey || e.ctrlKey || e.metaKey)) { pick(o.id, true); return; }
+    const group = how === 'move' && chosen.has(o.id) ? layer.objects.filter(x => chosen.has(x.id) && !x.locked) : [o];
+    if (!chosen.has(o.id)) { setSel(o.id); setExtra([]); }
+    if (editing || o.locked) return;
+    const stageEl = e.currentTarget.closest('.cv-stage');
+    const els = group.map(g => ({ g, el: stageEl.querySelector(`.cv-o[data-id="${g.id}"]`) })).filter(x => x.el);
     const sx = e.clientX, sy = e.clientY, start = { x: o.x, y: o.y, w: o.w, h: o.h };
-    let moved = false, snap = null;
-    const box = e.currentTarget.closest('.cv-o');
+    const bx = Math.min(...group.map(g => g.x)), by = Math.min(...group.map(g => g.y));
+    const bw = Math.max(...group.map(g => g.x + g.w)) - bx, bh = Math.max(...group.map(g => g.y + g.h)) - by;
+    // What the dragged objects line up with: the slide's edges and middle, and the other objects'.
+    const ids = new Set(group.map(g => g.id)), others = layer.objects.filter(x => !ids.has(x.id) && !x.hideEdit);
+    const tx = [0, course.size.w / 2, course.size.w, ...others.flatMap(x => [x.x, x.x + x.w / 2, x.x + x.w])];
+    const ty = [0, course.size.h / 2, course.size.h, ...others.flatMap(x => [x.y, x.y + x.h / 2, x.y + x.h])];
+    const near = (lines, targets, th) => { let best = null; for (const [i, v] of lines.entries()) for (const t of targets) { const d = t - v; if (Math.abs(d) <= th && (!best || Math.abs(d) < Math.abs(best.d))) best = { d, at: t, i }; } return best; };
+    let moved = false, out = null;
     const mv = m => {
       const dx = (m.clientX - sx) / k, dy = (m.clientY - sy) / k;
       if (!moved && Math.abs(dx) + Math.abs(dy) < 2) return;
       moved = true;
-      const g = m.altKey ? 1 : 5, r = v => Math.round(v / g) * g;
-      snap = { ...start };
-      if (how === 'move') { snap.x = r(start.x + dx); snap.y = r(start.y + dy); }
-      if (how.includes('e')) snap.w = Math.max(10, r(start.w + dx));
-      if (how.includes('s')) snap.h = Math.max(10, r(start.h + dy));
-      if (how.includes('w')) { snap.w = Math.max(10, r(start.w - dx)); snap.x = start.x + start.w - snap.w; }
-      if (how.includes('n')) { snap.h = Math.max(10, r(start.h - dy)); snap.y = start.y + start.h - snap.h; }
-      Object.assign(box.style, { left: snap.x + 'px', top: snap.y + 'px', width: snap.w + 'px', height: snap.h + 'px' });
+      const step = m.altKey ? 1 : view.grid ? 20 : 5, r = v => Math.round(v / step) * step, th = 6 / k;
+      if (how === 'move') {
+        let nx = bx + dx, ny = by + dy;
+        const sxg = view.guides && !m.altKey ? near([nx, nx + bw / 2, nx + bw], tx, th) : null;
+        const syg = view.guides && !m.altKey ? near([ny, ny + bh / 2, ny + bh], ty, th) : null;
+        nx = sxg ? Math.round(nx + sxg.d) : r(nx); ny = syg ? Math.round(ny + syg.d) : r(ny);
+        showGuides(sxg ? [sxg.at] : [], syg ? [syg.at] : []);
+        out = group.map(g => ({ id: g.id, x: g.x + nx - bx, y: g.y + ny - by }));
+        for (const { g, el } of els) { const p = out.find(q => q.id === g.id); el.style.left = p.x + 'px'; el.style.top = p.y + 'px'; }
+      } else {
+        const sn = { ...start };
+        if (how.includes('e')) sn.w = Math.max(10, r(start.w + dx));
+        if (how.includes('s')) sn.h = Math.max(10, r(start.h + dy));
+        if (how.includes('w')) { sn.w = Math.max(10, r(start.w - dx)); sn.x = start.x + start.w - sn.w; }
+        if (how.includes('n')) { sn.h = Math.max(10, r(start.h - dy)); sn.y = start.y + start.h - sn.h; }
+        out = [{ id: o.id, ...sn }];
+        Object.assign(els[0].el.style, { left: sn.x + 'px', top: sn.y + 'px', width: sn.w + 'px', height: sn.h + 'px' });
+      }
     };
-    const up = () => { removeEventListener('pointermove', mv); removeEventListener('pointerup', up); if (moved && snap) editObj(x => { if (x.id === o.id) Object.assign(x, snap); }); };
+    const up = () => {
+      removeEventListener('pointermove', mv); removeEventListener('pointerup', up); showGuides([], []);
+      if (moved && out) write(c => { for (const p of out) { const x = inLayer(c).objects.find(q => q.id === p.id); if (x) Object.assign(x, p, { id: x.id }); } });
+    };
     addEventListener('pointermove', mv); addEventListener('pointerup', up);
   };
+  // A box dragged on the slide's background selects what it touches.
+  const marquee = e => {
+    if (e.button !== 0) return;
+    setEditing(null);
+    const add = e.shiftKey || e.ctrlKey || e.metaKey;
+    if (!add) { setSel(null); setExtra([]); }
+    const stageEl = holder.current?.querySelector('.cv-stage'); if (!stageEl) return;
+    const sr = stageEl.getBoundingClientRect(), at = m => ({ x: (m.clientX - sr.left) / k, y: (m.clientY - sr.top) / k });
+    const a = at(e); let b = a;
+    const box = document.createElement('div'); box.className = 'cv-marquee'; stageEl.appendChild(box);
+    const mv = m => { b = at(m); Object.assign(box.style, { left: Math.min(a.x, b.x) + 'px', top: Math.min(a.y, b.y) + 'px', width: Math.abs(b.x - a.x) + 'px', height: Math.abs(b.y - a.y) + 'px' }); };
+    const up = () => {
+      removeEventListener('pointermove', mv); removeEventListener('pointerup', up); box.remove();
+      if (Math.abs(b.x - a.x) + Math.abs(b.y - a.y) < 4) return;
+      const x1 = Math.min(a.x, b.x), x2 = Math.max(a.x, b.x), y1 = Math.min(a.y, b.y), y2 = Math.max(a.y, b.y);
+      const hit = layer.objects.filter(o => !o.hideEdit && o.x < x2 && o.x + o.w > x1 && o.y < y2 && o.y + o.h > y1).map(o => o.id);
+      const all = [...new Set([...(add ? [...chosen] : []), ...hit])];
+      setSel(all[0] || null); setExtra(all.slice(1));
+    };
+    addEventListener('pointermove', mv); addEventListener('pointerup', up);
+  };
+  // The right-click menu: an anchor at the pointer.
+  const at = e => ({ getBoundingClientRect: () => ({ left: e.clientX, right: e.clientX + 230, top: e.clientY, bottom: e.clientY }), contains: () => false });
+  const order = how => write(c => {
+    const l = inLayer(c), pickd = l.objects.filter(o => chosen.has(o.id)), rest = l.objects.filter(o => !chosen.has(o.id));
+    if (how === 'front') l.objects = [...rest, ...pickd];
+    else if (how === 'back') l.objects = [...pickd, ...rest];
+    else { const arr = l.objects; const idx = arr.map((o, i) => (chosen.has(o.id) ? i : -1)).filter(i => i >= 0); (how === 'forward' ? idx.reverse() : idx).forEach(i => { const j = how === 'forward' ? i + 1 : i - 1; if (j >= 0 && j < arr.length && !chosen.has(arr[j].id)) [arr[i], arr[j]] = [arr[j], arr[i]]; }); }
+  });
+  const align = how => write(c => {
+    const l = inLayer(c), objs = l.objects.filter(o => chosen.has(o.id));
+    const one = objs.length === 1, W = c.size.w, H = c.size.h;
+    const x1 = one ? 0 : Math.min(...objs.map(o => o.x)), x2 = one ? W : Math.max(...objs.map(o => o.x + o.w));
+    const y1 = one ? 0 : Math.min(...objs.map(o => o.y)), y2 = one ? H : Math.max(...objs.map(o => o.y + o.h));
+    for (const o of objs) {
+      if (how === 'left') o.x = x1; if (how === 'center') o.x = Math.round((x1 + x2 - o.w) / 2); if (how === 'right') o.x = x2 - o.w;
+      if (how === 'top') o.y = y1; if (how === 'middle') o.y = Math.round((y1 + y2 - o.h) / 2); if (how === 'bottom') o.y = y2 - o.h;
+    }
+    if (how === 'hspace' || how === 'vspace') {
+      const h = how === 'hspace', srt = [...objs].sort((a, b) => (h ? a.x - b.x : a.y - b.y));
+      if (srt.length > 2) { const total = srt.reduce((n, o) => n + (h ? o.w : o.h), 0), gap = ((h ? x2 - x1 : y2 - y1) - total) / (srt.length - 1); let p = h ? x1 : y1; for (const o of srt) { if (h) o.x = Math.round(p); else o.y = Math.round(p); p += (h ? o.w : o.h) + gap; } }
+    }
+  });
+  const alignItems = () => [['left', 'Align left'], ['center', 'Align center'], ['right', 'Align right'], ['top', 'Align top'], ['middle', 'Align middle'], ['bottom', 'Align bottom'], ...(chosen.size > 2 ? [['hspace', 'Distribute horizontally'], ['vspace', 'Distribute vertically']] : [])].map(([v, l]) => ({ label: l + (chosen.size === 1 ? ' (to the slide)' : ''), act: () => align(v) }));
+  const objMenu = (e, o) => {
+    e.preventDefault(); e.stopPropagation();
+    if (!chosen.has(o.id)) { setSel(o.id); setExtra([]); }
+    const many = chosen.has(o.id) && chosen.size > 1;
+    popup(at(e), [
+      { label: 'Cut', act: () => { clip.current = JSON.stringify(o); removeChosen(); } },
+      { label: 'Copy', act: () => { clip.current = JSON.stringify(o); toast('Copied'); } },
+      { label: 'Paste', act: pasteObj },
+      { label: 'Duplicate', act: () => duplicate(o) },
+      { label: many ? `Delete ${chosen.size} objects` : 'Delete', danger: true, act: removeChosen },
+      '-',
+      { label: 'Bring to front', act: () => order('front') }, { label: 'Bring forward', act: () => order('forward') },
+      { label: 'Send backward', act: () => order('backward') }, { label: 'Send to back', act: () => order('back') },
+      { label: 'Align', items: alignItems() },
+      '-',
+      { label: 'Add a trigger', act: () => { const t = { id: rid('t'), event: 'click', source: o.id, action: 'jump', target: 'next', conds: [] }; write(c => { inLayer(c).triggers.push(t); }); setOpenTrig(t.id); togglePanel('right', true); } },
+      { label: 'Edit states', act: () => { togglePanel('bottom', true); foldBottom(false); setBottom('states'); } },
+      { label: 'Format', act: () => { togglePanel('bottom', true); foldBottom(false); setBottom('format'); } },
+      { label: 'Rename', act: async () => { const v = await ask({ title: 'Rename object', value: o.name, ok: 'Rename' }); if (v?.trim()) write(c => { const x = inLayer(c).objects.find(q => q.id === o.id); if (x) x.name = v.trim(); }); } },
+      { label: o.locked ? 'Unlock' : 'Lock (can’t be moved)', act: () => write(c => { const x = inLayer(c).objects.find(q => q.id === o.id); if (x) x.locked = !x.locked || undefined; }) },
+      { label: 'Hide while editing', act: () => write(c => { const x = inLayer(c).objects.find(q => q.id === o.id); if (x) x.hideEdit = true; }) },
+    ]);
+  };
+  const stageMenu = e => {
+    e.preventDefault();
+    popup(at(e), [
+      { label: 'Paste', act: pasteObj },
+      { label: 'Select all', act: () => { const ids = layer.objects.filter(o => !o.hideEdit).map(o => o.id); setSel(ids[0] || null); setExtra(ids.slice(1)); } },
+      ...(layer.objects.some(o => o.hideEdit) ? [{ label: 'Show hidden objects', act: () => write(c => { inLayer(c).objects.forEach(o => { delete o.hideEdit; }); }) }] : []),
+      '-',
+      { label: (view.rulers ? '✓ ' : '') + 'Rulers', act: () => toggleView('rulers') },
+      { label: (view.grid ? '✓ ' : '') + 'Gridlines', act: () => toggleView('grid') },
+      { label: (view.guides ? '✓ ' : '') + 'Snap to objects', act: () => toggleView('guides') },
+    ]);
+  };
+  // Drag the bottom panel's top edge to change its height.
+  const resizeBottom = e => {
+    e.preventDefault();
+    const sy = e.clientY, h0 = bottomFold ? 40 : bottomH, max = Math.max(160, (holder.current?.parentElement?.clientHeight || 600) - 160);
+    let h = h0;
+    const mv = m => { h = Math.max(90, Math.min(max, h0 - (m.clientY - sy))); setBottomH(h); if (bottomFold) setBottomFold(false); };
+    const up = () => { removeEventListener('pointermove', mv); removeEventListener('pointerup', up); savePref('linework:course-bottomh', String(Math.round(h))); savePref('linework:course-bottomfold', '0'); };
+    addEventListener('pointermove', mv); addEventListener('pointerup', up);
+  };
+  // When the playhead is on the timeline: is the object on the slide at that time?
+  const offAt = o => { if (tlTime == null) return false; const st = Number(o.start) || 0, end = o.dur ? st + Number(o.dur) : Infinity; return tlTime < st || tlTime >= end; };
 
   if (!course || !slide) return <div className="cv"><p className="muted" style={{ padding: 20 }}>Making the course…</p></div>;
   const vars = defaultsOf(course);
@@ -328,6 +467,7 @@ export default function CourseView({ file, update, visible = true }) {
       <Group label="Slide"><Big icon={ICO.slide} label="New Slide" onClick={newSlideMenu} menu /><div className="sl-col"><Sm icon={ICO.templates} label="Apply Layout" disabled menu /><Sm icon={ICO.fit} label="Reset" disabled /><Sm icon={ICO.dup} label="Duplicate" onClick={() => dupSlide(here)} /></div></Group>
       <Group label="Record"><Big icon={ICO.record} label="Record Screen" disabled menu /></Group>
       <Group label="Triggers"><Big icon={ICO.vars} label="Variables" onClick={() => setDialog('vars')} /></Group>
+      <Group label="Arrange"><div className="sl-col"><Sm label="⬆ Bring to Front" onClick={() => order('front')} disabled={!obj} title={obj ? undefined : 'Select an object first'} /><Sm label="⬇ Send to Back" onClick={() => order('back')} disabled={!obj} title={obj ? undefined : 'Select an object first'} /><Sm label="⇔ Align" onClick={btn => popup(btn, alignItems())} disabled={!obj} title={obj ? undefined : 'Select an object first'} menu /></div></Group>
       <Group label="Publish"><Big icon={ICO.player} label="Player" onClick={() => setDialog('player')} /><Big icon={ICO.preview} label="Preview" onClick={previewMenu} menu /><Big icon={ICO.publish} label="Publish" onClick={publish} menu /></Group>
     </>,
     INSERT: <>
@@ -368,6 +508,11 @@ export default function CourseView({ file, update, visible = true }) {
         <Big small icon={ICO.layer} label="Triggers & Layers" on={panels.right} onClick={() => togglePanel('right')} />
         <Big small icon={ICO.keys} label="Timeline & Format" on={panels.bottom} onClick={() => togglePanel('bottom')} />
         <Big small icon={ICO.fit} label="Focus" on={focusMode} onClick={() => setFocus(!focusMode)} />
+      </Group>
+      <Group label="Show">
+        <Big small icon={ICO.size} label="Rulers" on={view.rulers} onClick={() => toggleView('rulers')} />
+        <Big small icon={ICO.table} label="Gridlines" on={view.grid} onClick={() => toggleView('grid')} />
+        <Big small icon={ICO.fit} label="Snap to Objects" on={view.guides} onClick={() => toggleView('guides')} />
       </Group>
       <Group label="Zoom"><Big icon={ICO.zoomin} label="Zoom In" onClick={() => (mode === 'story' ? setStoryZoom(z => Math.min(200, z + 10)) : setZoom(z => Math.min(300, (z || Math.round(fitK * 100)) + 10)))} /><Big icon={ICO.zoomout} label="Zoom Out" onClick={() => (mode === 'story' ? setStoryZoom(z => Math.max(40, z - 10)) : setZoom(z => Math.max(15, (z || Math.round(fitK * 100)) - 10)))} /><Big icon={ICO.fit} label="Fit" onClick={() => (mode === 'story' ? setStoryZoom(100) : setZoom(0))} /></Group>
     </>,
@@ -421,41 +566,47 @@ export default function CourseView({ file, update, visible = true }) {
   const stage = (
     <div className="cv-center">
       {editState !== 'normal' && obj && <div className="cv-stbar">Editing the <b>{STATE_LABEL[editState] || editState}</b> state of “{obj.name}”: Format changes apply to this state only.<button className="btn" onClick={() => setEditState('normal')}>Done</button></div>}
-      <div className={'cv-holder' + (zoom ? ' zoomed' : '')} ref={holder} onPointerDown={() => { setSel(null); setEditing(null); }}>
+      <div className={'cv-holder' + (zoom ? ' zoomed' : '') + (view.rulers ? ' rulers' : '')} ref={holder} onPointerDown={marquee} onContextMenu={stageMenu}>
         <div className="cv-stage-box" style={{ width: course.size.w * k, height: course.size.h * k }}>
-          <div className="cv-stage" style={{ width: course.size.w, height: course.size.h, transform: `scale(${k})`, background: slide.bg, fontFamily: course.font }} aria-label={`Slide: ${slide.title}`} role="region">
+          {view.rulers && <Rulers w={course.size.w} h={course.size.h} k={k} sel={obj} />}
+          <div className="cv-stage" style={{ width: course.size.w, height: course.size.h, transform: `scale(${k})`, background: slide.bg, fontFamily: course.font, '--k': k }} aria-label={`Slide: ${slide.title}`} role="region">
             {baseUnder && <div className="cv-under">{slide.layers[0].objects.map(o => <div key={o.id} className={'cv-o k-' + o.kind} style={boxStyle(o, lookOf(o))}><ObjArt o={o} vars={vars} assets={course.assets} /></div>)}</div>}
             {layer.objects.map(o => {
               const st = lookState(o), s = lookOf(o, st);
+              if (o.hideEdit) return null;
               return (
-                <div key={o.id} className={'cv-o k-' + o.kind + (o.id === sel ? ' sel' : '') + (o.initial === 'hidden' && st === 'normal' ? ' ghost' : '')} style={boxStyle(o, s)}
-                  data-name={o.name} onPointerDown={e => drag(e, o, 'move')} onDoubleClick={() => ['text', 'shape', 'button', 'result'].includes(o.kind) && setEditing(o.id)}>
+                <div key={o.id} className={'cv-o k-' + o.kind + (o.id === sel ? ' sel' : chosen.has(o.id) ? ' sel2' : '') + (o.initial === 'hidden' && st === 'normal' ? ' ghost' : '') + (o.locked ? ' locked' : '') + (offAt(o) ? ' tl-off' : '')} style={boxStyle(o, s)}
+                  data-name={o.name} data-id={o.id} onPointerDown={e => drag(e, o, 'move')} onContextMenu={e => objMenu(e, o)} onDoubleClick={() => ['text', 'shape', 'button', 'result'].includes(o.kind) && setEditing(o.id)}>
                   {editing === o.id
                     ? <textarea className="cv-edit" autoFocus defaultValue={s.text != null ? s.text : o.text} aria-label="Edit the text" style={{ textAlign: s.align, color: s.color, fontSize: s.size, fontWeight: s.bold ? 700 : 400 }}
                       onPointerDown={e => e.stopPropagation()} onKeyDown={e => { if (e.key === 'Escape') e.currentTarget.blur(); }}
                       onBlur={e => { const v = e.target.value.replace(/\r\n?/g, '\n'); setEditing(null); editObj(x => { if (editState === 'normal') { if (v !== x.text) { x.text = v; delete x.rich; } } else { const st = ((x.states ||= {})[editState] ||= {}); if (v !== st.text) { st.text = v; delete st.rich; } } }); }} />
                     : <ObjArt o={o} st={st} vars={vars} assets={course.assets} />}
-                  {o.id === sel && !editing && ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].map(h => <i key={h} className={'cv-h h-' + h} onPointerDown={e => drag(e, o, h)} />)}
+                  {o.id === sel && !editing && !o.locked && chosen.size < 2 && ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].map(h => <i key={h} className={'cv-h h-' + h} onPointerDown={e => drag(e, o, h)} />)}
                 </div>
               );
             })}
+            {view.grid && <div className="cv-grid" aria-hidden="true" />}
+            <div className="cv-guides" ref={guideRef} aria-hidden="true" />
           </div>
         </div>
       </div>
-      {panels.bottom && <div className="sl-bottom">
+      {panels.bottom && <div className={'sl-bottom' + (bottomFold ? ' folded' : '')} style={bottomFold ? undefined : { height: bottomH }}>
+        <div className="sl-bsplit" role="separator" aria-orientation="horizontal" aria-label="Drag to resize the Timeline panel" title="Drag to resize" onPointerDown={resizeBottom} onDoubleClick={() => foldBottom(!bottomFold)} />
         <div className="sl-btabs" role="tablist" aria-label="Slide panels">
-          {[['timeline', 'Timeline'], ['states', 'States'], ['format', 'Format'], ['notes', 'Notes']].map(([t, l]) => <button key={t} role="tab" aria-selected={bottom === t} className={bottom === t ? 'on' : ''} onClick={() => setBottom(t)}>{l}</button>)}
-          <span className="sl-btabs-sp">{obj ? `${KINDS[obj.kind]}: ${obj.name}` : `Slide: ${slide.title}`}</span>
+          {[['timeline', 'Timeline'], ['states', 'States'], ['format', 'Format'], ['notes', 'Notes']].map(([t, l]) => <button key={t} role="tab" aria-selected={bottom === t} className={bottom === t ? 'on' : ''} onClick={() => { setBottom(t); if (bottomFold) foldBottom(false); }}>{l}</button>)}
+          <span className="sl-btabs-sp">{chosen.size > 1 ? `${chosen.size} objects selected` : obj ? `${KINDS[obj.kind]}: ${obj.name}` : `Slide: ${slide.title}`}</span>
+          <button className="sl-x" aria-label={bottomFold ? 'Open the Timeline panel' : 'Fold the Timeline panel'} aria-expanded={!bottomFold} title={bottomFold ? 'Open' : 'Fold down to the tabs'} onClick={() => foldBottom(!bottomFold)}>{bottomFold ? '⌃' : '⌄'}</button>
           <button className="sl-x" aria-label="Hide the Timeline panel" title="Hide this panel" onClick={() => togglePanel('bottom', false)}>×</button>
         </div>
-        <div className="sl-bbody">
-          {bottom === 'timeline' && <Timeline slide={slide} layer={layer} sel={sel} setSel={setSel} write={write} inLayer={inLayer} inSlide={inSlide} />}
+        {!bottomFold && <div className="sl-bbody">
+          {bottom === 'timeline' && <Timeline slide={slide} layer={layer} sel={sel} chosen={chosen} pick={pick} write={write} inLayer={inLayer} inSlide={inSlide} time={tlTime} setTime={setTlTime} />}
           {bottom === 'states' && <States o={obj} editState={editState} setEditState={setEditState} editObj={editObj} />}
           {bottom === 'format' && (obj ? <ObjFormat o={obj} course={course} layer={layer} editState={editState} setLook={setLook} editObj={editObj} write={write} inLayer={inLayer} setSel={setSel} duplicate={duplicate}
             onPicture={() => { picFor.current = obj.id; picRef.current?.click(); }} onTrigger={() => { const t = { id: rid('t'), event: 'click', source: obj.id, action: 'jump', target: 'next', conds: [] }; write(c => { inLayer(c).triggers.push(t); }); setOpenTrig(t.id); togglePanel('right', true); }} />
             : <SlideFormat slide={slide} write={write} inSlide={inSlide} />)}
           {bottom === 'notes' && <textarea className="sl-notes" style={{ fontFamily: course.notesStyle?.font, fontSize: course.notesStyle?.size, color: course.notesStyle?.color }} value={slide.notes || ''} onChange={e => setSlideProp('notes', e.target.value)} aria-label="Slide notes" placeholder="Notes for this slide (not shown to learners)" />}
-        </div>
+        </div>}
       </div>}
     </div>
   );
@@ -575,7 +726,7 @@ export default function CourseView({ file, update, visible = true }) {
       {dialog === 'player' && <PlayerDialog course={course} write={write} onClose={() => setDialog(null)} />}
       {dialog === 'feedback' && <FeedbackDialog course={course} write={write} onClose={() => setDialog(null)} />}
       {dialog === 'notes' && <NotesDialog course={course} write={write} onClose={() => setDialog(null)} />}
-      {dialog === 'keys' && <InfoDialog title="Keyboard shortcuts" onClose={() => setDialog(null)} rows={[['Ctrl Z / Ctrl Y', 'Undo / redo'], ['Ctrl C, Ctrl X, Ctrl V', 'Copy, cut, paste an object'], ['Ctrl D', 'Duplicate the object'], ['Arrows (Shift: 10 px)', 'Nudge the object'], ['Delete', 'Delete the object (Story View: the slide)'], ['Double-click', 'Edit text · open a slide from Story View'], ['Enter', 'Story View: open the slide'], ['Alt while dragging', 'Move without snapping'], ['F12', 'Preview the entire project']]} />}
+      {dialog === 'keys' && <InfoDialog title="Keyboard shortcuts" onClose={() => setDialog(null)} rows={[['Ctrl Z / Ctrl Y', 'Undo / redo'], ['Ctrl C, Ctrl X, Ctrl V', 'Copy, cut, paste an object'], ['Ctrl D', 'Duplicate the object'], ['Arrows (Shift: 10 px)', 'Nudge the object'], ['Delete', 'Delete the object (Story View: the slide)'], ['Double-click', 'Edit text · open a slide from Story View'], ['Enter', 'Story View: open the slide'], ['Alt while dragging', 'Move without snapping'], ['Shift-click · drag a box', 'Select several objects'], ['Ctrl A · Esc', 'Select all · select none'], ['Right-click', 'Arrange, align, lock, add a trigger…'], ['F12', 'Preview the entire project']]} />}
       {dialog === 'import' && <InfoDialog title="What didn’t come over" onClose={() => setDialog(null)} rows={course.importDetails || []} />}
       {dialog === 'help' && <InfoDialog title="How it works" onClose={() => setDialog(null)} rows={[['Story View', 'Every scene and its slides. Double-click a slide to edit it.'], ['Slide View', 'The slide, its layers (right), triggers (right) and the Timeline, States, Format and Notes (below).'], ['Layers', 'Extra parts of a slide shown and hidden by triggers — pop-ups, feedback, details.'], ['States', 'How an object looks when hovered, pressed, selected, visited, disabled, or a state of your own.'], ['Triggers', '“Do this when that happens, if…”: jump, show a layer, change a state, adjust a variable…'], ['Variables', 'Remember things while the course runs; show one in text as %Name%.'], ['Publish', 'One web page, or a SCORM 1.2 zip for an LMS. Export saves a course file to open again.']]} />}
       {dialog?.preview && <Preview course={course} fileId={file.id} what={dialog.preview} device={dialog.device} onClose={() => setDialog(null)} />}
@@ -915,37 +1066,155 @@ function TriggerForm({ t, course, slide, layer, edit, onMove, onDelete }) {
 }
 
 /* ---- Timeline ---- */
-function Timeline({ slide, layer, sel, setSel, write, inLayer, inSlide }) {
+// Rulers along the slide's top and left edges, in slide pixels; the selected object's span is marked.
+function Rulers({ w, h, k, sel }) {
+  const step = [10, 20, 50, 100, 200, 500].find(v => v * k >= 46) || 1000, minor = step / (step % 50 === 0 ? 5 : 2);
+  const ticks = (len, horiz) => {
+    const out = [];
+    for (let v = 0; v <= len + 0.01; v += minor) {
+      const major = Math.abs(v / step - Math.round(v / step)) < 1e-6, p = v * k, t = major ? 9 : 4;
+      out.push(horiz ? <line key={v} x1={p} x2={p} y1={18 - t} y2={18} /> : <line key={v} y1={p} y2={p} x1={18 - t} x2={18} />);
+      if (major && v < len) out.push(horiz ? <text key={'t' + v} x={p + 3} y={9}>{Math.round(v)}</text> : <text key={'t' + v} x={9} y={p + 3} transform={`rotate(-90 9 ${p + 3})`} textAnchor="end">{Math.round(v)}</text>);
+    }
+    return out;
+  };
+  return <>
+    <svg className="cv-ruler top" width={w * k} height={18} aria-hidden="true">{sel && <rect className="mark" x={sel.x * k} width={sel.w * k} y={0} height={18} />}{ticks(w, true)}</svg>
+    <svg className="cv-ruler left" width={18} height={h * k} aria-hidden="true">{sel && <rect className="mark" y={sel.y * k} height={sel.h * k} x={0} width={18} />}{ticks(h, false)}</svg>
+    <i className="cv-ruler-corner" aria-hidden="true" />
+  </>;
+}
+
+/* The Timeline, as in desktop authoring tools: a ruler in seconds, one row per object with its bar (drag it to
+   move when it appears, drag its ends to change when it comes and goes), the slide's end (drag it), a playhead
+   (click or drag the ruler; Play runs it) that dims what isn't on the slide yet, and eye / lock per object. */
+const NAMEW = 230;
+function Timeline({ slide, layer, sel, chosen, pick, write, inLayer, inSlide, time, setTime }) {
   const base = layer === slide.layers[0];
-  const len = Math.max(base ? Number(slide.duration) || 1 : 1, ...layer.objects.map(o => (Number(o.start) || 0) + (o.dur ? Number(o.dur) : 0))) || 1;
-  const set = (id, k, v) => write(c => { const o = inLayer(c).objects.find(x => x.id === id); if (o) o[k] = v; });
+  const ends = layer.objects.map(o => (Number(o.start) || 0) + (o.dur ? Number(o.dur) : 0));
+  const len = Math.max(0.5, base ? Number(slide.duration) || 0 : 0, ...ends, base ? 0 : 1);
+  const track = useRef(null);
+  const [pps, setPps] = useState(60); // pixels per second
+  useLayoutEffect(() => {
+    const el = track.current; if (!el) return undefined;
+    const fit = () => setPps(Math.max(24, Math.min(240, (el.clientWidth - NAMEW - 24) / (len + 0.5))));
+    fit(); const ro = new ResizeObserver(fit); ro.observe(el); return () => ro.disconnect();
+  }, [len]);
+  const snap = (v, alt) => Math.max(0, alt ? Math.round(v * 100) / 100 : Math.round(v * 4) / 4);
+  const width = (len + 0.5) * pps;
+  const step = pps >= 50 ? 1 : pps >= 25 ? 2 : 5;
+  const ticks = [];
+  for (let t = 0; t <= len + 0.5; t += step / 2) ticks.push(t);
+  // Scrub: click or drag the ruler.
+  const scrub = e => {
+    const r = e.currentTarget.getBoundingClientRect(), to = m => setTime(Math.max(0, Math.min(len, Math.round(((m.clientX - r.left) / pps) * 20) / 20)));
+    to(e);
+    const up = () => { removeEventListener('pointermove', to); removeEventListener('pointerup', up); };
+    addEventListener('pointermove', to); addEventListener('pointerup', up);
+  };
+  // Play the playhead from where it is (or the start) to the end.
+  const [playing, setPlaying] = useState(false);
+  const raf = useRef(0);
+  useEffect(() => () => cancelAnimationFrame(raf.current), []);
+  const play = () => {
+    if (playing) { cancelAnimationFrame(raf.current); setPlaying(false); return; }
+    const from = time != null && time < len ? time : 0, t0 = performance.now();
+    setPlaying(true);
+    const tick = now => { const t = from + (now - t0) / 1000; if (t >= len) { setTime(len); setPlaying(false); return; } setTime(t); raf.current = requestAnimationFrame(tick); };
+    raf.current = requestAnimationFrame(tick);
+  };
+  // Drag a bar (move), its left end (start) or right end (how long); the slide's end (base layer).
+  const dragBar = (e, o, how) => {
+    e.stopPropagation(); e.preventDefault();
+    pick(o.id, e.shiftKey || e.ctrlKey || e.metaKey);
+    const bar = e.currentTarget.closest('.tl-bar'), sx = e.clientX;
+    const st0 = Number(o.start) || 0, du0 = o.dur ? Number(o.dur) : len - st0;
+    let st = st0, du = du0, moved = false;
+    const mv = m => {
+      const d = (m.clientX - sx) / pps; if (!moved && Math.abs(m.clientX - sx) < 3) return; moved = true;
+      if (how === 'move') st = snap(st0 + d, m.altKey);
+      if (how === 'start') { st = Math.min(snap(st0 + d, m.altKey), st0 + du0 - 0.1); du = du0 + st0 - st; }
+      if (how === 'end') du = Math.max(0.1, snap(st0 + du0 + d, m.altKey) - st0);
+      bar.style.left = st * pps + 'px'; bar.style.width = Math.max(4, du * pps) + 'px';
+      bar.dataset.tip = `${st.toFixed(2)}s – ${(st + du).toFixed(2)}s`;
+    };
+    const up = () => {
+      removeEventListener('pointermove', mv); removeEventListener('pointerup', up); delete bar.dataset.tip;
+      if (!moved) return;
+      write(c => {
+        const x = inLayer(c).objects.find(q => q.id === o.id); if (!x) return;
+        const end = st + du, slideEnd = base ? Number(inSlide(c).duration) || 0 : len;
+        x.start = Math.round(st * 100) / 100;
+        // To the end of the slide: no fixed length (it stays to the end if the slide gets longer).
+        if (how === 'move' && !o.dur) x.dur = null; else x.dur = Math.abs(end - Math.max(slideEnd, len)) < 0.05 ? null : Math.round(du * 100) / 100;
+        if (base && end > slideEnd) inSlide(c).duration = Math.round(end * 100) / 100;
+      });
+    };
+    addEventListener('pointermove', mv); addEventListener('pointerup', up);
+  };
+  const dragEnd = e => {
+    e.stopPropagation(); e.preventDefault();
+    const sx = e.clientX, d0 = Number(slide.duration) || 0, el = e.currentTarget, min = Math.max(0.5, ...ends);
+    let d = d0;
+    const mv = m => { d = Math.max(min, snap(d0 + (m.clientX - sx) / pps, m.altKey)); el.style.left = d * pps + 'px'; el.dataset.tip = d.toFixed(2) + 's'; };
+    const up = () => { removeEventListener('pointermove', mv); removeEventListener('pointerup', up); delete el.dataset.tip; if (d !== d0) write(c => { inSlide(c).duration = d; }); };
+    addEventListener('pointermove', mv); addEventListener('pointerup', up);
+  };
+  const flip = (o, key) => write(c => { const x = inLayer(c).objects.find(q => q.id === o.id); if (x) { if (x[key]) delete x[key]; else x[key] = true; } });
+  const set = (id, key, v) => write(c => { const o = inLayer(c).objects.find(x => x.id === id); if (o) o[key] = v; });
+  const o = sel && layer.objects.find(x => x.id === sel);
+  const fmt = t => (t >= 60 ? `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}` : `${Math.round(t * 100) / 100}s`);
   return (
-    <div className="cv-tl">
-      <p className="cv-kind">Timeline of <b>{layer.name}</b>{base ? '' : ' (starts when the layer is shown)'}</p>
-      {base && <div className="cv-row"><Num label="Slide length (s)" value={slide.duration} step={0.5} min={0} onChange={v => write(c => { inSlide(c).duration = Math.max(0, v || 0); })} /></div>}
-      <div className="cv-tl-rows">
-        {[...layer.objects].reverse().map(o => {
-          const st = Number(o.start) || 0, du = o.dur ? Number(o.dur) : len - st;
-          return (
-            <div key={o.id} className={'cv-tl-r' + (o.id === sel ? ' on' : '')} onClick={() => setSel(o.id)}>
-              <span className="cv-tl-n">{o.name}</span>
-              <div className="cv-tl-bar"><i style={{ left: `${(st / len) * 100}%`, width: `${Math.max(2, (du / len) * 100)}%` }} /></div>
+    <div className="tl">
+      <div className="tl-scroll" ref={track}>
+        <div className="tl-grid" style={{ width: NAMEW + width + 16 }}>
+          <div className="tl-head">
+            <span className="tl-hn" style={{ width: NAMEW }}>
+              <button className="tl-play" onClick={play} aria-label={playing ? 'Pause the timeline' : 'Play the timeline'} title={playing ? 'Pause' : 'Play the slide’s timeline'}>{playing ? '❚❚' : '▶'}</button>
+              {time != null && <button className="tl-play" onClick={() => { cancelAnimationFrame(raf.current); setPlaying(false); setTime(null); }} aria-label="Stop the playhead" title="Stop: show every object">■</button>}
+              <span className="tl-now">{time != null ? fmt(time) : '0s'} / {fmt(len)}</span>
+            </span>
+            <div className="tl-ruler" style={{ width }} onPointerDown={scrub} role="slider" aria-label="Playhead" aria-valuemin={0} aria-valuemax={len} aria-valuenow={time ?? 0} tabIndex={0}
+              onKeyDown={e => { if (e.key === 'ArrowRight') setTime(Math.min(len, (time ?? 0) + 0.25)); if (e.key === 'ArrowLeft') setTime(Math.max(0, (time ?? 0) - 0.25)); }}>
+              {ticks.map(t => <i key={t} className={Math.abs(t / step - Math.round(t / step)) < 1e-6 ? 'maj' : ''} style={{ left: t * pps }}>{Math.abs(t / step - Math.round(t / step)) < 1e-6 ? fmt(t) : ''}</i>)}
             </div>
-          );
-        })}
-      </div>
-      {sel && layer.objects.find(o => o.id === sel) && (() => {
-        const o = layer.objects.find(x => x.id === sel);
-        return (
-          <div className="cv-form">
-            <p className="cv-kind">“{o.name}”</p>
-            <div className="cv-row"><Num label="Appears at (s)" value={o.start || 0} step={0.25} min={0} onChange={v => set(o.id, 'start', Math.max(0, v || 0))} /><Num label="Shown for (s, blank: to the end)" value={o.dur ?? ''} step={0.25} min={0} onChange={v => set(o.id, 'dur', v || null)} /></div>
-            <Field label="Comes in with" wide><select value={o.anim || 'none'} onChange={e => set(o.id, 'anim', e.target.value)} aria-label="Entrance animation">{ANIMS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
-            <Field label="Goes out with" wide><select value={o.out || 'none'} onChange={e => set(o.id, 'out', e.target.value === 'none' ? undefined : e.target.value)} aria-label="Exit animation"><option value="none">Nothing (just goes)</option><option value="fade">Fade out</option></select></Field>
           </div>
-        );
-      })()}
-      {!sel && <p className="cv-empty">Pick an object to set when it appears, for how long, and how it comes in.</p>}
+          <div className="tl-rows">
+            {[...layer.objects].reverse().map(x => {
+              const st = Number(x.start) || 0, du = x.dur ? Number(x.dur) : len - st, on = chosen.has(x.id);
+              return (
+                <div key={x.id} className={'tl-row' + (x.id === sel ? ' on' : on ? ' on2' : '') + (x.hideEdit ? ' hid' : '')}>
+                  <span className="tl-name" style={{ width: NAMEW }}>
+                    <button className={'tl-ic' + (x.hideEdit ? ' off' : '')} aria-label={`${x.hideEdit ? 'Show' : 'Hide'} “${x.name}” while editing`} aria-pressed={!x.hideEdit} onClick={() => flip(x, 'hideEdit')}>{x.hideEdit ? '◌' : '👁'}</button>
+                    <button className={'tl-ic' + (x.locked ? ' lk' : ' off')} aria-label={`${x.locked ? 'Unlock' : 'Lock'} “${x.name}”`} aria-pressed={!!x.locked} onClick={() => flip(x, 'locked')}>{x.locked ? '🔒' : '🔓'}</button>
+                    <button className="tl-n" onClick={e => pick(x.id, e.shiftKey || e.ctrlKey || e.metaKey)} title={x.name}><em>{KINDS[x.kind]?.[0] || '•'}</em>{x.name}</button>
+                  </span>
+                  <div className="tl-track" style={{ width }} onPointerDown={e => { if (e.target === e.currentTarget) pick(x.id); }}>
+                    <div className={'tl-bar' + (x.anim && x.anim !== 'none' ? ' anim' : '')} style={{ left: st * pps, width: Math.max(4, du * pps) }} onPointerDown={e => dragBar(e, x, 'move')} title={`${fmt(st)} – ${fmt(st + du)}${x.anim && x.anim !== 'none' ? ` · comes in: ${x.anim}` : ''}`}>
+                      <i className="tl-gl" onPointerDown={e => dragBar(e, x, 'start')} aria-hidden="true" />
+                      <span>{x.anim && x.anim !== 'none' ? '★ ' : ''}{x.name}</span>
+                      <i className="tl-gr" onPointerDown={e => dragBar(e, x, 'end')} aria-hidden="true" />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            {!layer.objects.length && <p className="cv-empty" style={{ marginLeft: NAMEW }}>No objects on this layer yet.</p>}
+          </div>
+          {base && <div className="tl-end" style={{ left: NAMEW + len * pps }} onPointerDown={dragEnd} title="End of the slide: drag to change its length" aria-hidden="true" />}
+          {time != null && <div className="tl-head-line" style={{ left: NAMEW + time * pps }} aria-hidden="true" />}
+        </div>
+      </div>
+      {o ? (
+        <div className="tl-form">
+          <b className="tl-fn" title={o.name}>{o.name}</b>
+          <label>Appears at <input type="number" min="0" step="0.25" value={o.start || 0} onChange={e => set(o.id, 'start', Math.max(0, Number(e.target.value) || 0))} aria-label="Appears at (s)" />s</label>
+          <label>Shown for <input type="number" min="0" step="0.25" value={o.dur ?? ''} placeholder="to end" onChange={e => set(o.id, 'dur', Number(e.target.value) || null)} aria-label="Shown for (s, blank: to the end)" />s</label>
+          <label>Comes in <select value={o.anim || 'none'} onChange={e => set(o.id, 'anim', e.target.value)} aria-label="Entrance animation">{ANIMS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
+          <label>Goes out <select value={o.out || 'none'} onChange={e => set(o.id, 'out', e.target.value === 'none' ? undefined : e.target.value)} aria-label="Exit animation"><option value="none">Just goes</option><option value="fade">Fade out</option></select></label>
+          {base && <label className="tl-len">Slide length <input type="number" min="0" step="0.5" value={slide.duration} onChange={e => write(c => { inSlide(c).duration = Math.max(Math.max(0, ...ends), Number(e.target.value) || 0); })} aria-label="Slide length (s)" />s</label>}
+        </div>
+      ) : <div className="tl-form tl-tip"><span>{base ? <>Timeline of <b>{slide.title}</b></> : <>Layer <b>{layer.name}</b>: starts when it’s shown</>}. Drag a bar to move it, its ends to change how long it shows; click the ruler to see that moment.</span>{base && <label className="tl-len">Slide length <input type="number" min="0" step="0.5" value={slide.duration} onChange={e => write(c => { inSlide(c).duration = Math.max(Math.max(0, ...ends), Number(e.target.value) || 0); })} aria-label="Slide length (s)" />s</label>}</div>}
     </div>
   );
 }

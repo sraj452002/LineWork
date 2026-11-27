@@ -487,3 +487,73 @@ test('autofit, scrollbars, corner radius, feedback master, notes format, font sc
   await p.locator('.cp-menu button', { hasText: 'Question 1' }).click();
   await expect(p.locator('.cp-question').getByRole('button', { name: 'Submit' })).toBeDisabled();
 });
+
+// The editor as in desktop authoring tools: rulers, snapping, several objects at once, the right-click menu,
+// a Timeline with bars to drag and a playhead, and a bottom panel to resize or fold.
+test('canvas and Timeline: multi-select, right-click arrange, drag a bar, playhead, eye and lock, panel resize', async ({ page }) => {
+  test.setTimeout(60_000);
+  await studio(page, 'Quiz');
+  await page.getByRole('button', { name: /^Slide 1\.1:/ }).dblclick();
+  const stage = page.locator('.cv-stage');
+  await expect(page.locator('.cv-ruler.top')).toBeVisible();
+  const objs = stage.locator('.cv-o');
+  const n = await objs.count();
+  expect(n).toBeGreaterThan(1);
+  const names = await objs.evaluateAll(els => els.map(e => e.dataset.name));
+  // Shift-click: two selected.
+  await objs.nth(0).click({ force: true });
+  await objs.nth(1).click({ modifiers: ['Shift'], force: true });
+  await expect(page.locator('.sl-btabs-sp')).toHaveText('2 objects selected');
+  // Right-click → Send to back: the second one goes under everything.
+  await page.keyboard.press('Escape');
+  await objs.nth(n - 1).click({ force: true });
+  await objs.nth(n - 1).click({ button: 'right', force: true });
+  await page.getByRole('menuitem', { name: 'Send to back' }).click();
+  await expect.poll(() => objs.first().getAttribute('data-name')).toBe(names[n - 1]);
+  // Drag: guides show while moving, and the object moves.
+  // (the top-most object, so nothing covers it)
+  const oid = await objs.last().getAttribute('data-id'), o = stage.locator(`.cv-o[data-id="${oid}"]`);
+  await o.click({ force: true });
+  const b0 = await o.boundingBox();
+  await page.mouse.move(b0.x + b0.width / 2, b0.y + b0.height / 2); await page.mouse.down();
+  await page.mouse.move(b0.x + b0.width / 2 + 60, b0.y + b0.height / 2 + 30, { steps: 6 });
+  await page.mouse.up();
+  await expect.poll(async () => (await o.boundingBox()).x).toBeGreaterThan(b0.x + 20);
+
+  // The Timeline: drag the selected object's bar to the right: it appears later.
+  await page.getByRole('tab', { name: 'Timeline' }).click();
+  const row = page.locator('.tl-row.on');
+  await expect(row).toHaveCount(1);
+  const bar = row.locator('.tl-bar'), bb = await bar.boundingBox();
+  await page.mouse.move(bb.x + bb.width / 2, bb.y + bb.height / 2); await page.mouse.down();
+  await page.mouse.move(bb.x + bb.width / 2 + 80, bb.y + bb.height / 2, { steps: 6 }); await page.mouse.up();
+  await expect.poll(async () => Number(await page.getByLabel('Appears at (s)').inputValue())).toBeGreaterThan(0);
+  // The playhead at the start dims what isn't on the slide yet.
+  const ruler = page.getByRole('slider', { name: 'Playhead' }), rb = await ruler.boundingBox();
+  await page.mouse.click(rb.x + 2, rb.y + rb.height / 2);
+  await expect(o).toHaveClass(/tl-off/);
+  await page.getByRole('button', { name: 'Stop the playhead' }).click();
+  await expect(stage.locator('.cv-o.tl-off')).toHaveCount(0);
+  // Eye: hidden while editing; lock: no handles.
+  await row.getByRole('button', { name: /^Hide “.*” while editing$/ }).click();
+  await expect(o).toHaveCount(0);
+  await page.locator('.tl-row.hid').getByRole('button', { name: /^Show “.*” while editing$/ }).click();
+  await expect(o).toHaveCount(1);
+  await page.locator('.tl-row.on').getByRole('button', { name: /^Lock “/ }).click();
+  await o.click({ force: true });
+  await expect(o).toHaveClass(/locked/);
+  await expect(stage.locator('.cv-h')).toHaveCount(0);
+
+  // The bottom panel: fold to its tabs and back; drag its edge to make it taller.
+  const panel = page.locator('.sl-bottom'), h0 = (await panel.boundingBox()).height;
+  await page.getByRole('button', { name: 'Fold the Timeline panel' }).click();
+  await expect.poll(async () => (await panel.boundingBox()).height).toBeLessThan(60);
+  await page.getByRole('button', { name: 'Open the Timeline panel' }).click();
+  const sp = await page.getByRole('separator', { name: 'Drag to resize the Timeline panel' }).boundingBox();
+  await page.mouse.move(sp.x + 100, sp.y + 4); await page.mouse.down(); await page.mouse.move(sp.x + 100, sp.y - 60, { steps: 4 }); await page.mouse.up();
+  await expect.poll(async () => (await panel.boundingBox()).height).toBeGreaterThan(h0 + 40);
+  // Gridlines from the VIEW tab.
+  await page.getByRole('tab', { name: 'VIEW' }).click();
+  await page.getByRole('toolbar', { name: 'Course tools' }).getByRole('button', { name: 'Gridlines' }).click();
+  await expect(stage.locator('.cv-grid')).toHaveCount(1);
+});

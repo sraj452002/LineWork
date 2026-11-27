@@ -5072,3 +5072,115 @@ body{background:radial-gradient(1100px 620px at 8% -10%,color-mix(in srgb,var(--
 .cv-fit{max-height:100%;min-height:0}.cv-fit.cv-scroll{overflow:auto;scrollbar-width:thin}
 .cv-fbrow{display:grid;grid-template-columns:110px 1fr auto auto;gap:8px 12px;align-items:end;margin-top:10px}
 .cv-fbprev{padding:10px;border-radius:8px;font-weight:700;text-align:center;align-self:stretch;display:grid;place-items:center}
+
+/* ---- Course editor: canvas (rulers, grid, guides, multi-select), resizable bottom panel, Timeline ---- */
+.sl .cv-holder.rulers .cv-stage-box{margin:20px 0 0 20px}
+.cv-ruler{position:absolute;background:var(--surface);color:var(--ink2);font:9px var(--ui);z-index:4;overflow:visible}
+.cv-ruler line{stroke:color-mix(in srgb,var(--ink) 38%,transparent);stroke-width:1}
+.cv-ruler text{fill:currentColor}
+.cv-ruler .mark{fill:color-mix(in srgb,var(--sl-blue,#2b6fd6) 22%,transparent)}
+.cv-ruler.top{left:0;top:-20px;border-bottom:1px solid var(--hair)}
+.cv-ruler.left{top:0;left:-20px;border-right:1px solid var(--hair)}
+.cv-ruler-corner{position:absolute;left:-20px;top:-20px;width:18px;height:18px;background:var(--surface);border-right:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.cv-grid{position:absolute;inset:0;pointer-events:none;z-index:5;background-image:linear-gradient(to right,rgba(43,111,214,.18) 1px,transparent 1px),linear-gradient(to bottom,rgba(43,111,214,.18) 1px,transparent 1px);background-size:20px 20px}
+.cv-guides{position:absolute;inset:0;pointer-events:none;z-index:6}
+.cv-guides .gv,.cv-guides .gh{position:absolute;background:#e5367a}
+.cv-guides .gv{top:-2000px;bottom:-2000px;width:calc(1px / var(--k,1))}
+.cv-guides .gh{left:-2000px;right:-2000px;height:calc(1px / var(--k,1))}
+.cv-marquee{position:absolute;z-index:7;pointer-events:none;border:calc(1px / var(--k,1)) dashed #2b6fd6;background:rgba(43,111,214,.08)}
+.cv-o.sel2{outline:2px dashed #4f7cf7;outline-offset:1px}
+.cv-o.locked{cursor:not-allowed}
+.cv-o.tl-off{opacity:.12}
+.sl .cv-holder{position:relative}
+/* the bottom panel: drag its top edge; fold down to the tabs */
+.sl-bottom{position:relative}
+.sl-bottom.folded{height:auto!important}
+.sl-bsplit{position:absolute;left:0;right:0;top:-4px;height:8px;cursor:ns-resize;z-index:5}
+.sl-bsplit:hover,.sl-bsplit:active{background:linear-gradient(transparent 3px,var(--sl-blue,#2b6fd6) 3px,var(--sl-blue,#2b6fd6) 5px,transparent 5px)}
+.sl-bottom .sl-bbody{padding:0}
+.sl-bottom .sl-bbody>:not(.tl){padding:10px 14px}
+/* the Timeline */
+.tl{display:flex;flex-direction:column;height:100%;min-height:0;font:12px var(--ui)}
+.tl-bar0{display:flex;align-items:center;gap:8px;padding:5px 10px;border-bottom:1px solid var(--hair);flex:none}
+.tl-bar0 .btn{padding:3px 9px;min-height:0;font-size:12px}
+.tl-now{font-variant-numeric:tabular-nums;color:var(--ink2);min-width:84px}
+.tl-of{color:var(--ink2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tl-len{margin-left:auto;display:flex;align-items:center;gap:6px;color:var(--ink2);white-space:nowrap}
+.tl-len input{width:64px;padding:3px 6px}
+.tl-scroll{flex:1;min-height:0;overflow:auto;position:relative}
+.tl-grid{position:relative;min-height:100%}
+.tl-head{display:flex;position:sticky;top:0;z-index:3;background:var(--sl-bar,var(--surface));border-bottom:1px solid var(--hair);height:24px}
+.tl-hn{display:flex;align-items:center;gap:4px;padding-left:8px;flex:none;position:sticky;left:0;background:inherit;z-index:2;border-right:1px solid var(--hair);font-style:normal}
+.tl-play{width:22px;height:20px;border:1px solid var(--hair);border-radius:4px;background:var(--surface);color:var(--ink);font-size:10px;cursor:pointer;padding:0;display:grid;place-items:center}
+.tl-play:hover{border-color:var(--sl-blue,#2b6fd6);color:var(--sl-blue,#2b6fd6)}
+.tl-hn .tl-now{margin-left:4px;font-size:11.5px;min-width:0}
+.tl-ruler{position:relative;cursor:col-resize;flex:none;outline:none}
+.tl-ruler i{position:absolute;bottom:0;height:5px;border-left:1px solid color-mix(in srgb,var(--ink) 30%,transparent);font:10px var(--ui);font-style:normal;color:var(--ink2);padding-left:3px;line-height:1}
+.tl-ruler i.maj{height:100%;padding-top:4px}
+.tl-ruler:focus-visible{box-shadow:inset 0 0 0 2px var(--sl-blue,#2b6fd6)}
+.tl-rows{padding:2px 0 8px}
+.tl-row{display:flex;align-items:center;height:26px;border-bottom:1px solid color-mix(in srgb,var(--ink) 5%,transparent)}
+.tl-row.on{background:color-mix(in srgb,#2b6fd6 12%,transparent)}
+.tl-row.on2{background:color-mix(in srgb,#2b6fd6 6%,transparent)}
+.tl-row.hid .tl-n,.tl-row.hid .tl-bar{opacity:.4}
+.tl-name{display:flex;align-items:center;gap:2px;padding-left:6px;flex:none;position:sticky;left:0;z-index:2;background:var(--surface);height:100%;border-right:1px solid var(--hair)}
+.tl-row.on .tl-name{background:color-mix(in srgb,#2b6fd6 12%,var(--surface))}
+.tl-ic{width:22px;height:22px;border:0;background:none;border-radius:4px;cursor:pointer;font-size:12px;padding:0;color:var(--ink2)}
+.tl-ic:hover{background:color-mix(in srgb,var(--ink) 8%,transparent)}
+.tl-ic.off{opacity:.35}
+.tl-ic.off:hover{opacity:.8}
+.tl-n{flex:1;min-width:0;display:flex;align-items:center;gap:6px;border:0;background:none;text-align:left;font:12px var(--ui);color:var(--ink);cursor:pointer;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding:0 6px}
+.tl-n em{font-style:normal;font-size:9px;font-weight:700;width:16px;height:16px;border-radius:4px;display:inline-grid;place-items:center;flex:none;background:color-mix(in srgb,#2b6fd6 14%,transparent);color:#2b5fb8}
+.tl-track{position:relative;height:100%;flex:none}
+.tl-bar{position:absolute;top:4px;bottom:4px;border-radius:4px;background:linear-gradient(180deg,#7c8cf8,#5865e6);color:#fff;cursor:grab;display:flex;align-items:center;overflow:visible;box-shadow:0 1px 2px rgba(20,30,80,.25)}
+.tl-bar:active{cursor:grabbing}
+.tl-bar.anim{background:linear-gradient(180deg,#a37cf8,#7a52e6)}
+.tl-row.on .tl-bar{box-shadow:0 0 0 2px #1d4fd1}
+.tl-bar span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 8px;font-size:11px;pointer-events:none}
+.tl-bar i{position:absolute;top:0;bottom:0;width:7px;cursor:ew-resize}
+.tl-gl{left:-2px}.tl-gr{right:-2px}
+.tl-bar i:hover{background:rgba(255,255,255,.35);border-radius:3px}
+.tl-bar[data-tip]::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 4px);left:0;background:#1f2433;color:#fff;font-size:11px;padding:2px 6px;border-radius:4px;white-space:nowrap;z-index:5}
+.tl-end{position:absolute;top:0;bottom:0;width:2px;margin-left:-1px;background:#e5484d;cursor:ew-resize;z-index:3}
+.tl-end::before{content:'';position:absolute;top:0;left:-5px;border:6px solid transparent;border-top-color:#e5484d}
+.tl-end::after{content:'';position:absolute;inset:0 -5px}
+.tl-end[data-tip]::before{content:attr(data-tip);border:0;top:26px;left:4px;background:#1f2433;color:#fff;font-size:11px;padding:2px 6px;border-radius:4px;white-space:nowrap}
+.tl-head-line{position:absolute;top:0;bottom:0;width:2px;margin-left:-1px;background:#f5a623;z-index:4;pointer-events:none}
+.tl-head-line::before{content:'';position:absolute;top:0;left:-6px;border:7px solid transparent;border-top-color:#f5a623}
+.tl-form{flex:none;display:flex;flex-wrap:wrap;align-items:center;gap:4px 14px;padding:5px 10px;border-top:1px solid var(--hair);background:var(--sl-bar,var(--surface))}
+.tl-form label{display:flex;align-items:center;gap:5px;color:var(--ink2);white-space:nowrap}
+.sl .tl-form input{width:58px!important;min-width:0;padding:2px 6px;font:12px var(--ui);height:24px}
+.sl .tl-form select{width:auto!important;min-width:0;padding:2px 4px;font:12px var(--ui);max-width:120px;height:24px}
+.tl-fn{max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tl-tip>span{flex:1;min-width:200px;color:var(--ink2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tl-form .tl-len{margin-left:auto}
+@media (max-height:820px){.sl-ribbon .sl-big svg{width:24px;height:24px}.sl-glabel{display:none}}
+@media (max-width:1440px) and (min-width:1101px){.cv.sl{--sl-left:150px;--sl-rightw:262px}}
+
+/* ---- Course editor: look and feel ---- */
+.sl .cv-holder{background-color:color-mix(in srgb,#5a6a8f 10%,var(--paper));background-image:radial-gradient(color-mix(in srgb,var(--ink) 10%,transparent) 1px,transparent 1px)}
+.sl .cv-stage-box{box-shadow:0 1px 3px rgba(16,24,48,.18),0 10px 30px -8px rgba(16,24,48,.28);border-radius:2px}
+.sl-pane header{min-height:34px}
+.sl-pane h4{font:600 12px var(--ui);letter-spacing:.06em;text-transform:uppercase;color:var(--ink2)}
+.sl-tgroup h5{font:600 11.5px var(--ui);letter-spacing:.04em;text-transform:uppercase;color:var(--ink2);margin:10px 0 4px}
+.sl .cv-trig{border:0;border-radius:6px;transition:background .12s}
+.sl .cv-trig:not(.static):hover{background:color-mix(in srgb,#2b6fd6 7%,transparent)}
+.sl .cv-trig-h b u{color:#1d5fd1;text-decoration-color:color-mix(in srgb,#1d5fd1 40%,transparent);text-underline-offset:2px}
+.sl .cv-sl-b{border-radius:8px;padding:4px 5px}
+.sl .cv-sl-b .cv-thumb{border-radius:4px;transition:box-shadow .12s}
+.sl .cv-sl.on .cv-sl-b{background:color-mix(in srgb,#2b6fd6 9%,transparent);border-color:transparent}
+.sl .cv-sl.on .cv-sl-b .cv-thumb{box-shadow:0 0 0 2px #2b6fd6;border-color:transparent}
+.sl .cv-sl-b:hover .cv-thumb{box-shadow:0 0 0 2px color-mix(in srgb,#2b6fd6 35%,transparent)}
+.sl .cv-sl.on .cv-sl-b>span{color:#1d4fb8;font-weight:600}
+.sl .cv-scene header b{font:600 11.5px var(--ui);letter-spacing:.05em;text-transform:uppercase;color:var(--ink2)}
+.sl-big:disabled,.sl-sm:disabled{opacity:.32}
+.sl-big svg{transition:transform .12s}
+.sl-big:hover:not(:disabled) svg{transform:translateY(-1px)}
+.sl-lrow.on{box-shadow:inset 3px 0 0 #2b6fd6}
+.sl-btabs button{border-radius:0}
+.sl-btabs button.on{color:#1d4fb8}
+.sl-status{font-variant-numeric:tabular-nums}
+.tl-row:hover:not(.on){background:color-mix(in srgb,var(--ink) 3%,transparent)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .sl .cv-sl.on .cv-sl-b>span,:root:not([data-theme="light"]) .sl-btabs button.on{color:#8db4ff}:root:not([data-theme="light"]) .sl .cv-trig-h b u{color:#8db4ff}:root:not([data-theme="light"]) .tl-n em{color:#9dbcff}}
+:root[data-theme="dark"] .sl .cv-sl.on .cv-sl-b>span,:root[data-theme="dark"] .sl-btabs button.on,:root[data-theme="dark"] .sl .cv-trig-h b u{color:#8db4ff}
+:root[data-theme="dark"] .tl-n em{color:#9dbcff}
