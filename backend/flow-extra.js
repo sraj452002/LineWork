@@ -203,54 +203,6 @@ export const EXTRA_NODES = {
     });
   } },
 
-  // Storage (drive.js): the account's common place for files. Save a file (or text) there, read one back,
-  // list a folder, or delete one. A file in an item is {name, type, size, data (base64)}.
-  'core.storage': { run: async args => {
-    const d = args.ctx.drive;
-    if (!d) throw new FlowError('Storage needs the server.', 'no_server');
-    const wrap = async job => { try { return await job(); } catch (e) { throw e instanceof FlowError ? e : new FlowError(e.message, e.code || 'storage'); } };
-    const pathOf = f => (f.folder ? f.folder + '/' : '') + f.name;
-    const info = f => ({ id: f.id, name: f.name, folder: f.folder, path: pathOf(f), type: f.type, size: f.size, updated: f.updated });
-    const fileIn = j => { for (const v of Object.values(j || {})) if (v && typeof v === 'object' && typeof v.data === 'string' && v.name) return v; return null; };
-    const findOrFail = async ref => { const f = await d.find(need(ref, 'the file (its path, like Reports/june.pdf)')); if (!f) throw new FlowError(`“${ref}” isn’t in Storage.`, 'not_found'); return f; };
-    const out = args.node.params?.output || (args.node.params?.operation === 'list' ? 'files' : 'file');
-    if (args.node.params?.operation === 'list' && (args.node.params.each === true || args.node.params.each === 'true')) {
-      const all = [];
-      await each(args, async p => {
-        const { files } = await wrap(() => d.list());
-        const fd = String(p.folder || '').replace(/^\/+|\/+$/g, '');
-        for (const f of files) if (p.sub === true || p.sub === 'true' ? f.folder === fd || f.folder.startsWith(fd ? fd + '/' : '') : f.folder === fd) all.push({ json: info(f) });
-        return [];
-      });
-      return { main: all };
-    }
-    return each(args, async (p, item) => wrap(async () => {
-      if (p.operation === 'save') {
-        let name = String(p.name || '').trim(), type = '', buf;
-        if (p.source === 'text') { buf = Buffer.from(String(p.text ?? ''), 'utf8'); name ||= 'note.txt'; type = 'text/plain'; }
-        else {
-          const f = p.file && typeof p.file === 'object' && typeof p.file.data === 'string' ? p.file : fileIn(item.json);
-          if (!f) throw new FlowError('There’s no file to save: give one in “File”, like {{ $json.file }}.', 'no_file');
-          buf = Buffer.from(String(f.data).replace(/^data:[^,]*,/, ''), 'base64'); name ||= f.name; type = f.type || '';
-        }
-        const saved = await d.put({ name, folder: p.folder || '', type, buf, replace: p.replace === true || p.replace === 'true' });
-        return put(item, out, info(saved));
-      }
-      if (p.operation === 'read') {
-        const f = await findOrFail(p.path);
-        const { buf } = await d.read(f.id);
-        return put(item, out, p.as === 'text' ? buf.toString('utf8') : { name: f.name, type: f.type, size: f.size, data: buf.toString('base64') });
-      }
-      if (p.operation === 'delete') { const f = await findOrFail(p.path); await d.remove(f.id); return put(item, out, { deleted: true, ...info(f) }); }
-      if (p.operation === 'list') {
-        const { files } = await d.list();
-        const fd = String(p.folder || '').replace(/^\/+|\/+$/g, '');
-        return put(item, out, files.filter(f => (p.sub === true || p.sub === 'true' ? f.folder === fd || f.folder.startsWith(fd ? fd + '/' : '') : f.folder === fd)).map(info));
-      }
-      throw new FlowError('Pick what to do: Save, Read, List or Delete.', 'bad_operation');
-    }));
-  } },
-
   /* ---- the web ---- */
   'core.graphql': { run: async args => {
     const c = args.node.credential ? await cred(args) : null;

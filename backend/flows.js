@@ -88,7 +88,7 @@ const ID = /^[\w-]{1,80}$/;
 // A page's own link name: /p/<name>.
 export const PAGE_LINK = /^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$/;
 
-export function createFlows({ store, drive = null, ai = {}, mailer, allowPrivate = false, secret = '', storeOwner = '' }) {
+export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secret = '', storeOwner = '' }) {
   const m = store.meta;
   // The node types a run of `flow` can use: ours, and the account's custom nodes (My nodes), the latest
   // version of each; copies a workflow file carries (flow.customNodes) fill in ones the account hasn't got.
@@ -155,8 +155,6 @@ export function createFlows({ store, drive = null, ai = {}, mailer, allowPrivate
         reindex(uid, file.id, file);
       },
     },
-    // Storage (drive.js): the account's common place for files, for the Storage node.
-    drive: drive ? drive.forUser(uid) : null,
     // A connection saved in the Database view (by id or name), with its password if it was remembered.
     dbConnection(id) { const list = m.userdata[uid]?.['db-connections']; return Array.isArray(list) ? list.find(c => c.id === id || c.name === id) || null : null; },
     // Another workflow file of this account, run on these items: what its last steps produce.

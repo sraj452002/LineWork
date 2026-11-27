@@ -5,7 +5,6 @@ import { accountRoutes } from './accounts.js';
 import { createMailer } from './mail.js';
 import { DbError, handle as dbHandle } from './dbconnect.js';
 import { createFlows } from './flows.js';
-import { createDrive, driveRoutes } from './drive.js';
 import { electronRoute } from './app-install.js';
 import { createAgent, fetchRetry } from './agent.js';
 import { nvidiaContent, nvidiaParams, nvidiaSeesImages } from './nvidia.js';
@@ -45,9 +44,7 @@ export function createApp(store, opts = {}) {
   const api = express.Router();
   // Workflows (flows.js). Their webhooks are called by other services, from anywhere, so they come
   // before the checks below that changes come from this site as JSON.
-  // Storage: the common place for any files (drive.js); a bucket when S3_… is set, else the server's own storage.
-  const drive = opts.drive || createDrive({ store, env: opts.driveEnv || {} });
-  const flows = createFlows({ store, drive, ai: { key: aiKey, base: aiBase, model: aiModel, dailyLimit: aiDailyLimit, nvidiaKey, nvidiaBase, nvidiaModels: String(nvidiaModel || '').split(',').map(m => m.trim()).filter(Boolean) }, mailer, allowPrivate: dbAllowPrivate, secret: opts.flowSecret || '', storeOwner: opts.storeOwner || '' });
+  const flows = createFlows({ store, ai: { key: aiKey, base: aiBase, model: aiModel, dailyLimit: aiDailyLimit, nvidiaKey, nvidiaBase, nvidiaModels: String(nvidiaModel || '').split(',').map(m => m.trim()).filter(Boolean) }, mailer, allowPrivate: dbAllowPrivate, secret: opts.flowSecret || '', storeOwner: opts.storeOwner || '' });
   api.use('/hook', flows.hooks);
   api.use('/ui', flows.ui); // published custom apps: public pages, like webhooks
   api.use('/p', flows.pages); // pages made of nodes at a name of their own (/p/<name> on the site)
@@ -92,14 +89,13 @@ export function createApp(store, opts = {}) {
   });
   const signedIn = (req, res, next) => (req.user ? next() : res.status(401).json({ error: 'unauthorized' }));
   flows.routes(api, signedIn);
-  driveRoutes(api, signedIn, drive);
   electronRoute(api, signedIn, { base: opts.electronBase });
   const accounts = accountRoutes(api, { store, mailer, allowSignup, requireVerified, oauthConfig: oauth, appUrl, signedIn });
 
   // What this server offers. allowLocal: whether the app may be used without an account.
   api.get('/server', (req, res) => res.json({
     name: 'linework-server', ...accounts.info(), allowLocal, accounts: !noAccounts,
-    features: ['versions', 'share', 'folders', 'ai-limits', '2fa', 'db', 'flows', 'drive'],
+    features: ['versions', 'share', 'folders', 'ai-limits', '2fa', 'db', 'flows'],
     ai: { configured: Boolean(aiKey || nvidiaKey), dailyLimit: aiDailyLimit },
   }));
 
