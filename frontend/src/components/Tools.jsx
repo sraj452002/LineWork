@@ -8,6 +8,7 @@ import { emptyFlow, newNode } from '../lib/flows.js';
 import { importFlow } from '../lib/flowio.js';
 import { readZip, zipSummary } from '../lib/zipimport.js';
 import { STARTERS } from '../lib/starters.js';
+import { newCourse, quizCourse, sampleCourse } from '../lib/course.js';
 import { useUI } from './ui.jsx';
 import ReverseDialog from './ReverseDialog.jsx';
 
@@ -33,6 +34,7 @@ const ICON = {
   auto: 'M3 9h6v6H3zM15 3.5h6v6h-6zM15 14.5h6v6h-6zM9 12h3l1.5-5.5H15M12 12l1.5 5.5H15',
   zip: 'M6 3h9l4 4v14H6zM15 3v4h4M10 3v2h2v2h-2v2h2v2h-2v3h2v3h-2z',
   rev: 'M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4M12 8v4l3 2',
+  course: 'M3 5h18v11H3zM10 8.5l4 2-4 2zM8 20h8M12 16v4',
 };
 
 export default function Tools({ q = '', onCreate, onGenerate, busy }) {
@@ -187,6 +189,11 @@ export default function Tools({ q = '', onCreate, onGenerate, busy }) {
       { k: 'rev', view: 'Doc', name: 'Reverse engineer a website', note: 'A web address: its technologies, pages, forms and API calls', act: () => setRev('site') },
       { k: 'rev', view: 'Doc', name: 'Reverse engineer data', note: 'JSON, CSV or an API response: its schema as tables, and a workflow for it', act: () => setRev('data') },
       { k: 'rev', view: 'Doc', name: 'Reverse engineer a workflow', note: 'n8n, Make, Zapier, Node-RED or Power Automate: the steps explained, and a Workline workflow', act: () => setRev('flow') },
+    ] },
+    { id: 'course', name: 'E-learning', k: 'course', note: 'Interactive courses like in an e-learning authoring tool: slides and scenes, layers, states, triggers, variables, quizzes and a player; publish as a web page or a SCORM package for any LMS.', list: [
+      { k: 'course', view: 'Course', name: 'Interactive course', note: 'Start from a sample: a name entry, click-to-reveal layers, a quiz and results', act: () => onCreate(blank('Workplace safety basics', { view: 'course', course: sampleCourse() })) },
+      { k: 'course', view: 'Course', name: 'Blank course', note: 'One title slide, ready for your own', act: () => onCreate(blank('Course', { view: 'course', course: newCourse('Course') })) },
+      { k: 'course', view: 'Course', name: 'Quiz', note: 'Question slides and a results slide, scored with a pass mark', act: () => onCreate(blank('Quiz', { view: 'course', course: quizCourse() })) },
     ] },
     { id: 'code', name: 'Code', k: 'code', note: 'Write, run and understand code, all in the browser.', list: [
       { k: 'code', view: 'Code', name: 'Code editor', note: 'VS Code’s editor, with files and folders', act: () => onCreate(code('Code', null)) },

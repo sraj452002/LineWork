@@ -16,6 +16,7 @@ const SheetView = lazy(() => import('./SheetView.jsx'));
 const DatabaseView = lazy(() => import('./DatabaseView.jsx'));
 const FlowView = lazy(() => import('./FlowView.jsx'));
 const AppBuilder = lazy(() => import('./AppBuilder.jsx'));
+const CourseView = lazy(() => import('./CourseView.jsx'));
 const AssistPanel = lazy(() => import('./AssistPanel.jsx'));
 
 const narrow = () => innerWidth <= 760;
@@ -25,7 +26,7 @@ const aiPref = () => { try { return localStorage.getItem(AI_KEY) === '1'; } catc
 
 // onShare and onHistory appear with the Workline API (backend/); a shared file has no onDelete.
 // The views a file can be shown in (the View menu at the top). `wide` ones need a wide screen.
-const VIEW_GROUPS = ['Draw', 'Write', 'Data', 'Build', 'Automate'];
+const VIEW_GROUPS = ['Draw', 'Write', 'Data', 'Build', 'Teach', 'Automate'];
 const VIEWS = [
   { k: 'canvas', group: 'Draw', label: 'Canvas', note: 'Diagrams, database schemas and the whiteboard', icon: '<rect x="3" y="3.5" width="7" height="5" rx="1"/><rect x="14" y="15.5" width="7" height="5" rx="1"/><path d="M6.5 8.5v4.5h11v2.5"/>' },
   { k: 'doc', group: 'Write', label: 'Doc', note: 'The design doc', icon: '<path d="M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6"/>' },
@@ -33,6 +34,7 @@ const VIEWS = [
   { k: 'sheet', group: 'Data', label: 'Sheet', note: 'Spreadsheets with formulas and charts, like Excel', icon: '<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17M3.5 14.5h17M9 4.5v15"/>' },
   { k: 'db', group: 'Data', label: 'Database', note: 'Connect to a live database: its schema and data', icon: '<ellipse cx="12" cy="5.5" rx="7.5" ry="2.5"/><path d="M4.5 5.5v13c0 1.4 3.4 2.5 7.5 2.5s7.5-1.1 7.5-2.5v-13M4.5 12c0 1.4 3.4 2.5 7.5 2.5s7.5-1.1 7.5-2.5"/>' },
   { k: 'code', group: 'Build', label: 'Code', note: 'Editor, terminal, Python and the code visualizer', icon: '<path d="m8 7-5 5 5 5M16 7l5 5-5 5M14 4l-4 16"/>' },
+  { k: 'course', group: 'Teach', label: 'Course', note: 'Interactive e-learning: slides, layers, states, triggers, quizzes; publish as a web page or SCORM', icon: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M10 8l4 2-4 2zM8 20h8M12 16v4"/>' },
   { k: 'app', group: 'Automate', label: 'App', note: 'Your own page (HTML, CSS, JavaScript) that runs your workflows, with a link to share', icon: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 8.5h18M6 6.2h.01M8.5 6.2h.01M7 13l2.5 2.5L7 18M12 18h5"/>' },
   { k: 'flow', group: 'Automate', label: 'Workflow', note: 'Triggers, steps and apps, run on the server (like n8n)', icon: '<rect x="2.5" y="9" width="6" height="6" rx="1.5"/><rect x="15.5" y="3.5" width="6" height="6" rx="1.5"/><rect x="15.5" y="14.5" width="6" height="6" rx="1.5"/><path d="M8.5 12h3l1.5-5.5h2.5M11.5 12l1.5 5.5h2.5"/>' },
 ];
@@ -243,6 +245,13 @@ export default function Editor({ file, files, update, saveState, onBack, onRenam
               <FlowView file={file} update={update} visible saveState={saveState} onGuide={onGuide} assist={assist} />
             </Suspense>
             {assistPanel}
+          </div>
+        )}
+        {view === 'course' && (
+          <div className="apppane">
+            <Suspense fallback={<Loading />}>
+              <CourseView file={file} update={update} visible />
+            </Suspense>
           </div>
         )}
         {view === 'app' && (
