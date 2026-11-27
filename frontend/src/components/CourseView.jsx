@@ -1,14 +1,18 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { rid } from '../lib/utils.js';
 import { useUI } from './ui.jsx';
+import { ObjArt, Thumb, boxStyle, defaultsOf, lookOf } from './CourseArt.jsx';
+import { storyNote } from './CourseStudio.jsx';
 import {
   ACTIONS, ANIMS, BUILTIN_VARS, EVENTS, KINDS, OPS, QTYPES, STATES, allSlides, cloneSlide, courseHtml, findSlide, interpolate,
-  newCourse, newLayer, newObject, newScene, newSlide, pictureUrl, scormZip,
+  TRANSITIONS, appendCourse, courseFile, newCourse, newLayer, newObject, newScene, newSlide, pictureUrl, readCourse, scormZip,
 } from '../lib/course.js';
 
-/* The Course view: e-learning made of scenes and slides (see lib/course.js). The slides on the left, the
-   slide in the middle with its layers below it, and on the right: Format (the object, or the slide),
-   States, Triggers and Timeline. Preview runs the course; Publish gives a web page or a SCORM package. */
+/* The Course view: e-learning made of scenes and slides (see lib/course.js), laid out like a desktop authoring
+   tool: a ribbon (FILE, HOME, INSERT, SLIDES, DESIGN, TRANSITIONS, ANIMATIONS, VIEW, HELP); Story View (every
+   scene and its slides) and Slide View (the slide list, the slide, Timeline / States / Format / Notes below,
+   Triggers and Slide Layers on the right); a status bar with the zoom. Preview runs the course; Publish gives a
+   web page or a SCORM package; FILE imports and exports course files. */
 
 const SLIDE_KINDS = [['blank', 'Blank'], ['title', 'Title slide'], ['content', 'Title and content'], ['question', 'Question'], ['result', 'Results']];
 const STATE_LABEL = { normal: 'Normal', hover: 'Hover', down: 'Down', selected: 'Selected', visited: 'Visited', disabled: 'Disabled', hidden: 'Hidden' };
@@ -17,68 +21,79 @@ const hex = c => (/^#[0-9a-f]{6}$/i.test(c || '') ? c : /^#[0-9a-f]{3}$/i.test(c
 const download = (blob, name) => { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); };
 const safeName = t => (t || 'course').replace(/[\\/:*?"<>|]+/g, '-').slice(0, 80);
 
-// How an object looks (the same as the player draws it).
-export function lookOf(o, st = 'normal') { return { ...o.style, ...(st !== 'normal' ? o.states?.[st] || {} : {}) }; }
-function boxStyle(o, s) {
-  return {
-    left: o.x, top: o.y, width: o.w, height: o.h, background: s.fill && s.fill !== 'transparent' ? s.fill : 'transparent', color: s.color, fontSize: s.size || 18,
-    fontWeight: s.bold ? 700 : 400, fontStyle: s.italic ? 'italic' : undefined, textAlign: s.align || 'left', borderRadius: s.shape === 'ellipse' ? '50%' : (s.radius || 0),
-    border: s.borderW ? `${s.borderW}px solid ${s.border || 'transparent'}` : 0, opacity: s.opacity ?? undefined, boxShadow: s.shadow ? '0 10px 30px rgba(20,24,60,.18)' : undefined,
-    justifyContent: s.valign === 'middle' ? 'center' : s.valign === 'bottom' ? 'flex-end' : 'flex-start',
-  };
-}
-function ObjArt({ o, st = 'normal', vars = {} }) {
-  const s = lookOf(o, st);
-  const text = s.text != null ? s.text : o.text;
-  if (o.kind === 'image') return (s.src || o.src) ? <img src={s.src || o.src} alt="" style={{ objectFit: s.fit || 'cover' }} draggable={false} /> : <span className="cv-ph">Picture</span>;
-  if (o.kind === 'input') return <span className="cv-input">{o.var ? `${o.placeholder || ''}  → %${o.var}%` : o.placeholder}</span>;
-  if (o.kind === 'video') return <span className="cv-ph dark">▶ Video{o.src ? '' : ' (add a link)'}</span>;
-  if (o.kind === 'audio') return <span className="cv-ph">♪ Audio{o.src ? '' : ' (add a link)'}</span>;
-  if (o.kind === 'hotspot') return <span className="cv-hot" />;
-  if (o.kind === 'question') {
-    const Q = o.q || {};
-    return (
-      <div className="cv-q">
-        <b>{interpolate(Q.prompt, vars)}</b>
-        {Q.type === 'fill' ? <span className="cv-qf">Type your answer</span> : (Q.choices || []).map((c, i) => <span key={c.id} className="cv-qo"><i className={Q.type === 'mr' ? 'sq' : Q.type === 'order' ? 'num' : ''}>{Q.type === 'order' ? i + 1 : ''}</i>{c.text}{c.correct && Q.type !== 'order' && <em>✓</em>}</span>)}
-        <span className="cv-qs">Submit</span>
-      </div>
-    );
-  }
-  if (o.kind === 'result') return <div className="cv-r"><span className="cv-ring"><b>80%</b></span><b>{interpolate(text, { ...vars, 'Quiz.Percent': 80 })}</b><small>Score, pass or fail, and Retry</small></div>;
-  return <div className="cv-t">{interpolate(text, vars)}</div>;
-}
-const defaultsOf = c => Object.fromEntries((c.vars || []).map(v => [v.name, v.value === '' ? `%${v.name}%` : v.value]));
-
-// A slide drawn small (the slide list).
-function Thumb({ slide, course }) {
-  const vars = defaultsOf(course);
-  const ref = useRef(null), [k, setK] = useState(0.17);
-  useLayoutEffect(() => { const el = ref.current; if (!el) return undefined; const f = () => el.clientWidth && setK(el.clientWidth / course.size.w); f(); const ro = new ResizeObserver(f); ro.observe(el); return () => ro.disconnect(); }, [course.size.w]);
+// The ribbon's big buttons: an icon over a label (with ▾ when it opens a menu).
+const ICO = {
+  paste: '<rect x="7" y="5" width="18" height="23" rx="2" fill="#eef1f8" stroke="#6b7591"/><rect x="11" y="3" width="10" height="5" rx="1.5" fill="#c9d0e4" stroke="#6b7591"/><rect x="14" y="13" width="14" height="16" rx="1.5" fill="#fff" stroke="#3d6fd6"/><path d="M17 18h8M17 22h8M17 26h5" stroke="#3d6fd6"/>',
+  scene: '<rect x="3" y="6" width="11" height="8" rx="1.5" fill="#dfe8fb" stroke="#3d6fd6"/><rect x="18" y="6" width="11" height="8" rx="1.5" fill="#dfe8fb" stroke="#3d6fd6"/><rect x="10" y="20" width="12" height="8" rx="1.5" fill="#fff" stroke="#3d6fd6"/><path d="M8.5 14v3h15v-3M16 17v3" stroke="#6b7591"/><path d="M26 19v8M22 23h8" stroke="#17a05b" stroke-width="2"/>',
+  flag: '<path d="M8 4v25" stroke="#6b7591" stroke-width="2"/><path d="M9 5h16l-4 5.5 4 5.5H9z" fill="#e5484d" stroke="#c0353a"/>',
+  slide: '<rect x="3" y="6" width="22" height="16" rx="1.5" fill="#fff" stroke="#3d6fd6"/><path d="M3 10h22" stroke="#3d6fd6"/><rect x="6" y="13" width="9" height="6" fill="#dfe8fb"/><circle cx="25" cy="23" r="6" fill="#17a05b"/><path d="M25 20v6M22 23h6" stroke="#fff" stroke-width="2"/>',
+  dup: '<rect x="4" y="4" width="16" height="12" rx="1.5" fill="#dfe8fb" stroke="#3d6fd6"/><rect x="11" y="13" width="17" height="13" rx="1.5" fill="#fff" stroke="#3d6fd6"/>',
+  del: '<path d="M7 9h18l-1.5 18h-15z" fill="#fde2e2" stroke="#c0353a"/><path d="M5 9h22M12 9V5h8v4M13 14v9M19 14v9" stroke="#c0353a"/>',
+  player: '<rect x="3" y="5" width="26" height="19" rx="2" fill="#fff" stroke="#6b7591"/><path d="M3 20h26" stroke="#6b7591"/><path d="M13 9.5l7 4-7 4z" fill="#3d6fd6"/><rect x="6" y="21.5" width="9" height="1.2" fill="#3d6fd6"/><circle cx="24" cy="26" r="4.5" fill="#f5b400" stroke="#b07d00"/>',
+  preview: '<circle cx="14" cy="14" r="9" fill="#eef4ff" stroke="#3d6fd6" stroke-width="2"/><path d="M21 21l7 7" stroke="#6b7591" stroke-width="3" stroke-linecap="round"/><path d="M11.5 10l6 4-6 4z" fill="#3d6fd6"/>',
+  publish: '<rect x="4" y="6" width="24" height="17" rx="2" fill="#fff" stroke="#6b7591"/><path d="M16 26V12M11 16l5-5 5 5" stroke="#17a05b" stroke-width="2.2" fill="none"/><path d="M10 29h12" stroke="#6b7591" stroke-width="2"/>',
+  text: '<rect x="4" y="5" width="24" height="22" rx="2" fill="#fff" stroke="#6b7591" stroke-dasharray="3 2"/><path d="M10 10h12M16 10v13" stroke="#1f2433" stroke-width="2.6"/>',
+  shape: '<rect x="3" y="12" width="14" height="14" rx="2" fill="#dfe8fb" stroke="#3d6fd6"/><circle cx="21" cy="11" r="8" fill="#ffe9b8" stroke="#d99a00"/>',
+  button: '<rect x="3" y="9" width="26" height="14" rx="7" fill="#4f5bd5"/><path d="M10 16h12" stroke="#fff" stroke-width="2"/><path d="M21 19l4 8 1.5-3.5 3.5-1.5z" fill="#1f2433" stroke="#fff"/>',
+  picture: '<rect x="3" y="6" width="26" height="20" rx="2" fill="#e8f3ff" stroke="#3d6fd6"/><path d="M3 22l8-8 6 6 4-4 8 8" fill="#7bc47f" stroke="#2f8a3c"/><circle cx="22" cy="12" r="3" fill="#f5b400"/>',
+  hotspot: '<circle cx="16" cy="16" r="11" fill="rgba(61,111,214,.12)" stroke="#3d6fd6" stroke-dasharray="3 2.5" stroke-width="1.6"/><path d="M15 12l3 13 2-5 5-2z" fill="#1f2433" stroke="#fff"/>',
+  input: '<rect x="3" y="10" width="26" height="12" rx="2" fill="#fff" stroke="#6b7591"/><path d="M8 13v6" stroke="#3d6fd6" stroke-width="2"/><path d="M12 16h10" stroke="#c3c8d8" stroke-width="2"/>',
+  video: '<rect x="3" y="7" width="19" height="18" rx="2" fill="#2b2f3a"/><path d="M22 13l7-4v14l-7-4z" fill="#6b7591"/><path d="M10 12l6 4-6 4z" fill="#fff"/>',
+  audio: '<path d="M6 12h5l7-6v20l-7-6H6z" fill="#dfe8fb" stroke="#3d6fd6"/><path d="M22 11a7 7 0 0 1 0 10M25 8a11 11 0 0 1 0 16" stroke="#3d6fd6" fill="none" stroke-width="1.8"/>',
+  question: '<rect x="4" y="4" width="24" height="24" rx="3" fill="#fff4dc" stroke="#d99a00"/><path d="M12.5 12a3.5 3.5 0 1 1 5.5 2.9c-1.2.8-2 1.5-2 3.1" stroke="#b07d00" stroke-width="2.4" fill="none"/><circle cx="16" cy="22.5" r="1.6" fill="#b07d00"/>',
+  result: '<rect x="4" y="4" width="24" height="24" rx="3" fill="#e6f6ef" stroke="#17a05b"/><path d="M9 20l4-5 4 3 6-8" stroke="#17a05b" stroke-width="2.4" fill="none"/>',
+  vars: '<rect x="4" y="6" width="24" height="20" rx="2" fill="#fff" stroke="#6b7591"/><text x="16" y="21" font-size="12" font-family="monospace" font-weight="700" text-anchor="middle" fill="#7a45b8">%x%</text>',
+  size: '<rect x="4" y="8" width="24" height="15" rx="1.5" fill="#fff" stroke="#3d6fd6"/><path d="M8 27h16M8 25v4M24 25v4" stroke="#6b7591"/>',
+  bg: '<rect x="4" y="6" width="24" height="18" rx="2" fill="url(#g)" stroke="#6b7591"/><defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="#cfe0ff"/><stop offset="1" stop-color="#f3d9ff"/></linearGradient></defs><path d="M9 28l14-14 3 3-14 14z" fill="#f5b400" stroke="#b07d00"/>',
+  theme: '<circle cx="11" cy="12" r="6" fill="#4f5bd5"/><circle cx="21" cy="12" r="6" fill="#e5484d" opacity=".85"/><circle cx="16" cy="20" r="6" fill="#17a05b" opacity=".85"/>',
+  font: '<text x="16" y="23" font-size="20" font-family="Georgia,serif" font-weight="700" text-anchor="middle" fill="#1f2433">Aa</text>',
+  story: '<rect x="3" y="4" width="11" height="8" rx="1.5" fill="#dfe8fb" stroke="#3d6fd6"/><rect x="18" y="4" width="11" height="8" rx="1.5" fill="#dfe8fb" stroke="#3d6fd6"/><rect x="3" y="20" width="11" height="8" rx="1.5" fill="#fff" stroke="#3d6fd6"/><rect x="18" y="20" width="11" height="8" rx="1.5" fill="#fff" stroke="#3d6fd6"/><path d="M8.5 12v8M23.5 12v8M14 8h4" stroke="#6b7591"/>',
+  slideview: '<rect x="3" y="5" width="26" height="18" rx="2" fill="#fff" stroke="#3d6fd6"/><rect x="7" y="9" width="10" height="2" fill="#1f2433"/><rect x="7" y="13" width="14" height="6" fill="#dfe8fb"/><path d="M3 26h26" stroke="#6b7591" stroke-width="2"/>',
+  zoomin: '<circle cx="14" cy="14" r="9" fill="#fff" stroke="#3d6fd6" stroke-width="2"/><path d="M21 21l7 7" stroke="#6b7591" stroke-width="3"/><path d="M10 14h8M14 10v8" stroke="#3d6fd6" stroke-width="2"/>',
+  zoomout: '<circle cx="14" cy="14" r="9" fill="#fff" stroke="#3d6fd6" stroke-width="2"/><path d="M21 21l7 7" stroke="#6b7591" stroke-width="3"/><path d="M10 14h8" stroke="#3d6fd6" stroke-width="2"/>',
+  fit: '<path d="M4 11V4h7M21 4h7v7M28 21v7h-7M11 28H4v-7" stroke="#3d6fd6" stroke-width="2.2" fill="none"/><rect x="10" y="10" width="12" height="12" rx="1.5" fill="#dfe8fb" stroke="#3d6fd6"/>',
+  keys: '<rect x="3" y="9" width="26" height="15" rx="2" fill="#fff" stroke="#6b7591"/><path d="M7 13h2M11 13h2M15 13h2M19 13h2M23 13h2M7 17h2M23 17h2M11 20h10" stroke="#3d6fd6" stroke-width="2"/>',
+  help: '<circle cx="16" cy="16" r="12" fill="#eef4ff" stroke="#3d6fd6" stroke-width="2"/><path d="M12.5 12.5a3.5 3.5 0 1 1 5 3.2c-1 .5-1.5 1.2-1.5 2.6" stroke="#3d6fd6" stroke-width="2.4" fill="none"/><circle cx="16" cy="22.5" r="1.5" fill="#3d6fd6"/>',
+  layer: '<path d="M16 5l12 6-12 6-12-6z" fill="#dfe8fb" stroke="#3d6fd6"/><path d="M4 16l12 6 12-6M4 21l12 6 12-6" stroke="#3d6fd6" fill="none"/>',
+  import: '<path d="M6 4h13l7 7v17H6z" fill="#fff" stroke="#6b7591"/><path d="M16 12v11M11 18l5 5 5-5" stroke="#3d6fd6" stroke-width="2.2" fill="none"/>',
+  export: '<path d="M6 4h13l7 7v17H6z" fill="#fff" stroke="#6b7591"/><path d="M16 23V12M11 17l5-5 5 5" stroke="#17a05b" stroke-width="2.2" fill="none"/>',
+};
+const TR_ICON = { none: '<rect x="4" y="7" width="24" height="18" rx="2" fill="#fff" stroke="#6b7591"/><path d="M8 25L24 7" stroke="#c0353a" stroke-width="2"/>', fade: '<rect x="4" y="7" width="24" height="18" rx="2" fill="url(#f)" stroke="#6b7591"/><defs><linearGradient id="f" x1="0" x2="1"><stop offset="0" stop-color="#3d6fd6" stop-opacity=".1"/><stop offset="1" stop-color="#3d6fd6"/></linearGradient></defs>', push: '<rect x="4" y="7" width="14" height="18" fill="#dfe8fb" stroke="#3d6fd6"/><rect x="18" y="7" width="10" height="18" fill="#3d6fd6"/><path d="M8 16h6M12 13l3 3-3 3" stroke="#3d6fd6" stroke-width="1.6" fill="none"/>', pushUp: '<rect x="4" y="7" width="24" height="11" fill="#dfe8fb" stroke="#3d6fd6"/><rect x="4" y="18" width="24" height="7" fill="#3d6fd6"/>', cover: '<rect x="4" y="7" width="24" height="18" fill="#dfe8fb" stroke="#6b7591"/><rect x="4" y="7" width="15" height="18" fill="#3d6fd6"/>', zoom: '<rect x="4" y="7" width="24" height="18" rx="2" fill="#fff" stroke="#6b7591"/><rect x="11" y="12" width="10" height="8" fill="#3d6fd6"/><path d="M7 10l3 3M25 10l-3 3M7 22l3-3M25 22l-3-3" stroke="#3d6fd6"/>' };
+const AN_ICON = { none: TR_ICON.none, fade: '<circle cx="16" cy="16" r="10" fill="#3d6fd6" opacity=".35"/><circle cx="16" cy="16" r="6" fill="#3d6fd6"/>', 'fly-left': '<rect x="15" y="10" width="12" height="12" rx="2" fill="#3d6fd6"/><path d="M4 16h8M9 13l3 3-3 3" stroke="#6b7591" stroke-width="2" fill="none"/>', 'fly-right': '<rect x="5" y="10" width="12" height="12" rx="2" fill="#3d6fd6"/><path d="M28 16h-8M23 13l-3 3 3 3" stroke="#6b7591" stroke-width="2" fill="none"/>', 'fly-up': '<rect x="10" y="5" width="12" height="12" rx="2" fill="#3d6fd6"/><path d="M16 28v-8M13 23l3-3 3 3" stroke="#6b7591" stroke-width="2" fill="none"/>', 'fly-down': '<rect x="10" y="15" width="12" height="12" rx="2" fill="#3d6fd6"/><path d="M16 4v8M13 9l3 3 3-3" stroke="#6b7591" stroke-width="2" fill="none"/>', zoom: '<rect x="11" y="11" width="10" height="10" rx="2" fill="#3d6fd6"/><rect x="6" y="6" width="20" height="20" rx="3" fill="none" stroke="#3d6fd6" stroke-dasharray="3 2"/>', spin: '<rect x="10" y="10" width="12" height="12" rx="2" fill="#3d6fd6" transform="rotate(25 16 16)"/><path d="M6 12a11 11 0 0 1 16-6" stroke="#6b7591" stroke-width="2" fill="none"/>', bounce: '<circle cx="16" cy="9" r="5" fill="#3d6fd6"/><path d="M6 27h20M12 21q4-6 8 0" stroke="#6b7591" stroke-width="2" fill="none"/>' };
+const Svg = ({ d, s = 32 }) => <svg viewBox="0 0 32 32" width={s} height={s} fill="none" strokeWidth="1.4" aria-hidden="true" dangerouslySetInnerHTML={{ __html: d }} />;
+function Big({ icon, label, onClick, menu, on, disabled, small }) {
   return (
-    <div className="cv-thumb" ref={ref} style={{ background: slide.bg, aspectRatio: `${course.size.w} / ${course.size.h}` }}>
-      <div className="cv-thumb-in" style={{ width: course.size.w, height: course.size.h, transform: `scale(${k})` }}>
-        {slide.layers[0].objects.filter(o => o.initial !== 'hidden').map(o => <div key={o.id} className={'cv-o k-' + o.kind} style={boxStyle(o, lookOf(o, o.initial || 'normal'))}><ObjArt o={o} st={o.initial || 'normal'} vars={vars} /></div>)}
-      </div>
-    </div>
+    <button type="button" className={'sl-big' + (on ? ' on' : '') + (small ? ' small' : '')} onClick={e => onClick?.(e.currentTarget)} disabled={disabled} aria-haspopup={menu ? 'menu' : undefined} aria-pressed={on === undefined ? undefined : !!on}>
+      <Svg d={icon} s={small ? 24 : 32} />
+      <span>{label}{menu && <i aria-hidden="true"> ▾</i>}</span>
+    </button>
   );
 }
+const Group = ({ label, children }) => <div className="sl-group" role="group" aria-label={label}><div className="sl-gbody">{children}</div><span className="sl-glabel">{label}</span></div>;
+const TABS = ['HOME', 'INSERT', 'SLIDES', 'DESIGN', 'TRANSITIONS', 'ANIMATIONS', 'VIEW', 'HELP'];
+const readPref = (k, d) => { try { return localStorage.getItem(k) || d; } catch (e) { return d; } };
+const savePref = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* private window */ } };
 
 export default function CourseView({ file, update, visible = true }) {
   const { popup, ask, toast } = useUI();
   const course = file.course;
   useEffect(() => { if (!file.course) update(c => { c.course = newCourse(c.title || 'Course'); }); }, [file.course, update]);
 
+  const [mode, setMode] = useState(() => readPref('linework:course-mode', 'story')); // 'story' | 'slide'
+  const [ribbon, setRibbon] = useState('HOME');
   const [slideId, setSlideId] = useState(null);
   const [layerId, setLayerId] = useState(null);
   const [sel, setSel] = useState(null);
-  const [tab, setTab] = useState('format');
+  const [bottom, setBottom] = useState('timeline'); // timeline | states | format | notes
   const [editState, setEditState] = useState('normal');
   const [editing, setEditing] = useState(null);
-  const [openTrig, setOpenTrig] = useState(null); // the trigger opened in Triggers
-  const [dialog, setDialog] = useState(null); // 'vars' | 'player' | {preview}
+  const [openTrig, setOpenTrig] = useState(null);
+  const [dialog, setDialog] = useState(null); // 'vars' | 'player' | 'keys' | {preview}
+  const [storyZoom, setStoryZoom] = useState(100);
+  const [zoom, setZoom] = useState(0); // the slide's zoom (0: fit)
   const undo = useRef([]), redo = useRef([]);
-  const picRef = useRef(null), picFor = useRef(null);
+  const picRef = useRef(null), picFor = useRef(null), importRef = useRef(null);
+  const go = m => { setMode(m); savePref('linework:course-mode', m); };
 
   const flat = course ? allSlides(course) : [];
   const here = course && (findSlide(course, slideId) || flat[0]);
@@ -87,8 +102,7 @@ export default function CourseView({ file, update, visible = true }) {
   const obj = layer && sel ? (layer.objects.find(o => o.id === sel) || null) : null;
   useEffect(() => { if (obj?.id !== sel) setSel(obj?.id || null); setEditState('normal'); }, [slide?.id, layer?.id]); // eslint-disable-line
 
-  // A change to the course: one step to undo.
-  // (The snapshot is taken here, not inside update(): React may run an updater twice.)
+  // A change to the course: one step to undo. (The snapshot is taken here: React may run an updater twice.)
   const now = useRef(course); now.current = course;
   const write = useCallback(fn => {
     if (now.current) { undo.current.push(JSON.stringify(now.current)); if (undo.current.length > 60) undo.current.shift(); }
@@ -96,19 +110,19 @@ export default function CourseView({ file, update, visible = true }) {
     update(c => { if (!c.course) c.course = newCourse(c.title); fn(c.course); });
   }, [update]);
   const back = (from, to) => { const s = from.current.pop(); if (!s) return; to.current.push(JSON.stringify(now.current)); now.current = JSON.parse(s); update(c => { c.course = JSON.parse(s); }); };
-  // Work on the live slide / layer / object inside a change.
   const inSlide = (c, id = slide.id) => findSlide(c, id)?.s;
   const inLayer = (c, sid = slide.id, lid = layer.id) => inSlide(c, sid)?.layers.find(l => l.id === lid);
   const inObj = (c, id = sel) => inLayer(c)?.objects.find(o => o.id === id);
   const editObj = fn => write(c => { const o = inObj(c); if (o) fn(o); });
-  // Format edits go to the state being edited (Normal: the object's own look).
   const setLook = (k, v) => editObj(o => { const t = editState === 'normal' ? (o.style ||= {}) : ((o.states ||= {})[editState] ||= {}); if (v === undefined) delete t[k]; else t[k] = v; });
+  const openSlide = id => { setSlideId(id); setLayerId(null); setSel(null); go('slide'); };
 
   /* ---- inserting ---- */
   const insert = (kind, extra = {}) => {
+    if (mode !== 'slide') go('slide');
     const o = newObject(kind, extra);
     write(c => { inLayer(c).objects.push(o); });
-    setSel(o.id); setTab('format');
+    setSel(o.id); setBottom('format');
   };
   const insertPicture = async f => {
     if (!f) return;
@@ -121,7 +135,7 @@ export default function CourseView({ file, update, visible = true }) {
     } catch (e) { toast(e.message); }
   };
   const insertMedia = async kind => {
-    const url = await ask({ title: kind === 'video' ? 'Video link' : 'Audio link', text: 'A link to an .mp4 / .webm / .mp3 file (for example a file in Storage you made public, or any web address).', value: 'https://', ok: 'Insert' });
+    const url = await ask({ title: kind === 'video' ? 'Video link' : 'Audio link', text: 'A link to an .mp4 / .webm / .mp3 file on the web.', value: 'https://', ok: 'Insert' });
     if (url && url.trim() && url.trim() !== 'https://') insert(kind, { src: url.trim() });
   };
   const addSlide = (kind, sceneId) => {
@@ -133,56 +147,70 @@ export default function CourseView({ file, update, visible = true }) {
     });
     setSlideId(s.id); setLayerId(null); setSel(null);
   };
+  const addScene = () => { const sc = newScene(`Scene ${course.scenes.length + 1}`, [newSlide('Untitled slide', 'blank')]); write(c => { c.scenes.push(sc); }); setSlideId(sc.slides[0].id); };
+  const dupSlide = x => { const n = cloneSlide(x.s); n.title += ' copy'; write(c => { const sc = c.scenes.find(s => s.id === x.sc.id); sc.slides.splice(sc.slides.findIndex(s => s.id === x.s.id) + 1, 0, n); }); setSlideId(n.id); };
+  const delSlide = x => { if (flat.length <= 1) return toast('A course needs at least one slide.'); write(c => { const sc = c.scenes.find(s => s.id === x.sc.id); sc.slides = sc.slides.filter(s => s.id !== x.s.id); c.scenes = c.scenes.filter(s => s.slides.length); if (c.start && !c.scenes.some(s => s.id === c.start)) delete c.start; }); setSlideId(null); };
 
-  /* ---- keys: delete, nudge, duplicate, copy / paste, undo / redo ---- */
+  /* ---- clipboard, keys ---- */
   const clip = useRef(null);
+  const copyObj = () => { if (obj) { clip.current = JSON.stringify(obj); toast('Copied'); } };
+  const cutObj = () => { if (!obj) return; clip.current = JSON.stringify(obj); write(c => { const l = inLayer(c); l.objects = l.objects.filter(o => o.id !== obj.id); }); setSel(null); };
+  const pasteObj = () => { if (!clip.current) return toast('Copy or cut an object first.'); if (mode !== 'slide') go('slide'); const o = { ...JSON.parse(clip.current), id: rid('o') }; o.x += 20; o.y += 20; write(c => { inLayer(c).objects.push(o); }); setSel(o.id); };
+  const duplicate = o => { const n = { ...JSON.parse(JSON.stringify(o)), id: rid('o'), x: o.x + 20, y: o.y + 20, name: o.name + ' copy' }; write(c => { inLayer(c).objects.push(n); }); setSel(n.id); };
   useEffect(() => {
     if (!visible || !course) return undefined;
     const key = e => {
       if (e.target.closest?.('input,textarea,select,[contenteditable="true"]') || document.querySelector('.modal,.menu')) return;
-      const mod = e.ctrlKey || e.metaKey;
-      if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? back(redo, undo) : back(undo, redo); return; }
-      if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); back(redo, undo); return; }
+      const mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
+      if (mod && k === 'z') { e.preventDefault(); e.shiftKey ? back(redo, undo) : back(undo, redo); return; }
+      if (mod && k === 'y') { e.preventDefault(); back(redo, undo); return; }
+      if (e.key === 'F12') { e.preventDefault(); setDialog({ preview: 'all' }); return; }
+      if (mode === 'story') {
+        if (e.key === 'Enter' && slide) { e.preventDefault(); openSlide(slide.id); }
+        if (e.key === 'Delete' && slide) { e.preventDefault(); delSlide(here); }
+        return;
+      }
+      if (mod && k === 'v') { e.preventDefault(); pasteObj(); return; }
       if (!obj) return;
       if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); write(c => { const l = inLayer(c); l.objects = l.objects.filter(o => o.id !== obj.id); }); setSel(null); }
       else if (e.key.startsWith('Arrow')) {
         e.preventDefault(); const d = e.shiftKey ? 10 : 1;
         editObj(o => { if (e.key === 'ArrowLeft') o.x -= d; if (e.key === 'ArrowRight') o.x += d; if (e.key === 'ArrowUp') o.y -= d; if (e.key === 'ArrowDown') o.y += d; });
-      } else if (mod && e.key.toLowerCase() === 'd') { e.preventDefault(); duplicate(obj); }
-      else if (mod && e.key.toLowerCase() === 'c') clip.current = JSON.stringify(obj);
-      else if (mod && e.key.toLowerCase() === 'v' && clip.current) { e.preventDefault(); const o = { ...JSON.parse(clip.current), id: rid('o') }; o.x += 20; o.y += 20; write(c => { inLayer(c).objects.push(o); }); setSel(o.id); }
+      } else if (mod && k === 'd') { e.preventDefault(); duplicate(obj); }
+      else if (mod && k === 'c') copyObj();
+      else if (mod && k === 'x') { e.preventDefault(); cutObj(); }
     };
     addEventListener('keydown', key);
     return () => removeEventListener('keydown', key);
   });
-  const duplicate = o => { const n = { ...JSON.parse(JSON.stringify(o)), id: rid('o'), x: o.x + 20, y: o.y + 20, name: o.name + ' copy' }; write(c => { inLayer(c).objects.push(n); }); setSel(n.id); };
 
-  /* ---- the stage: fit it, select, move and resize objects ---- */
+  /* ---- the stage ---- */
   const holder = useRef(null);
-  const [k, setK] = useState(0.6);
+  const [fitK, setFitK] = useState(0.6);
   useLayoutEffect(() => {
     const el = holder.current; if (!el || !course) return undefined;
-    const fit = () => { const r = el.getBoundingClientRect(); setK(Math.max(0.2, Math.min((r.width - 40) / course.size.w, (r.height - 30) / course.size.h, 1.4))); };
+    const fit = () => { const r = el.getBoundingClientRect(); if (r.width && r.height) setFitK(Math.max(0.15, Math.min((r.width - 40) / course.size.w, (r.height - 30) / course.size.h, 1.4))); };
     fit(); const ro = new ResizeObserver(fit); ro.observe(el); return () => ro.disconnect();
-  }, [course?.size?.w, visible]); // eslint-disable-line
-  const drag = (e, o, mode) => {
+  }, [course?.size?.w, course?.size?.h, visible, mode]); // eslint-disable-line
+  const k = zoom ? zoom / 100 : fitK;
+  const drag = (e, o, how) => {
     e.stopPropagation(); e.preventDefault();
     setSel(o.id);
     if (editing) return;
     const sx = e.clientX, sy = e.clientY, start = { x: o.x, y: o.y, w: o.w, h: o.h };
     let moved = false, snap = null;
-    const el = e.currentTarget.closest('.cv-o'), box = el;
+    const box = e.currentTarget.closest('.cv-o');
     const mv = m => {
       const dx = (m.clientX - sx) / k, dy = (m.clientY - sy) / k;
       if (!moved && Math.abs(dx) + Math.abs(dy) < 2) return;
       moved = true;
       const g = m.altKey ? 1 : 5, r = v => Math.round(v / g) * g;
       snap = { ...start };
-      if (mode === 'move') { snap.x = r(start.x + dx); snap.y = r(start.y + dy); }
-      if (mode.includes('e')) snap.w = Math.max(10, r(start.w + dx));
-      if (mode.includes('s')) snap.h = Math.max(10, r(start.h + dy));
-      if (mode.includes('w')) { snap.w = Math.max(10, r(start.w - dx)); snap.x = start.x + start.w - snap.w; }
-      if (mode.includes('n')) { snap.h = Math.max(10, r(start.h - dy)); snap.y = start.y + start.h - snap.h; }
+      if (how === 'move') { snap.x = r(start.x + dx); snap.y = r(start.y + dy); }
+      if (how.includes('e')) snap.w = Math.max(10, r(start.w + dx));
+      if (how.includes('s')) snap.h = Math.max(10, r(start.h + dy));
+      if (how.includes('w')) { snap.w = Math.max(10, r(start.w - dx)); snap.x = start.x + start.w - snap.w; }
+      if (how.includes('n')) { snap.h = Math.max(10, r(start.h - dy)); snap.y = start.y + start.h - snap.h; }
       Object.assign(box.style, { left: snap.x + 'px', top: snap.y + 'px', width: snap.w + 'px', height: snap.h + 'px' });
     };
     const up = () => { removeEventListener('pointermove', mv); removeEventListener('pointerup', up); if (moved && snap) editObj(x => { if (x.id === o.id) Object.assign(x, snap); }); };
@@ -193,135 +221,287 @@ export default function CourseView({ file, update, visible = true }) {
   const vars = defaultsOf(course);
   const baseUnder = layer !== slide.layers[0];
   const lookState = o => (o.id === sel ? editState : 'normal');
+  const sceneNo = course.scenes.findIndex(sc => sc.id === here.sc.id) + 1;
 
-  /* ---- menus ---- */
-  const slideMenu = (btn, x) => popup(btn, [
-    { label: 'Duplicate slide', act: () => { const n = cloneSlide(x.s); n.title += ' copy'; write(c => { const sc = c.scenes.find(s => s.id === x.sc.id); sc.slides.splice(sc.slides.findIndex(s => s.id === x.s.id) + 1, 0, n); }); setSlideId(n.id); } },
-    { label: 'Rename slide', act: async () => { const v = await ask({ title: 'Rename slide', value: x.s.title, ok: 'Rename' }); if (v?.trim()) write(c => { inSlide(c, x.s.id).title = v.trim(); }); } },
-    { label: 'Move up', act: () => write(c => { const sc = c.scenes.find(s => s.id === x.sc.id), i = sc.slides.findIndex(s => s.id === x.s.id); if (i > 0) [sc.slides[i - 1], sc.slides[i]] = [sc.slides[i], sc.slides[i - 1]]; }) },
-    { label: 'Move down', act: () => write(c => { const sc = c.scenes.find(s => s.id === x.sc.id), i = sc.slides.findIndex(s => s.id === x.s.id); if (i < sc.slides.length - 1) [sc.slides[i + 1], sc.slides[i]] = [sc.slides[i], sc.slides[i + 1]]; }) },
-    ...(course.scenes.length > 1 ? [{ label: 'Move to scene', items: course.scenes.filter(s => s.id !== x.sc.id).map(s => ({ label: s.name, act: () => write(c => { const from = c.scenes.find(z => z.id === x.sc.id), to = c.scenes.find(z => z.id === s.id); const [m] = from.slides.splice(from.slides.findIndex(z => z.id === x.s.id), 1); to.slides.push(m); }) })) }] : []),
-    { label: 'Preview this slide', act: () => setDialog({ preview: x.s.id }) },
-    { label: 'Delete slide', danger: true, act: () => { if (flat.length <= 1) return toast('A course needs at least one slide.'); write(c => { const sc = c.scenes.find(s => s.id === x.sc.id); sc.slides = sc.slides.filter(s => s.id !== x.s.id); c.scenes = c.scenes.filter(s => s.slides.length); }); setSlideId(null); } },
-  ]);
-  const sceneMenu = (btn, sc) => popup(btn, [
-    { label: 'New slide here', items: SLIDE_KINDS.map(([kd, l]) => ({ label: l, act: () => addSlide(kd, sc.id) })) },
-    { label: 'Rename scene', act: async () => { const v = await ask({ title: 'Rename scene', value: sc.name, ok: 'Rename' }); if (v?.trim()) write(c => { c.scenes.find(s => s.id === sc.id).name = v.trim(); }); } },
-    { label: 'Delete scene', danger: true, act: async () => { if (course.scenes.length <= 1) return toast('A course needs at least one scene.'); if (await ask({ title: `Delete “${sc.name}”?`, text: `Its ${sc.slides.length} slide${sc.slides.length === 1 ? '' : 's'} go too.`, input: false, ok: 'Delete' })) { write(c => { c.scenes = c.scenes.filter(s => s.id !== sc.id); }); setSlideId(null); } } },
-  ]);
-  const layerMenu = (btn, l) => popup(btn, [
-    { label: 'Rename layer', act: async () => { const v = await ask({ title: 'Rename layer', value: l.name, ok: 'Rename' }); if (v?.trim()) write(c => { inSlide(c).layers.find(x => x.id === l.id).name = v.trim(); }); } },
-    { label: l.hideOthers ? '✓ Hide other layers when shown' : 'Hide other layers when shown', act: () => write(c => { const x = inSlide(c).layers.find(y => y.id === l.id); x.hideOthers = !x.hideOthers; }) },
-    { label: 'Duplicate layer', act: () => { const n = { ...JSON.parse(JSON.stringify(l)), id: rid('l'), name: l.name + ' copy' }; n.objects.forEach(o => { o.id = rid('o'); }); n.triggers = []; write(c => { inSlide(c).layers.push(n); }); setLayerId(n.id); } },
-    { label: 'Delete layer', danger: true, act: () => { write(c => { const s = inSlide(c); s.layers = s.layers.filter(x => x.id !== l.id); }); setLayerId(null); } },
+  /* ---- files: import, export, publish ---- */
+  const exportFile = () => download(new Blob([courseFile(course)], { type: 'application/json' }), safeName(course.title) + '.course.json');
+  const importInto = async (f, how) => {
+    if (!f) return;
+    try {
+      const { imported, ...c } = await readCourse(f);
+      if (how === 'replace') { write(x => { Object.keys(x).forEach(key => delete x[key]); Object.assign(x, c); if (imported) x.importNote = storyNote(imported); }); setSlideId(null); if (!imported) toast(`Opened “${c.title}”`); }
+      else { const n = c.scenes.reduce((a, sc) => a + sc.slides.length, 0); write(x => { appendCourse(x, c); if (imported) x.importNote = storyNote(imported); }); if (!imported) toast(`Added ${n} slide${n === 1 ? '' : 's'} from “${c.title}”`); }
+    } catch (e) { toast(e.message || 'That file couldn’t be opened.'); }
+  };
+  const pickImport = how => { importRef.current.dataset.how = how; importRef.current.click(); };
+  const fileMenu = btn => popup(btn, [
+    { label: 'Import slides…', note: 'From a Storyline .story or published zip, a course file, a page or a SCORM zip', act: () => pickImport('append') },
+    { label: 'Open a course over this one…', note: 'Replace this course with one from a file', act: () => pickImport('replace') },
+    { label: 'Export course file (.course.json)', note: 'Everything, to open again here or share', act: exportFile },
+    '-',
+    { label: 'Publish: web page (.html)', act: () => download(new Blob([courseHtml({ ...course, id: file.id }, 'web')], { type: 'text/html' }), safeName(course.title) + '.html') },
+    { label: 'Publish: SCORM 1.2 (.zip)', note: 'For an LMS: completion, score, resume', act: async () => download(await scormZip({ ...course, id: file.id }), safeName(course.title) + '-scorm.zip') },
+    '-',
+    { label: 'Player…', act: () => setDialog('player') },
+    { label: 'Variables…', act: () => setDialog('vars') },
   ]);
   const publish = btn => popup(btn, [
     { label: 'Web page (.html)', note: 'One file: put it on any website, or open it', act: () => download(new Blob([courseHtml({ ...course, id: file.id }, 'web')], { type: 'text/html' }), safeName(course.title) + '.html') },
     { label: 'SCORM 1.2 package (.zip)', note: 'For an LMS (Moodle, TalentLMS, Docebo…): completion, score, resume', act: async () => download(await scormZip({ ...course, id: file.id }), safeName(course.title) + '-scorm.zip') },
+    { label: 'Course file (.course.json)', note: 'To open again in Workline', act: exportFile },
   ]);
+  const previewMenu = btn => popup(btn, [{ label: 'This slide', act: () => setDialog({ preview: slide.id }) }, { label: 'This scene', act: () => setDialog({ preview: 'scene:' + here.sc.id }) }, { label: 'Entire project', act: () => setDialog({ preview: 'all' }) }]);
+  const slideMenu = (btn, x) => popup(btn, [
+    { label: 'Open in slide view', act: () => openSlide(x.s.id) },
+    { label: 'Duplicate', act: () => dupSlide(x) },
+    { label: 'Rename', act: async () => { const v = await ask({ title: 'Rename slide', value: x.s.title, ok: 'Rename' }); if (v?.trim()) write(c => { inSlide(c, x.s.id).title = v.trim(); }); } },
+    { label: 'Move up', act: () => write(c => { const sc = c.scenes.find(s => s.id === x.sc.id), i = sc.slides.findIndex(s => s.id === x.s.id); if (i > 0) [sc.slides[i - 1], sc.slides[i]] = [sc.slides[i], sc.slides[i - 1]]; }) },
+    { label: 'Move down', act: () => write(c => { const sc = c.scenes.find(s => s.id === x.sc.id), i = sc.slides.findIndex(s => s.id === x.s.id); if (i < sc.slides.length - 1) [sc.slides[i + 1], sc.slides[i]] = [sc.slides[i], sc.slides[i + 1]]; }) },
+    ...(course.scenes.length > 1 ? [{ label: 'Move to scene', items: course.scenes.filter(s => s.id !== x.sc.id).map(s => ({ label: s.name, act: () => write(c => { const from = c.scenes.find(z => z.id === x.sc.id), to = c.scenes.find(z => z.id === s.id); const [m] = from.slides.splice(from.slides.findIndex(z => z.id === x.s.id), 1); to.slides.push(m); c.scenes = c.scenes.filter(z => z.slides.length); }) })) }] : []),
+    { label: 'Preview this slide', act: () => setDialog({ preview: x.s.id }) },
+    { label: 'Delete', danger: true, act: () => delSlide(x) },
+  ]);
+  const sceneMenu = (btn, sc) => popup(btn, [
+    { label: 'New slide here', items: SLIDE_KINDS.map(([kd, l]) => ({ label: l, act: () => addSlide(kd, sc.id) })) },
+    { label: course.start === sc.id || (!course.start && course.scenes[0].id === sc.id) ? '✓ Starting scene' : 'Make it the starting scene', act: () => write(c => { c.start = sc.id; }) },
+    { label: 'Rename scene', act: async () => { const v = await ask({ title: 'Rename scene', value: sc.name, ok: 'Rename' }); if (v?.trim()) write(c => { c.scenes.find(s => s.id === sc.id).name = v.trim(); }); } },
+    { label: 'Preview this scene', act: () => setDialog({ preview: 'scene:' + sc.id }) },
+    { label: 'Delete scene', danger: true, act: async () => { if (course.scenes.length <= 1) return toast('A course needs at least one scene.'); if (await ask({ title: `Delete “${sc.name}”?`, text: `Its ${sc.slides.length} slide${sc.slides.length === 1 ? '' : 's'} go too.`, input: false, ok: 'Delete' })) { write(c => { c.scenes = c.scenes.filter(s => s.id !== sc.id); if (c.start === sc.id) delete c.start; }); setSlideId(null); } } },
+  ]);
+  const startScene = course.start && course.scenes.some(s => s.id === course.start) ? course.start : course.scenes[0].id;
+  const shapeMenu = btn => popup(btn, [['Rectangle', {}], ['Rounded', { radius: 24 }], ['Oval', { shape: 'ellipse' }], ['Circle', { shape: 'ellipse' }, 160]].map(([l, x, d]) => ({ label: l, act: () => insert('shape', { name: l, ...(d ? { w: d, h: d } : {}), style: { ...newObject('shape').style, ...x } }) })));
+  const questionMenu = btn => popup(btn, QTYPES.map(([t, l]) => ({ label: l, act: () => { const o = newObject('question'); o.q.type = t; if (t === 'tf') o.q.choices = [{ id: rid('c'), text: 'True', correct: true }, { id: rid('c'), text: 'False', correct: false }]; if (t === 'fill') { o.q.answer = 'answer'; o.q.choices = []; } insert('question', { q: o.q }); } })));
+  const newSlideMenu = btn => popup(btn, SLIDE_KINDS.map(([kd, l]) => ({ label: l, act: () => addSlide(kd) })));
+  const setSlideProp = (key, v) => write(c => { inSlide(c)[key] = v; });
+
+  /* ---- the ribbon ---- */
+  const ribbonBody = {
+    HOME: <>
+      <Group label="Clipboard"><Big icon={ICO.paste} label="Paste" onClick={pasteObj} /><div className="sl-col"><button className="sl-sm" onClick={cutObj} disabled={!obj}>✂ Cut</button><button className="sl-sm" onClick={copyObj} disabled={!obj}>⧉ Copy</button></div></Group>
+      <Group label="Scenes"><Big icon={ICO.scene} label="New Scene" onClick={addScene} /><Big icon={ICO.flag} label="Starting Scene" on={false} onClick={btn => popup(btn, course.scenes.map(sc => ({ label: (sc.id === startScene ? '✓ ' : '') + sc.name, act: () => write(c => { c.start = sc.id; }) })))} menu /></Group>
+      <Group label="Slide"><Big icon={ICO.slide} label="New Slide" onClick={newSlideMenu} menu /><div className="sl-col"><button className="sl-sm" onClick={() => dupSlide(here)}>⧉ Duplicate</button><button className="sl-sm" onClick={() => delSlide(here)}>🗑 Delete</button></div></Group>
+      <Group label="Triggers"><Big icon={ICO.vars} label="Variables" onClick={() => setDialog('vars')} /></Group>
+      <Group label="Publish"><Big icon={ICO.player} label="Player" onClick={() => setDialog('player')} /><Big icon={ICO.preview} label="Preview" onClick={previewMenu} menu /><Big icon={ICO.publish} label="Publish" onClick={publish} menu /></Group>
+    </>,
+    INSERT: <>
+      <Group label="Text"><Big icon={ICO.text} label="Text Box" onClick={() => insert('text')} /></Group>
+      <Group label="Objects"><Big icon={ICO.shape} label="Shape" onClick={shapeMenu} menu /><Big icon={ICO.button} label="Button" onClick={() => insert('button')} /><Big icon={ICO.hotspot} label="Hotspot" onClick={() => insert('hotspot')} /><Big icon={ICO.input} label="Text Entry" onClick={() => insert('input')} /></Group>
+      <Group label="Media"><Big icon={ICO.picture} label="Picture" onClick={() => { picFor.current = null; picRef.current?.click(); }} /><Big icon={ICO.video} label="Video" onClick={() => insertMedia('video')} /><Big icon={ICO.audio} label="Audio" onClick={() => insertMedia('audio')} /></Group>
+      <Group label="Quiz"><Big icon={ICO.question} label="Question" onClick={questionMenu} menu /><Big icon={ICO.result} label="Result" onClick={() => insert('result')} /></Group>
+    </>,
+    SLIDES: <>
+      <Group label="Slides"><Big icon={ICO.slide} label="New Slide" onClick={newSlideMenu} menu /><Big icon={ICO.question} label="Question Slide" onClick={() => addSlide('question')} /><Big icon={ICO.result} label="Results Slide" onClick={() => addSlide('result')} /></Group>
+      <Group label="Edit"><Big icon={ICO.dup} label="Duplicate" onClick={() => dupSlide(here)} /><Big icon={ICO.del} label="Delete" onClick={() => delSlide(here)} /><Big icon={ICO.layer} label="New Layer" onClick={() => { go('slide'); const l = newLayer(`Layer ${slide.layers.length}`); write(c => { inSlide(c).layers.push(l); }); setLayerId(l.id); setSel(null); }} /></Group>
+      <Group label="Import & export"><Big icon={ICO.import} label="Import" onClick={btn => popup(btn, [{ label: 'Import slides…', act: () => pickImport('append') }, { label: 'Open a course over this one…', act: () => pickImport('replace') }])} menu /><Big icon={ICO.export} label="Export" onClick={exportFile} /></Group>
+    </>,
+    DESIGN: <>
+      <Group label="Setup"><Big icon={ICO.size} label="Slide Size" onClick={btn => popup(btn, [['960x540', '16:9 (960 × 540)'], ['720x540', '4:3 (720 × 540)'], ['1280x720', '16:9 large (1280 × 720)'], ['1920x1080', 'Full HD (1920 × 1080)'], ['540x960', 'Phone, portrait (540 × 960)']].map(([v, l]) => ({ label: (v === `${course.size.w}x${course.size.h}` ? '✓ ' : '') + l, act: () => { const [w, h] = v.split('x').map(Number); write(c => { c.size = { w, h }; }); } })))} menu /></Group>
+      <Group label="Background"><label className="sl-colorbig"><Svg d={ICO.bg} /><span>Slide color</span><input type="color" value={hex(slide.bg)} onChange={e => setSlideProp('bg', e.target.value)} aria-label="Slide background color" /></label><Big icon={ICO.dup} label="Apply to All" onClick={() => write(c => { allSlides(c).forEach(x => { x.s.bg = slide.bg; }); })} /></Group>
+      <Group label="Theme"><label className="sl-colorbig"><Svg d={ICO.theme} /><span>Accent</span><input type="color" value={hex(course.accent)} onChange={e => write(c => { c.accent = e.target.value; })} aria-label="Accent color" /></label>
+        <Big icon={ICO.font} label="Fonts" onClick={btn => popup(btn, [['Inter, system-ui, sans-serif', 'Inter'], ['Georgia, serif', 'Georgia'], ['"Trebuchet MS", sans-serif', 'Trebuchet'], ['"Segoe UI", Roboto, sans-serif', 'Segoe UI'], ['"Courier New", monospace', 'Courier']].map(([v, l]) => ({ label: (course.font === v ? '✓ ' : '') + l, act: () => write(c => { c.font = v; }) })))} menu /></Group>
+    </>,
+    TRANSITIONS: <>
+      <Group label="Transition to This Slide"><div className="sl-gallery">{TRANSITIONS.map(([v, l]) => <Big key={v} small icon={TR_ICON[v]} label={l} on={(slide.transition?.type || 'none') === v} onClick={() => setSlideProp('transition', { type: v, dur: slide.transition?.dur || 0.6 })} />)}</div></Group>
+      <Group label="Timing"><label className="sl-field">Duration (s)<input type="number" step="0.1" min="0.1" value={slide.transition?.dur || 0.6} onChange={e => setSlideProp('transition', { type: slide.transition?.type || 'fade', dur: Number(e.target.value) || 0.6 })} aria-label="Transition duration" /></label><Big icon={ICO.dup} label="Apply to All" onClick={() => write(c => { allSlides(c).forEach(x => { x.s.transition = { ...(slide.transition || { type: 'none' }) }; }); toast('Applied to every slide'); })} /></Group>
+    </>,
+    ANIMATIONS: obj ? <>
+      <Group label={`Entrance: ${obj.name}`}><div className="sl-gallery">{ANIMS.map(([v, l]) => <Big key={v} small icon={AN_ICON[v]} label={l} on={(obj.anim || 'none') === v} onClick={() => editObj(o => { o.anim = v; })} />)}</div></Group>
+      <Group label="Timing"><label className="sl-field">Start (s)<input type="number" step="0.25" min="0" value={obj.start || 0} onChange={e => editObj(o => { o.start = Math.max(0, Number(e.target.value) || 0); })} aria-label="Animation start" /></label><label className="sl-field">Shown for (s)<input type="number" step="0.25" min="0" value={obj.dur ?? ''} placeholder="to the end" onChange={e => editObj(o => { o.dur = Number(e.target.value) || null; })} aria-label="Shown for" /></label></Group>
+    </> : <p className="sl-hint">Select an object on a slide to give it an entrance animation.</p>,
+    VIEW: <>
+      <Group label="Views"><Big icon={ICO.story} label="Story View" on={mode === 'story'} onClick={() => go('story')} /><Big icon={ICO.slideview} label="Slide View" on={mode === 'slide'} onClick={() => go('slide')} /></Group>
+      <Group label="Zoom"><Big icon={ICO.zoomin} label="Zoom In" onClick={() => (mode === 'story' ? setStoryZoom(z => Math.min(200, z + 10)) : setZoom(z => Math.min(300, (z || Math.round(fitK * 100)) + 10)))} /><Big icon={ICO.zoomout} label="Zoom Out" onClick={() => (mode === 'story' ? setStoryZoom(z => Math.max(40, z - 10)) : setZoom(z => Math.max(15, (z || Math.round(fitK * 100)) - 10)))} /><Big icon={ICO.fit} label="Fit" onClick={() => (mode === 'story' ? setStoryZoom(100) : setZoom(0))} /></Group>
+    </>,
+    HELP: <>
+      <Group label="Help"><Big icon={ICO.keys} label="Shortcuts" onClick={() => setDialog('keys')} /><Big icon={ICO.help} label="How It Works" onClick={() => setDialog('help')} /></Group>
+    </>,
+  };
+
+  /* ---- views ---- */
+  const storyView = (
+    <div className="sl-story" style={{ '--z': storyZoom / 100 }} onPointerDown={e => { if (e.target === e.currentTarget) setSlideId(slide.id); }}>
+      {course.scenes.map((sc, si) => (
+        <section key={sc.id} className={'sl-scene' + (sc.id === here.sc.id ? ' on' : '')} aria-label={`Scene ${si + 1}: ${sc.name}`}>
+          <header>{sc.id === startScene && <Svg d={ICO.flag} s={16} />}<b>{si + 1} {sc.name}</b><button aria-label={`Actions for scene ${sc.name}`} onClick={e => sceneMenu(e.currentTarget, sc)}>▾</button></header>
+          <div className="sl-scene-body">
+            {sc.slides.map((s, i) => {
+              const jumps = s.layers.some(l => l.triggers.some(t => t.action === 'jump' && !['next', 'prev'].includes(t.target)));
+              return (
+                <div key={s.id} className="sl-node">
+                  <button className={'sl-card' + (s.id === slide.id ? ' on' : '')} aria-label={`Slide ${si + 1}.${i + 1}: ${s.title}`} onClick={() => setSlideId(s.id)} onDoubleClick={() => openSlide(s.id)} onContextMenu={e => { e.preventDefault(); slideMenu(e.currentTarget, { s, sc }); }}>
+                    <Thumb slide={s} course={course} />
+                    <span>{si + 1}.{i + 1} {s.title}</span>
+                    {jumps && <i className="sl-jump" title="Has triggers that jump to other slides">↪</i>}
+                  </button>
+                  {i < sc.slides.length - 1 && <span className="sl-arrow" aria-hidden="true">↓</span>}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+  const slideList = (
+    <aside className="cv-slides" aria-label="Slides">
+      {course.scenes.map((sc, si) => (
+        <section key={sc.id} className="cv-scene">
+          <header><b>{si + 1} {sc.name}</b><button className="rs-ib" aria-label={`Actions for scene ${sc.name}`} onClick={e => sceneMenu(e.currentTarget, sc)}>⋯</button></header>
+          {sc.slides.map((s, i) => (
+            <div key={s.id} className={'cv-sl' + (s.id === slide.id ? ' on' : '')}>
+              <button className="cv-sl-b" aria-label={`Slide ${si + 1}.${i + 1}: ${s.title}`} aria-current={s.id === slide.id ? 'true' : undefined} onClick={() => { setSlideId(s.id); setLayerId(null); setSel(null); }}>
+                <i>{si + 1}.{i + 1}</i><Thumb slide={s} course={course} /><span>{s.title}</span>
+              </button>
+              <button className="cv-sl-m" aria-label={`Actions for slide ${s.title}`} onClick={e => slideMenu(e.currentTarget, { s, sc })}>⋯</button>
+            </div>
+          ))}
+        </section>
+      ))}
+    </aside>
+  );
+  const stage = (
+    <div className="cv-center">
+      {editState !== 'normal' && obj && <div className="cv-stbar">Editing the <b>{STATE_LABEL[editState] || editState}</b> state of “{obj.name}”: Format changes apply to this state only.<button className="btn" onClick={() => setEditState('normal')}>Done</button></div>}
+      <div className={'cv-holder' + (zoom ? ' zoomed' : '')} ref={holder} onPointerDown={() => { setSel(null); setEditing(null); }}>
+        <div className="cv-stage-box" style={{ width: course.size.w * k, height: course.size.h * k }}>
+          <div className="cv-stage" style={{ width: course.size.w, height: course.size.h, transform: `scale(${k})`, background: slide.bg, fontFamily: course.font }} aria-label={`Slide: ${slide.title}`} role="region">
+            {baseUnder && <div className="cv-under">{slide.layers[0].objects.map(o => <div key={o.id} className={'cv-o k-' + o.kind} style={boxStyle(o, lookOf(o))}><ObjArt o={o} vars={vars} /></div>)}</div>}
+            {layer.objects.map(o => {
+              const st = lookState(o), s = lookOf(o, st);
+              return (
+                <div key={o.id} className={'cv-o k-' + o.kind + (o.id === sel ? ' sel' : '') + (o.initial === 'hidden' && st === 'normal' ? ' ghost' : '')} style={boxStyle(o, s)}
+                  data-name={o.name} onPointerDown={e => drag(e, o, 'move')} onDoubleClick={() => ['text', 'shape', 'button', 'result'].includes(o.kind) && setEditing(o.id)}>
+                  {editing === o.id
+                    ? <textarea className="cv-edit" autoFocus defaultValue={s.text != null ? s.text : o.text} aria-label="Edit the text" style={{ textAlign: s.align, color: s.color, fontSize: s.size, fontWeight: s.bold ? 700 : 400 }}
+                      onPointerDown={e => e.stopPropagation()} onKeyDown={e => { if (e.key === 'Escape') e.currentTarget.blur(); }}
+                      onBlur={e => { const v = e.target.value.replace(/\r\n?/g, '\n'); setEditing(null); editObj(x => { if (editState === 'normal') x.text = v; else ((x.states ||= {})[editState] ||= {}).text = v; }); }} />
+                    : <ObjArt o={o} st={st} vars={vars} />}
+                  {o.id === sel && !editing && ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].map(h => <i key={h} className={'cv-h h-' + h} onPointerDown={e => drag(e, o, h)} />)}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+      <div className="sl-bottom">
+        <div className="sl-btabs" role="tablist" aria-label="Slide panels">
+          {[['timeline', 'Timeline'], ['states', 'States'], ['format', 'Format'], ['notes', 'Notes']].map(([t, l]) => <button key={t} role="tab" aria-selected={bottom === t} className={bottom === t ? 'on' : ''} onClick={() => setBottom(t)}>{l}</button>)}
+          <span className="sl-btabs-sp">{obj ? `${KINDS[obj.kind]}: ${obj.name}` : `Slide: ${slide.title}`}</span>
+        </div>
+        <div className="sl-bbody">
+          {bottom === 'timeline' && <Timeline slide={slide} layer={layer} sel={sel} setSel={setSel} write={write} inLayer={inLayer} inSlide={inSlide} />}
+          {bottom === 'states' && <States o={obj} editState={editState} setEditState={setEditState} editObj={editObj} />}
+          {bottom === 'format' && (obj ? <ObjFormat o={obj} course={course} layer={layer} editState={editState} setLook={setLook} editObj={editObj} write={write} inLayer={inLayer} setSel={setSel} duplicate={duplicate}
+            onPicture={() => { picFor.current = obj.id; picRef.current?.click(); }} onTrigger={() => { const t = { id: rid('t'), event: 'click', source: obj.id, action: 'jump', target: 'next', conds: [] }; write(c => { inLayer(c).triggers.push(t); }); setOpenTrig(t.id); }} />
+            : <SlideFormat slide={slide} write={write} inSlide={inSlide} />)}
+          {bottom === 'notes' && <textarea className="sl-notes" value={slide.notes || ''} onChange={e => setSlideProp('notes', e.target.value)} aria-label="Slide notes" placeholder="Notes for this slide (not shown to learners)" />}
+        </div>
+      </div>
+    </div>
+  );
+  const layersPane = (
+    <section className="sl-pane sl-layers" aria-label="Slide Layers">
+      <header><h4>Slide Layers</h4><button className="sl-ico" title="New layer" aria-label="New layer" onClick={() => { const l = newLayer(`Layer ${slide.layers.length}`); write(c => { inSlide(c).layers.push(l); }); setLayerId(l.id); setSel(null); }}>＋</button></header>
+      <div className="sl-plist" role="tablist" aria-label="Layers">
+        {[...slide.layers].reverse().map(l => {
+          const base = l === slide.layers[0];
+          return (
+            <div key={l.id} className={'sl-lrow' + (l.id === layer.id ? ' on' : '')}>
+              <button role="tab" aria-selected={l.id === layer.id} onClick={() => { setLayerId(l.id); setSel(null); }}><Svg d={ICO.layer} s={18} /><span>{base ? `${slide.title} (base layer)` : l.name}</span><small>{l.objects.length}</small></button>
+              {!base && <button className="rs-ib" aria-label={`Actions for layer ${l.name}`} onClick={e => popup(e.currentTarget, [
+                { label: 'Rename layer', act: async () => { const v = await ask({ title: 'Rename layer', value: l.name, ok: 'Rename' }); if (v?.trim()) write(c => { inSlide(c).layers.find(x => x.id === l.id).name = v.trim(); }); } },
+                { label: l.hideOthers ? '✓ Hide other layers when shown' : 'Hide other layers when shown', act: () => write(c => { const x = inSlide(c).layers.find(y => y.id === l.id); x.hideOthers = !x.hideOthers; }) },
+                { label: 'Duplicate layer', act: () => { const n = { ...JSON.parse(JSON.stringify(l)), id: rid('l'), name: l.name + ' copy' }; n.objects.forEach(o => { o.id = rid('o'); }); n.triggers = []; write(c => { inSlide(c).layers.push(n); }); setLayerId(n.id); } },
+                { label: 'Delete layer', danger: true, act: () => { write(c => { const s = inSlide(c); s.layers = s.layers.filter(x => x.id !== l.id); }); setLayerId(null); } },
+              ])}>⋯</button>}
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+  const slideProps = (
+    <section className="sl-pane" aria-label="Slide Properties">
+      <header><h4>Slide Properties</h4></header>
+      <div className="sl-pbody">
+        <label className="cv-f"><span>Title</span><input value={slide.title} onChange={e => setSlideProp('title', e.target.value)} aria-label="Slide title" /></label>
+        <label className="cv-f"><span>Slide advances</span><select value={slide.next} onChange={e => setSlideProp('next', e.target.value)} aria-label="Slide advances"><option value="user">By the learner (Next)</option><option value="auto">Automatically</option><option value="question">When the question is answered</option></select></label>
+        <label className="cv-f"><span>Timeline (s)</span><input type="number" min="0" step="0.5" value={slide.duration} onChange={e => setSlideProp('duration', Math.max(0, Number(e.target.value) || 0))} aria-label="Slide timeline" /></label>
+        <label className="cv-f"><span>Transition</span><select value={slide.transition?.type || 'none'} onChange={e => setSlideProp('transition', { type: e.target.value, dur: slide.transition?.dur || 0.6 })} aria-label="Transition">{TRANSITIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
+        <p className="cv-kind">{slide.layers.length - 1} layer{slide.layers.length === 2 ? '' : 's'} · {slide.layers.reduce((n, l) => n + l.triggers.length, 0)} triggers · double-click to edit</p>
+      </div>
+    </section>
+  );
 
   return (
-    <div className="cv" data-course>
-      <div className="cv-ribbon" role="toolbar" aria-label="Course tools">
-        <div className="cv-grp"><span>Slide</span>
-          <button className="btn" aria-haspopup="menu" onClick={e => popup(e.currentTarget, SLIDE_KINDS.map(([kd, l]) => ({ label: l, act: () => addSlide(kd) })))}>＋ New slide</button>
-        </div>
-        <div className="cv-grp"><span>Insert</span>
-          <button className="btn" onClick={() => insert('text')}>Text</button>
-          <button className="btn" aria-haspopup="menu" onClick={e => popup(e.currentTarget, [['Rectangle', {}], ['Rounded', { radius: 24 }], ['Oval', { shape: 'ellipse' }], ['Circle', { shape: 'ellipse' }, 160]].map(([l, x, d]) => ({ label: l, act: () => insert('shape', { name: l, ...(d ? { w: d, h: d } : {}), style: { ...newObject('shape').style, ...x } }) })))}>Shape</button>
-          <button className="btn" onClick={() => insert('button')}>Button</button>
-          <button className="btn" onClick={() => { picFor.current = null; picRef.current?.click(); }}>Picture</button>
-          <button className="btn" onClick={() => insert('hotspot')}>Hotspot</button>
-          <button className="btn" onClick={() => insert('input')}>Text entry</button>
-          <button className="btn" aria-haspopup="menu" onClick={e => popup(e.currentTarget, [{ label: 'Video', act: () => insertMedia('video') }, { label: 'Audio', act: () => insertMedia('audio') }])}>Media</button>
-          <button className="btn" onClick={() => insert('question')}>Question</button>
-          <button className="btn" onClick={() => insert('result')}>Result</button>
-          <input ref={picRef} type="file" accept="image/*" hidden aria-label="Picture to insert" onChange={e => { insertPicture(e.target.files[0]); e.target.value = ''; }} />
-        </div>
-        <div className="cv-grp"><span>Course</span>
-          <button className="btn" onClick={() => setDialog('vars')}>Variables{course.vars.length ? ` (${course.vars.length})` : ''}</button>
-          <button className="btn" onClick={() => setDialog('player')}>Player</button>
-          <button className="btn icon-only" aria-label="Undo" title="Undo (Ctrl Z)" disabled={!undo.current.length} onClick={() => back(undo, redo)}>↶</button>
-          <button className="btn icon-only" aria-label="Redo" title="Redo (Ctrl Y)" disabled={!redo.current.length} onClick={() => back(redo, undo)}>↷</button>
-        </div>
-        <div className="cv-grp cv-end">
-          <button className="btn" aria-haspopup="menu" onClick={e => popup(e.currentTarget, [{ label: 'This slide', act: () => setDialog({ preview: slide.id }) }, { label: 'This scene', act: () => setDialog({ preview: 'scene:' + here.sc.id }) }, { label: 'The whole course', act: () => setDialog({ preview: 'all' }) }])}>▶ Preview</button>
-          <button className="btn primary" aria-haspopup="menu" onClick={e => publish(e.currentTarget)}>Publish</button>
-        </div>
+    <div className="cv sl" data-course>
+      <div className="sl-tabs" role="tablist" aria-label="Ribbon">
+        <button className="sl-file" aria-haspopup="menu" onClick={e => fileMenu(e.currentTarget)}>FILE</button>
+        {TABS.map(t => <button key={t} role="tab" aria-selected={ribbon === t} className={ribbon === t ? 'on' : ''} onClick={() => setRibbon(t)}>{t}</button>)}
+        <span className="sl-qa">
+          <button aria-label="Undo" title="Undo (Ctrl Z)" disabled={!undo.current.length} onClick={() => back(undo, redo)}>↶</button>
+          <button aria-label="Redo" title="Redo (Ctrl Y)" disabled={!redo.current.length} onClick={() => back(redo, undo)}>↷</button>
+        </span>
       </div>
-
-      <div className="cv-main">
-        <aside className="cv-slides" aria-label="Slides">
-          {course.scenes.map(sc => (
-            <section key={sc.id} className="cv-scene">
-              <header><b>{sc.name}</b><button className="rs-ib" aria-label={`Actions for scene ${sc.name}`} onClick={e => sceneMenu(e.currentTarget, sc)}>⋯</button></header>
-              {sc.slides.map(s => {
-                const n = flat.findIndex(x => x.s.id === s.id) + 1;
-                return (
-                  <div key={s.id} className={'cv-sl' + (s.id === slide.id ? ' on' : '')}>
-                    <button className="cv-sl-b" aria-label={`Slide ${n}: ${s.title}`} aria-current={s.id === slide.id ? 'true' : undefined} onClick={() => { setSlideId(s.id); setLayerId(null); setSel(null); }}>
-                      <i>{n}</i><Thumb slide={s} course={course} /><span>{s.title}</span>
-                    </button>
-                    <button className="cv-sl-m" aria-label={`Actions for slide ${s.title}`} onClick={e => slideMenu(e.currentTarget, { s, sc })}>⋯</button>
-                  </div>
-                );
-              })}
+      <div className="sl-ribbon" role="toolbar" aria-label="Course tools">{ribbonBody[ribbon]}</div>
+      <input ref={picRef} type="file" accept="image/*" hidden aria-label="Picture to insert" onChange={e => { insertPicture(e.target.files[0]); e.target.value = ''; }} />
+      <input ref={importRef} type="file" accept=".json,.html,.htm,.zip,.story,application/json,text/html,application/zip" hidden aria-label="Course file to import" onChange={e => { importInto(e.target.files[0], e.target.dataset.how); e.target.value = ''; }} />
+      <div className="sl-viewbar">
+        <button className={mode === 'story' ? 'on' : ''} onClick={() => go('story')}><Svg d={ICO.story} s={16} />STORY VIEW</button>
+        <button className={mode === 'slide' ? 'on' : ''} onClick={() => go('slide')}><Svg d={ICO.slideview} s={16} />{here.sc.name.toUpperCase()} · {sceneNo}.{here.i + 1} {slide.title}</button>
+      </div>
+      {course.importNote && <div className="sl-import" role="status"><b>Storyline import</b><span>{course.importNote}</span><button className="rs-ib" aria-label="Dismiss the import note" onClick={() => write(c => { delete c.importNote; })}>×</button></div>}
+      {mode === 'story' ? (
+        <div className="sl-main story">
+          {storyView}
+          <aside className="sl-right" aria-label="Properties">
+            <section className="sl-pane sl-trigpane" aria-label="Triggers">
+              <header><h4>Triggers</h4><button className="sl-ico" aria-label="Variables" title="Variables" onClick={() => setDialog('vars')}>%x%</button></header>
+              <div className="sl-pbody"><Triggers course={course} slide={slide} layer={slide.layers[0]} write={write} inLayer={(c) => inLayer(c, slide.id, slide.layers[0].id)} open={openTrig} setOpen={setOpenTrig} /></div>
             </section>
-          ))}
-          <button className="btn cv-addscene" onClick={() => { const sc = newScene(`Scene ${course.scenes.length + 1}`, [newSlide('Untitled slide', 'blank')]); write(c => { c.scenes.push(sc); }); setSlideId(sc.slides[0].id); }}>＋ New scene</button>
-        </aside>
-
-        <div className="cv-center">
-          {editState !== 'normal' && obj && <div className="cv-stbar">Editing the <b>{STATE_LABEL[editState] || editState}</b> state of “{obj.name}”: Format changes apply to this state only.<button className="btn" onClick={() => setEditState('normal')}>Done</button></div>}
-          <div className="cv-holder" ref={holder} onPointerDown={() => { setSel(null); setEditing(null); }}>
-            <div className="cv-stage-box" style={{ width: course.size.w * k, height: course.size.h * k }}>
-              <div className="cv-stage" style={{ width: course.size.w, height: course.size.h, transform: `scale(${k})`, background: slide.bg }} aria-label={`Slide: ${slide.title}`} role="region">
-                {baseUnder && <div className="cv-under">{slide.layers[0].objects.map(o => <div key={o.id} className={'cv-o k-' + o.kind} style={boxStyle(o, lookOf(o))}><ObjArt o={o} vars={vars} /></div>)}</div>}
-                {layer.objects.map(o => {
-                  const st = lookState(o), s = lookOf(o, st);
-                  return (
-                    <div key={o.id} className={'cv-o k-' + o.kind + (o.id === sel ? ' sel' : '') + (o.initial === 'hidden' && st === 'normal' ? ' ghost' : '')} style={boxStyle(o, s)}
-                      data-name={o.name} onPointerDown={e => drag(e, o, 'move')} onDoubleClick={() => ['text', 'shape', 'button', 'result'].includes(o.kind) && setEditing(o.id)}>
-                      {editing === o.id
-                        ? <textarea className="cv-edit" autoFocus defaultValue={s.text != null ? s.text : o.text} aria-label="Edit the text" style={{ textAlign: s.align, color: s.color, fontSize: s.size, fontWeight: s.bold ? 700 : 400 }}
-                          onPointerDown={e => e.stopPropagation()} onKeyDown={e => { if (e.key === 'Escape') e.currentTarget.blur(); }}
-                          onBlur={e => { const v = e.target.value.replace(/\r\n?/g, '\n'); setEditing(null); editObj(x => { if (editState === 'normal') x.text = v; else ((x.states ||= {})[editState] ||= {}).text = v; }); }} />
-                        : <ObjArt o={o} st={st} vars={vars} />}
-                      {o.id === sel && !editing && ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].map(h => <i key={h} className={'cv-h h-' + h} onPointerDown={e => drag(e, o, h)} />)}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-          <div className="cv-layers" role="tablist" aria-label="Layers">
-            {slide.layers.map((l, i) => (
-              <div key={l.id} className={'cv-ly' + (l.id === layer.id ? ' on' : '')}>
-                <button role="tab" aria-selected={l.id === layer.id} onClick={() => { setLayerId(l.id); setSel(null); }}>{i === 0 ? '▣ ' : '◧ '}{l.name}<small>{l.objects.length}</small></button>
-                {i > 0 && <button className="rs-ib" aria-label={`Actions for layer ${l.name}`} onClick={e => layerMenu(e.currentTarget, l)}>⋯</button>}
-              </div>
-            ))}
-            <button className="btn" onClick={() => { const l = newLayer(`Layer ${slide.layers.length}`); write(c => { inSlide(c).layers.push(l); }); setLayerId(l.id); setSel(null); }}>＋ Layer</button>
-          </div>
+            {slideProps}
+          </aside>
         </div>
-
-        <aside className="cv-panel" aria-label="Properties">
-          <div className="cv-tabs" role="tablist">
-            {[['format', 'Format'], ['states', 'States'], ['triggers', 'Triggers'], ['timeline', 'Timeline']].map(([t, l]) => <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>{l}{t === 'triggers' && layer.triggers.length ? <small>{layer.triggers.length}</small> : null}</button>)}
-          </div>
-          <div className="cv-pbody">
-            {tab === 'format' && (obj ? <ObjFormat o={obj} course={course} layer={layer} editState={editState} setLook={setLook} editObj={editObj} write={write} inLayer={inLayer} setSel={setSel} duplicate={duplicate}
-              onPicture={() => { picFor.current = obj.id; picRef.current?.click(); }} onTrigger={() => { const t = { id: rid('t'), event: 'click', source: obj.id, action: 'jump', target: 'next', conds: [] }; write(c => { inLayer(c).triggers.push(t); }); setOpenTrig(t.id); setTab('triggers'); }} />
-              : <SlideFormat slide={slide} write={write} inSlide={inSlide} />)}
-            {tab === 'states' && <States o={obj} editState={editState} setEditState={setEditState} editObj={editObj} />}
-            {tab === 'triggers' && <Triggers course={course} slide={slide} layer={layer} write={write} inLayer={inLayer} open={openTrig} setOpen={setOpenTrig} />}
-            {tab === 'timeline' && <Timeline slide={slide} layer={layer} sel={sel} setSel={setSel} write={write} inLayer={inLayer} inSlide={inSlide} />}
-          </div>
-        </aside>
-      </div>
+      ) : (
+        <div className="sl-main slide">
+          {slideList}
+          {stage}
+          <aside className="sl-right" aria-label="Properties">
+            <section className="sl-pane sl-trigpane" aria-label="Triggers">
+              <header><h4>Triggers</h4><button className="sl-ico" aria-label="Variables" title="Variables" onClick={() => setDialog('vars')}>%x%</button></header>
+              <div className="sl-pbody"><Triggers course={course} slide={slide} layer={layer} write={write} inLayer={inLayer} open={openTrig} setOpen={setOpenTrig} /></div>
+            </section>
+            {layersPane}
+          </aside>
+        </div>
+      )}
+      <footer className="sl-status">
+        <span>Scene {sceneNo} of {course.scenes.length}</span><span>{course.size.w} × {course.size.h}</span><span>“{slide.title}”</span>
+        <span>{flat.length} slides · {course.vars.length} variables</span>
+        <span className="sl-zoom">
+          <button aria-label="Zoom out" onClick={() => (mode === 'story' ? setStoryZoom(z => Math.max(40, z - 10)) : setZoom(z => Math.max(15, (z || Math.round(fitK * 100)) - 10)))}>−</button>
+          <input type="range" min={mode === 'story' ? 40 : 15} max={mode === 'story' ? 200 : 300} value={mode === 'story' ? storyZoom : (zoom || Math.round(fitK * 100))} onChange={e => (mode === 'story' ? setStoryZoom(Number(e.target.value)) : setZoom(Number(e.target.value)))} aria-label="Zoom" />
+          <button aria-label="Zoom in" onClick={() => (mode === 'story' ? setStoryZoom(z => Math.min(200, z + 10)) : setZoom(z => Math.min(300, (z || Math.round(fitK * 100)) + 10)))}>＋</button>
+          <b>{mode === 'story' ? storyZoom : (zoom || Math.round(fitK * 100))}%</b>
+          <button aria-label="Fit" title="Fit" onClick={() => (mode === 'story' ? setStoryZoom(100) : setZoom(0))}>⤢</button>
+        </span>
+      </footer>
       {dialog === 'vars' && <VarsDialog course={course} write={write} onClose={() => setDialog(null)} />}
       {dialog === 'player' && <PlayerDialog course={course} write={write} onClose={() => setDialog(null)} />}
+      {dialog === 'keys' && <InfoDialog title="Keyboard shortcuts" onClose={() => setDialog(null)} rows={[['Ctrl Z / Ctrl Y', 'Undo / redo'], ['Ctrl C, Ctrl X, Ctrl V', 'Copy, cut, paste an object'], ['Ctrl D', 'Duplicate the object'], ['Arrows (Shift: 10 px)', 'Nudge the object'], ['Delete', 'Delete the object (Story View: the slide)'], ['Double-click', 'Edit text · open a slide from Story View'], ['Enter', 'Story View: open the slide'], ['Alt while dragging', 'Move without snapping'], ['F12', 'Preview the entire project']]} />}
+      {dialog === 'help' && <InfoDialog title="How it works" onClose={() => setDialog(null)} rows={[['Story View', 'Every scene and its slides. Double-click a slide to edit it.'], ['Slide View', 'The slide, its layers (right), triggers (right) and the Timeline, States, Format and Notes (below).'], ['Layers', 'Extra parts of a slide shown and hidden by triggers — pop-ups, feedback, details.'], ['States', 'How an object looks when hovered, pressed, selected, visited, disabled, or a state of your own.'], ['Triggers', '“Do this when that happens, if…”: jump, show a layer, change a state, adjust a variable…'], ['Variables', 'Remember things while the course runs; show one in text as %Name%.'], ['Publish', 'One web page, or a SCORM 1.2 zip for an LMS. Export saves a course file to open again.']]} />}
       {dialog?.preview && <Preview course={course} fileId={file.id} what={dialog.preview} onClose={() => setDialog(null)} />}
+    </div>
+  );
+}
+function InfoDialog({ title, rows, onClose }) {
+  return (
+    <div className="modal" onPointerDown={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="mbox cv-dlg" role="dialog" aria-modal="true" aria-label={title} onKeyDown={e => { if (e.key === 'Escape') onClose(); }}>
+        <header><h3>{title}</h3><button className="rs-ib" aria-label="Close" onClick={onClose}>×</button></header>
+        <dl className="sl-info">{rows.map(([a, b]) => <div key={a}><dt>{a}</dt><dd>{b}</dd></div>)}</dl>
+        <footer className="cv-dlg-f"><button className="btn primary" onClick={onClose}>Done</button></footer>
+      </div>
     </div>
   );
 }

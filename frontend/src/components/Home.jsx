@@ -7,7 +7,7 @@ import { THEMES, setTheme, themePref } from '../lib/theme.js';
 import { BrandMark, useUI } from './ui.jsx';
 import { StorageMeter } from './ServerDialogs.jsx';
 import Tools from './Tools.jsx';
-import Storage from './Storage.jsx';
+import CourseStudio from './CourseStudio.jsx';
 import Templates from './Templates.jsx';
 import Apps from './Apps.jsx';
 import Live from './Live.jsx';
@@ -19,7 +19,7 @@ const IC = {
   ai: 'M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z',
   grid: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',
   apps: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
-  drive: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 10v6M9.5 12.5L12 10l2.5 2.5',
+  course: 'M3 5h18v11H3zM10 8.5l4 2-4 2zM8 20h8M12 16v4',
   bookmark: 'M6 3h12v18l-6-4-6 4z',
   play: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM10 8.5v7l6-3.5z',
   tools: 'M14.7 6.3a4 4 0 0 0-5.4 5.2L3 17.8V21h3.2l6.3-6.3a4 4 0 0 0 5.2-5.4l-2.6 2.6-2.4-.6-.6-2.4z',
@@ -248,7 +248,7 @@ Reply with ONLY a JSON object: {"title": "...", "doc": "...", "diagrams": [...]}
       else if (e.key === 't' || e.key === 'T') setView('tools');
       else if (e.key === 'p' || e.key === 'P') setView('templates');
       else if (e.key === 'r' || e.key === 'R') setView('apps');
-      else if (e.key === 's' || e.key === 'S') setView('storage');
+      else if (e.key === 'c' || e.key === 'C') setView('courses');
       else if (e.key === 'w' || e.key === 'W') setView('run');
       else if (e.key === 'l' || e.key === 'L') setView('live');
       else if (e.key === 'i' || e.key === 'I') setView('assistant');
@@ -314,8 +314,8 @@ Reply with ONLY a JSON object: {"title": "...", "doc": "...", "diagrams": [...]}
           <button className="nav" aria-current={view === 'apps' ? 'page' : undefined} onClick={() => setView('apps')}>
             <Ico d={IC.apps} /><span>Apps</span><kbd>R</kbd>
           </button>
-          <button className="nav" aria-current={view === 'storage' ? 'page' : undefined} onClick={() => setView('storage')}>
-            <Ico d={IC.drive} /><span>Storage</span><kbd>S</kbd>
+          <button className="nav" aria-current={view === 'courses' ? 'page' : undefined} onClick={() => setView('courses')}>
+            <Ico d={IC.course} /><span>Course Studio</span><kbd>C</kbd>
           </button>
           <button className="nav" aria-current={view === 'live' ? 'page' : undefined} onClick={() => setView('live')}>
             <Ico d={IC.live} /><span>Live</span><kbd>L</kbd>
@@ -355,21 +355,21 @@ Reply with ONLY a JSON object: {"title": "...", "doc": "...", "diagrams": [...]}
         {view === 'assistant' ? <Assistant user={account} onOpenFile={onOpen} onShowMenu={sideHidden ? toggleMenu : null} /> : <div className="main-in">
           <header className="topbar">
             {sideHidden && view !== 'run' && <button className="side-show" onClick={toggleMenu} aria-label="Show the menu panel" title="Show the menu panel (\)"><Ico d={IC.panel} size={17} /></button>}
-            <div className="tabs" role="tablist" aria-label="Filter files" hidden={view === 'tools' || view === 'templates' || view === 'apps' || view === 'run' || view === 'live' || view === 'storage'}>
+            <div className="tabs" role="tablist" aria-label="Filter files" hidden={view === 'tools' || view === 'templates' || view === 'apps' || view === 'run' || view === 'live' || view === 'courses'}>
               {[['all', 'All'], ['recent', 'Recents']].map(([k, l]) => (
                 <button key={k} role="tab" aria-selected={tab === k} className="tab-btn" onClick={() => setTab(k)}>{l}</button>
               ))}
             </div>
             <label className="dsearch">
               <Ico d={IC.search} size={17} />
-              <input ref={searchRef} type="search" placeholder={view === 'storage' ? 'Search Storage' : view === 'tools' ? 'Search tools' : view === 'templates' ? 'Search templates' : view === 'apps' ? 'Search apps' : view === 'live' ? 'Search what’s live' : view === 'run' ? 'Search workflows' : 'Search'} aria-label={view === 'storage' ? 'Search Storage' : view === 'tools' ? 'Search tools' : view === 'templates' ? 'Search templates' : view === 'apps' ? 'Search apps' : view === 'live' ? 'Search what’s live' : view === 'run' ? 'Search workflows' : 'Search files'} value={q}
+              <input ref={searchRef} type="search" placeholder={view === 'courses' ? 'Search courses' : view === 'tools' ? 'Search tools' : view === 'templates' ? 'Search templates' : view === 'apps' ? 'Search apps' : view === 'live' ? 'Search what’s live' : view === 'run' ? 'Search workflows' : 'Search'} aria-label={view === 'courses' ? 'Search courses' : view === 'tools' ? 'Search tools' : view === 'templates' ? 'Search templates' : view === 'apps' ? 'Search apps' : view === 'live' ? 'Search what’s live' : view === 'run' ? 'Search workflows' : 'Search files'} value={q}
                 onChange={e => setQ(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') { setQ(''); e.currentTarget.blur(); } }} />
               <kbd>/</kbd>
             </label>
             <AccountMenu account={account} who={who} initial={initial} saveState={saveState} storage={storage} onAccount={onAccount} onSignOut={onSignOut} />
           </header>
 
-          {view === 'run' ? <Suspense fallback={<p className="muted">Loading…</p>}><RunHub files={files} q={q} onOpen={onOpen} onUpdate={onUpdate} menuHidden={runMenuHidden} onToggleMenu={toggleRunMenu} /></Suspense> : view === 'apps' ? <Apps files={files} q={q} onEdit={onOpen} onUpdate={onUpdate} /> : view === 'storage' ? <Storage q={q} /> : view === 'live' ? <Live files={files} q={q} onEdit={onOpen} onUpdate={onUpdate} onApps={() => setView('apps')} /> : view === 'templates' ? <Templates q={q} onCreate={onCreate} /> : view === 'tools' ? <Tools q={q} busy={busy} onCreate={onCreate} onGenerate={generate} /> : (<>
+          {view === 'run' ? <Suspense fallback={<p className="muted">Loading…</p>}><RunHub files={files} q={q} onOpen={onOpen} onUpdate={onUpdate} menuHidden={runMenuHidden} onToggleMenu={toggleRunMenu} /></Suspense> : view === 'apps' ? <Apps files={files} q={q} onEdit={onOpen} onUpdate={onUpdate} /> : view === 'courses' ? <CourseStudio files={files} q={q} onCreate={onCreate} onOpen={onOpen} /> : view === 'live' ? <Live files={files} q={q} onEdit={onOpen} onUpdate={onUpdate} onApps={() => setView('apps')} /> : view === 'templates' ? <Templates q={q} onCreate={onCreate} /> : view === 'tools' ? <Tools q={q} busy={busy} onCreate={onCreate} onGenerate={generate} /> : (<>
           {view === 'all' && !q && (
             <section className="hero" aria-label="Welcome">
               <div className="hero-art" aria-hidden="true"><i /><i /><i /><svg viewBox="0 0 400 120" preserveAspectRatio="none"><path d="M0 90 C 80 20, 160 120, 240 60 S 360 20, 400 50" /><path d="M0 60 C 90 110, 170 10, 260 70 S 350 100, 400 30" /></svg></div>
