@@ -8,6 +8,7 @@ import { BrandMark, useUI } from './ui.jsx';
 import { StorageMeter } from './ServerDialogs.jsx';
 import Tools from './Tools.jsx';
 import CourseStudio from './CourseStudio.jsx';
+import { Thumb } from './CourseArt.jsx';
 import Templates from './Templates.jsx';
 import Apps from './Apps.jsx';
 import Live from './Live.jsx';
@@ -110,6 +111,18 @@ const typing = e => {
   return t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName);
 };
 
+// What a file is, under its name in the list: what its view makes (a course, a sheet, a workflow…), else its diagrams.
+const kindOf = f => {
+  const n = (k, w) => `${k} ${w}${k === 1 ? '' : 's'}`;
+  if (f.view === 'course' && f.course) return `Course · ${n(f.course.scenes.reduce((a, sc) => a + sc.slides.length, 0), 'slide')}`;
+  if (f.view === 'sheet' && f.sheets?.length) return `Spreadsheet · ${n(f.sheets.length, 'sheet')}`;
+  if (f.view === 'flow' && f.flow) return `Workflow · ${n((f.flow.nodes || []).length, 'step')}`;
+  if (f.view === 'app') return 'App';
+  if (f.view === 'db') return 'Database';
+  if (f.view === 'doc' || f.view === 'both') return 'Doc';
+  const d = f.diagrams.map(x => TYPES[x.type]?.name).filter((v, i, a) => v && a.indexOf(v) === i).join(' · ');
+  return d + (f.code?.files?.length ? `${d ? ' · ' : ''}${n(f.code.files.length, 'code file')}` : '');
+};
 export default function Home({ files, folders, setFolders, account, saveState, storage, onOpen, onCreate, onUpdate, onRename, onDuplicate, onDelete, onSignOut, onGuide, serverProps = () => ({}), onAccount }) {
   const { popup, ask, toast, theme } = useUI();
   const [q, setQ] = useState('');
@@ -303,31 +316,31 @@ Reply with ONLY a JSON object: {"title": "...", "doc": "...", "diagrams": [...]}
         </div>
         <nav className="side-nav" aria-label="Files">
           <button className="nav" aria-current={view === 'all' ? 'page' : undefined} onClick={() => setView('all')}>
-            <Ico d={IC.grid} /><span>All Files</span><kbd>A</kbd>
+            <i className="nav-ic" style={{ '--tone': '#4f7cf7' }}><Ico d={IC.grid} /></i><span>All Files</span><kbd>A</kbd>
           </button>
           <button className="nav" aria-current={view === 'archive' ? 'page' : undefined} onClick={() => setView('archive')}>
-            <Ico d={IC.archive} /><span>Archive</span><kbd>E</kbd>
+            <i className="nav-ic" style={{ '--tone': '#8a8f9c' }}><Ico d={IC.archive} /></i><span>Archive</span><kbd>E</kbd>
           </button>
           <button className="nav" aria-current={view === 'tools' ? 'page' : undefined} onClick={() => setView('tools')}>
-            <Ico d={IC.tools} /><span>Tools</span><kbd>T</kbd>
+            <i className="nav-ic" style={{ '--tone': '#f08a24' }}><Ico d={IC.tools} /></i><span>Tools</span><kbd>T</kbd>
           </button>
           <button className="nav" aria-current={view === 'apps' ? 'page' : undefined} onClick={() => setView('apps')}>
-            <Ico d={IC.apps} /><span>Apps</span><kbd>R</kbd>
+            <i className="nav-ic" style={{ '--tone': '#14a37f' }}><Ico d={IC.apps} /></i><span>Apps</span><kbd>R</kbd>
           </button>
           <button className="nav" aria-current={view === 'courses' ? 'page' : undefined} onClick={() => setView('courses')}>
-            <Ico d={IC.course} /><span>Course Studio</span><kbd>C</kbd>
+            <i className="nav-ic" style={{ '--tone': '#7c5cf6' }}><Ico d={IC.course} /></i><span>Course Studio</span><kbd>C</kbd>
           </button>
           <button className="nav" aria-current={view === 'live' ? 'page' : undefined} onClick={() => setView('live')}>
-            <Ico d={IC.live} /><span>Live</span><kbd>L</kbd>
+            <i className="nav-ic" style={{ '--tone': '#e5484d' }}><Ico d={IC.live} /></i><span>Live</span><kbd>L</kbd>
           </button>
           <button className="nav" aria-current={view === 'run' ? 'page' : undefined} onClick={() => setView('run')}>
-            <Ico d={IC.play} /><span>Run</span><kbd>W</kbd>
+            <i className="nav-ic" style={{ '--tone': '#16a34a' }}><Ico d={IC.play} /></i><span>Run</span><kbd>W</kbd>
           </button>
           <button className="nav" aria-current={view === 'templates' ? 'page' : undefined} onClick={() => setView('templates')}>
-            <Ico d={IC.bookmark} /><span>Templates</span><kbd>P</kbd>
+            <i className="nav-ic" style={{ '--tone': '#d99a00' }}><Ico d={IC.bookmark} /></i><span>Templates</span><kbd>P</kbd>
           </button>
           <button className="nav" aria-current={view === 'assistant' ? 'page' : undefined} onClick={() => setView('assistant')}>
-            <Ico d={IC.ai} /><span>Nemo AI</span><kbd>I</kbd>
+            <i className="nav-ic" style={{ '--tone': '#a855f7' }}><Ico d={IC.ai} /></i><span>Nemo AI</span><kbd>I</kbd>
           </button>
         </nav>
         <div className="side-sec">
@@ -416,8 +429,10 @@ Reply with ONLY a JSON object: {"title": "...", "doc": "...", "diagrams": [...]}
                   <tr key={f.id} tabIndex={0} style={{ '--i': Math.min(i, 12) }} onClick={() => onOpen(f.id)}
                     onKeyDown={e => { if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) { e.preventDefault(); onOpen(f.id); } }}>
                     <td className="c-name"><span className="f-cell">
-                      <span className="f-thumb" aria-hidden="true" dangerouslySetInnerHTML={{ __html: fileThumb(f, theme) || '' }} />
-                      <span className="f-name">{f.title || 'Untitled'}<small>{f.diagrams.map(x => TYPES[x.type]?.name).filter((v, i, a) => v && a.indexOf(v) === i).join(' · ')}{f.code?.files?.length ? ` · ${f.code.files.length} code file${f.code.files.length === 1 ? '' : 's'}` : ''}</small></span>
+                      {f.view === 'course' && f.course?.scenes?.[0]?.slides?.[0]
+                        ? <span className="f-thumb f-course" aria-hidden="true"><Thumb slide={f.course.scenes[0].slides[0]} course={f.course} /></span>
+                        : <span className="f-thumb" aria-hidden="true" dangerouslySetInnerHTML={{ __html: fileThumb(f, theme) || '' }} />}
+                      <span className="f-name">{f.title || 'Untitled'}<small>{kindOf(f)}</small></span>
                     </span></td>
                     <td className="c-loc">{folderName(f.folder) || <span className="dash-mark">—</span>}</td>
                     <td className="c-date" title={new Date(f.created || f.updated).toLocaleString()}>{ago(f.created || f.updated)}</td>

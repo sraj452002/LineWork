@@ -29,11 +29,12 @@ export const storyDetails = r => [
   ...(r.picturesSkipped ? [['Pictures over the size limit', `${r.picturesSkipped}`]] : []),
   ...Object.entries(r.where || {}).map(([slide, kinds]) => [`On “${slide}”`, kinds.map(k => k.replace(/^dead: /, 'left out: ').replace(/^unsupported: /, 'not supported: ')).join('; ')]),
 ];
+// The ways to start: a tone and a simple glyph each (drawn white on a tile in that tone).
 const START = [
-  ['blank', 'Blank course', 'One title slide, ready for your own', '<rect x="5" y="8" width="38" height="26" rx="3" fill="#fff" stroke="#2b6fd6" stroke-width="2"/><path d="M24 15v12M18 21h12" stroke="#17a05b" stroke-width="3" stroke-linecap="round"/><path d="M18 40h12M24 34v6" stroke="#6b7591" stroke-width="2"/>'],
-  ['sample', 'Interactive sample', 'A typed name, click-to-reveal layers, a quiz and results', '<rect x="5" y="8" width="38" height="26" rx="3" fill="#eef3ff" stroke="#2b6fd6" stroke-width="2"/><rect x="10" y="14" width="8" height="8" rx="2" fill="#17a05b"/><rect x="20" y="14" width="8" height="8" rx="2" fill="#e5484d"/><rect x="30" y="14" width="8" height="8" rx="2" fill="#f5a623"/><path d="M18 40h12M24 34v6" stroke="#6b7591" stroke-width="2"/>'],
-  ['quiz', 'Quiz', 'Question slides and a results slide, with a pass mark', '<rect x="7" y="6" width="34" height="36" rx="4" fill="#fff4dc" stroke="#d99a00" stroke-width="2"/><path d="M19 19a5 5 0 1 1 7.5 4.3c-1.6 1-2.5 2-2.5 4.2" stroke="#b07d00" stroke-width="3" fill="none" stroke-linecap="round"/><circle cx="24" cy="33.5" r="2.2" fill="#b07d00"/>'],
-  ['import', 'Import a course', 'A Storyline .story file or published zip, a course file (.json), a page (.html) or a SCORM zip', '<path d="M10 5h19l9 9v29H10z" fill="#fff" stroke="#6b7591" stroke-width="2"/><path d="M24 17v15M17 25l7 7 7-7" stroke="#2b6fd6" stroke-width="3" fill="none" stroke-linecap="round"/>'],
+  ['blank', 'Blank course', 'One title slide, ready for your own', '#4f7cf7', '<rect x="3" y="5" width="18" height="12" rx="2"/><path d="M12 8.5v5M9.5 11h5M9 21h6M12 17v4"/>'],
+  ['sample', 'Interactive sample', 'A typed name, click-to-reveal layers, a quiz and results', '#14a37f', '<rect x="3" y="5" width="18" height="12" rx="2"/><path d="M7 9h3v3H7zM14 9h3v3h-3zM9 21h6M12 17v4"/>'],
+  ['quiz', 'Quiz', 'Question slides and a results slide, with a pass mark', '#f08a24', '<circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 1 1 3.4 2.3c-.7.3-1 .8-1 1.6v.4M12 17h.01"/>'],
+  ['import', 'Import a course', 'Storyline .story or zip, SCORM zip, a course file or a published page', '#7c5cf6', '<path d="M12 3v12M7 10l5 5 5-5M5 21h14"/>'],
 ];
 
 export default function CourseStudio({ files, q = '', onCreate, onOpen }) {
@@ -63,16 +64,26 @@ export default function CourseStudio({ files, q = '', onCreate, onOpen }) {
   return (
     <section className="cs" aria-label="Course Studio">
       <header className="cs-hero">
-        <div>
-          <h2>Course Studio</h2>
-          <p>Interactive e-learning: scenes and slides, layers, states, triggers, variables and quizzes. Preview it in the player, publish it as a web page or a SCORM package for any LMS, and import or export course files.</p>
+        <div className="cs-hero-txt">
+          <span className="cs-kicker">Course Studio</span>
+          <h2>Build e-learning that people enjoy</h2>
+          <p>Scenes and slides, layers, states, triggers, variables and quizzes. Preview it in the player, publish a web page or a SCORM package for any LMS, and bring in your Storyline courses.</p>
+          <div className="cs-hero-acts">
+            <button className="btn cs-hero-go" onClick={() => start('blank')}>＋ New course</button>
+            <button className="btn cs-hero-alt" onClick={() => start('import')}>Import .story or SCORM</button>
+          </div>
         </div>
+        <div className="cs-hero-stats" aria-label="Your courses in numbers">
+          <div><b>{courses.length}</b><span>course{courses.length === 1 ? '' : 's'}</span></div>
+          <div><b>{courses.reduce((a, f) => a + allSlides(f.course).length, 0)}</b><span>slides</span></div>
+        </div>
+        <svg className="cs-hero-art" viewBox="0 0 220 150" aria-hidden="true"><rect x="20" y="18" width="150" height="96" rx="12" /><rect x="50" y="40" width="150" height="96" rx="12" /><path d="M70 64h70M70 80h100M70 96h54" /><circle cx="178" cy="112" r="14" /><path d="M172 112l4 4 8-8" /></svg>
       </header>
       <h3 className="cs-h">Start a course</h3>
       <div className="cs-start">
-        {START.map(([k, name, note, icon]) => (
-          <button key={k} className="cs-new" onClick={() => start(k)}>
-            <svg viewBox="0 0 48 48" width="44" height="44" fill="none" aria-hidden="true" dangerouslySetInnerHTML={{ __html: icon }} />
+        {START.map(([k, name, note, tone, icon]) => (
+          <button key={k} className="cs-new" style={{ '--tone': tone }} onClick={() => start(k)}>
+            <i className="cs-ico"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" aria-hidden="true" dangerouslySetInnerHTML={{ __html: icon }} /></i>
             <b>{name}</b><span>{note}</span>
           </button>
         ))}
@@ -88,9 +99,9 @@ export default function CourseStudio({ files, q = '', onCreate, onOpen }) {
             const n = allSlides(f.course).length;
             return (
               <button key={f.id} className="cs-card" onClick={() => onOpen(f.id)} aria-label={`Open the course ${f.title}`}>
-                {first ? <Thumb slide={first} course={f.course} /> : <div className="cv-thumb" />}
+                <span className="cs-thumb">{first ? <Thumb slide={first} course={f.course} /> : <div className="cv-thumb" />}<em>{n} slide{n === 1 ? '' : 's'}</em><i className="cs-open" aria-hidden="true">Open ›</i></span>
                 <b>{f.title || 'Untitled course'}</b>
-                <span>{f.course.scenes.length} scene{f.course.scenes.length === 1 ? '' : 's'} · {n} slide{n === 1 ? '' : 's'} · {ago(f.updated)}</span>
+                <span>{f.course.scenes.length} scene{f.course.scenes.length === 1 ? '' : 's'} · edited {ago(f.updated)}</span>
               </button>
             );
           })}

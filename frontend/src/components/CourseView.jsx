@@ -525,8 +525,8 @@ export default function CourseView({ file, update, visible = true }) {
   const storyView = (
     <div className="sl-story" style={{ '--z': storyZoom / 100 }} onPointerDown={e => { if (e.target === e.currentTarget) setSlideId(slide.id); }}>
       {course.scenes.map((sc, si) => (
-        <section key={sc.id} className={'sl-scene' + (sc.id === here.sc.id ? ' on' : '')} aria-label={`Scene ${si + 1}: ${sc.name}`}>
-          <header>{sc.id === startScene && <Svg d={ICO.flag} s={16} />}<b>{si + 1} {sc.name}</b><button aria-label={`Actions for scene ${sc.name}`} onClick={e => sceneMenu(e.currentTarget, sc)}>▾</button></header>
+        <section key={sc.id} className={'sl-scene' + (sc.id === here.sc.id ? ' on' : '') + (sc.slides.length > 4 ? ' wide' : '')} aria-label={`Scene ${si + 1}: ${sc.name}`}>
+          <header>{sc.id === startScene && <Svg d={ICO.flag} s={16} />}<b>{si + 1} {sc.name}</b><small className="sl-scount">{sc.slides.length} slide{sc.slides.length === 1 ? '' : 's'}</small><button aria-label={`Actions for scene ${sc.name}`} onClick={e => sceneMenu(e.currentTarget, sc)}>▾</button></header>
           <div className="sl-scene-body">
             {sc.slides.map((s, i) => {
               const jumps = s.layers.some(l => l.triggers.some(t => t.action === 'jump' && !['next', 'prev'].includes(t.target)));

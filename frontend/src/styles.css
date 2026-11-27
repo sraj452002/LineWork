@@ -7,7 +7,7 @@
   --ink:#1D2320;--ink2:#5A645E;--line:#C3CBC4;--edge:#4A544E;
   --hi:#F2CF3A;--hiInk:#1D2320;--err:#A8322D;
   --shadow:0 1px 0 rgba(29,35,32,.05),0 10px 28px -14px rgba(29,35,32,.4);
-  --ui:"Inter",ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --ui:"Plus Jakarta Sans","Inter",ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
   --read:"Source Serif 4",Georgia,"Times New Roman",serif;
   --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
   color-scheme:light;
@@ -26,7 +26,7 @@
 }
 html{height:100%;background:var(--paper);scroll-padding-top:env(safe-area-inset-top,0px)}
 *,*::before,*::after{box-sizing:inherit}
-body{margin:0;height:100%;overflow:hidden;background:var(--paper);color:var(--ink);font-family:var(--ui);font-size:14px;-webkit-font-smoothing:antialiased}
+body{margin:0;height:100%;overflow:hidden;background:var(--paper);color:var(--ink);font-family:var(--ui);font-size:14px;-webkit-font-smoothing:antialiased;font-feature-settings:"ss01","cv11";letter-spacing:-.003em}
 button,input,textarea{font:inherit;color:inherit}
 :focus-visible{outline:2px solid var(--ink);outline-offset:2px;border-radius:6px}
 [hidden]{display:none!important}
@@ -5201,3 +5201,63 @@ body{background:radial-gradient(1100px 620px at 8% -10%,color-mix(in srgb,var(--
 .te-view{display:grid;place-items:center;padding:20px;overflow:auto;background:color-mix(in srgb,var(--ink) 4%,var(--paper))}
 .te-view img,.te-view video{max-width:100%;max-height:100%;border-radius:8px;box-shadow:var(--shadow)}
 .te-pdf{border:0;width:100%;height:100%}
+
+/* ---- icons: a tile in its own colour for each place in the menu; bolder tiles on Home's cards ---- */
+.nav .nav-ic{flex:none;display:inline-grid;place-items:center;width:28px;height:28px;border-radius:9px;background:color-mix(in srgb,var(--tone) 14%,transparent);color:var(--tone);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--tone) 20%,transparent);transition:transform .15s var(--ease),background .15s}
+.nav .nav-ic svg{width:16px;height:16px;color:var(--tone)!important;stroke:var(--tone);stroke-width:2}
+.nav:hover .nav-ic{transform:scale(1.06)}
+.nav[aria-current="page"] .nav-ic{background:linear-gradient(140deg,color-mix(in srgb,var(--tone) 78%,#fff),var(--tone));box-shadow:0 4px 10px -4px color-mix(in srgb,var(--tone) 70%,transparent)}
+.nav[aria-current="page"] .nav-ic svg{color:#fff!important;stroke:#fff}
+.action .a-ico{width:56px;height:56px;border-radius:17px;background:linear-gradient(140deg,color-mix(in srgb,var(--tone) 70%,#fff),var(--tone));box-shadow:0 10px 22px -10px color-mix(in srgb,var(--tone) 80%,transparent),inset 0 1px 0 rgba(255,255,255,.35)}
+.action .a-ico svg{color:#fff!important;stroke:#fff;stroke-width:2.1}
+.action:hover .a-ico{transform:translateY(-2px) scale(1.05)}
+
+/* ---- Course Studio, made nicer: a bold hero, toned tiles to start from, course cards with a big preview ---- */
+.f-thumb.f-course{padding:0;background:#fff}
+.f-thumb.f-course .cv-thumb{width:100%;border:0;border-radius:0}
+.cs-hero{position:relative;overflow:hidden;display:flex;align-items:center;gap:24px;padding:30px 32px;border:0;border-radius:24px;color:#fff;background:radial-gradient(120% 160% at 100% 0%,#9f7aea 0%,transparent 55%),radial-gradient(90% 120% at 0% 100%,#22c3a6 0%,transparent 50%),linear-gradient(120deg,#3b4bdb,#6a4ce0 60%,#7c5cf6);box-shadow:0 22px 50px -26px rgba(76,64,220,.7)}
+.cs-hero-txt{position:relative;z-index:1;flex:1;min-width:0}
+.cs-kicker{display:inline-block;padding:4px 10px;border-radius:999px;background:rgba(255,255,255,.18);font:700 11px var(--ui);letter-spacing:.08em;text-transform:uppercase}
+.cs-hero h2{margin:12px 0 0;font-size:30px;line-height:1.15;letter-spacing:-.025em;color:#fff}
+.cs-hero p{margin:10px 0 0;color:rgba(255,255,255,.86);max-width:620px;line-height:1.55}
+.cs-hero-acts{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}
+.cs-hero .btn{border:0;padding:10px 18px;font-weight:700;border-radius:12px}
+.cs-hero-go{background:#fff;color:#3b3fc4}
+.cs-hero-go:hover{background:#f1efff}
+.cs-hero-alt{background:rgba(255,255,255,.16);color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.35)}
+.cs-hero-alt:hover{background:rgba(255,255,255,.26)}
+.cs-hero-stats{position:relative;z-index:1;display:flex;gap:10px}
+.cs-hero-stats div{display:flex;flex-direction:column;align-items:center;min-width:92px;padding:14px 12px;border-radius:16px;background:rgba(255,255,255,.14);box-shadow:inset 0 0 0 1px rgba(255,255,255,.25);backdrop-filter:blur(6px)}
+.cs-hero-stats b{font-size:26px;line-height:1}
+.cs-hero-stats span{font-size:12px;opacity:.85;margin-top:4px}
+.cs-hero-art{position:absolute;right:-10px;bottom:-24px;width:260px;opacity:.16;fill:none;stroke:#fff;stroke-width:3;stroke-linecap:round}
+.cs-h{font-size:12.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink2);margin:24px 0 12px}
+.cs-start{grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
+.cs-new{position:relative;gap:4px;padding:18px;border-radius:18px;box-shadow:var(--shadow-sm);transition:transform .15s var(--ease),box-shadow .15s,border-color .15s}
+.cs-new:hover{transform:translateY(-3px);border-color:color-mix(in srgb,var(--tone) 45%,var(--hair));box-shadow:0 16px 30px -18px color-mix(in srgb,var(--tone) 70%,transparent)}
+.cs-ico{display:inline-grid;place-items:center;width:48px;height:48px;margin-bottom:10px;border-radius:15px;background:linear-gradient(140deg,color-mix(in srgb,var(--tone) 70%,#fff),var(--tone));box-shadow:0 10px 20px -10px color-mix(in srgb,var(--tone) 80%,transparent),inset 0 1px 0 rgba(255,255,255,.35)}
+.cs-ico svg{stroke:#fff;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.cs-new b{font-size:15.5px}.cs-new span{font-size:13px;line-height:1.45}
+.cs-grid{grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px}
+.cs-card{padding:10px 10px 14px;border-radius:18px;box-shadow:var(--shadow-sm);transition:transform .15s var(--ease),box-shadow .15s}
+.cs-card:hover{transform:translateY(-3px);box-shadow:0 18px 34px -20px rgba(40,40,90,.45)}
+.cs-thumb{position:relative;display:block;border-radius:12px;overflow:hidden;margin-bottom:6px}
+.cs-thumb .cv-thumb{border:0;border-radius:0}
+.cs-thumb em{position:absolute;left:8px;bottom:8px;padding:3px 8px;border-radius:999px;background:rgba(20,22,40,.72);color:#fff;font:600 11px var(--ui);font-style:normal}
+.cs-open{position:absolute;inset:0;display:grid;place-items:center;background:rgba(40,36,120,.42);color:#fff;font:700 14px var(--ui);font-style:normal;opacity:0;transition:opacity .15s}
+.cs-card:hover .cs-open,.cs-card:focus-visible .cs-open{opacity:1}
+.cs-card b{font-size:14.5px;padding:0 4px}.cs-card>span:last-child{padding:0 4px}
+@media (max-width:760px){.cs-hero{flex-direction:column;align-items:flex-start;padding:22px}.cs-hero h2{font-size:24px}.cs-hero-stats div{min-width:76px}}
+/* Story View: a scene with many slides spreads out as a grid of slide cards, numbered in order */
+.sl-scene{border-radius:14px;overflow:hidden}
+.sl-scene header{background:linear-gradient(180deg,color-mix(in srgb,var(--sl-blue) 7%,var(--surface)),var(--surface));padding:10px 12px}
+.sl-scount{color:var(--ink2);font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:999px;background:color-mix(in srgb,var(--ink) 6%,transparent)}
+.sl-scene.wide{flex:1 1 100%;width:auto}
+.sl-scene.wide .sl-scene-body{display:grid;grid-template-columns:repeat(auto-fill,minmax(calc(180px * var(--z)),1fr));gap:18px 16px;align-items:start;padding:18px}
+.sl-scene.wide .sl-node{width:auto}
+.sl-scene.wide .sl-arrow{display:none}
+.sl-scene.wide .sl-card{width:100%;border-radius:10px;padding:4px;transition:transform .12s var(--ease),box-shadow .12s}
+.sl-scene.wide .sl-card .cv-thumb{border-radius:6px;box-shadow:0 1px 3px rgba(16,24,48,.12)}
+.sl-scene.wide .sl-card:hover{transform:translateY(-2px);box-shadow:0 10px 22px -14px rgba(16,24,48,.4)}
+.sl-scene.wide .sl-card span{align-self:flex-start;color:var(--ink);font-weight:500}
+.sl-card{border-radius:8px}
