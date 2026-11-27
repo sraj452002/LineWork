@@ -5010,3 +5010,10 @@ body{background:radial-gradient(1100px 620px at 8% -10%,color-mix(in srgb,var(--
 .cv-p{margin:0;min-height:1em}.cv-bul{display:inline-block;min-width:1.2em}
 .sl-info{max-height:60vh;overflow:auto}
 .cv-parts{position:absolute;inset:0;pointer-events:none}.cv-part{position:absolute;display:flex;flex-direction:column;overflow:hidden}.cv-part img{width:100%;height:100%;display:block;object-fit:fill}
+/* The course preview fills the window */
+.modal.cv-full{padding:0;align-items:stretch;justify-content:stretch}
+.modal .cv-dlg.full{width:100vw;height:100vh;max-width:none;max-height:none;border-radius:0;margin:0;display:flex;flex-direction:column;padding:10px 14px}
+.cv-dlg.full header{margin-bottom:6px;gap:8px}.cv-dlg.full header h3{margin-right:auto}
+.cv-dlg.full .cv-preview{flex:1;height:auto;min-height:0;border-radius:6px}
+.cv-dlg.full .cv-dlg-f{margin-top:8px}
+.cv-dlg.full:fullscreen{background:var(--surface)}

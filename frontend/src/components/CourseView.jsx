@@ -822,11 +822,11 @@ function Timeline({ slide, layer, sel, setSel, write, inLayer, inSlide }) {
 }
 
 /* ---- dialogs ---- */
-function Modal({ title, onClose, children, wide }) {
+function Modal({ title, onClose, children, wide, full, tools, boxRef }) {
   return (
-    <div className="modal" onPointerDown={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className={'mbox cv-dlg' + (wide ? ' wide' : '')} role="dialog" aria-modal="true" aria-label={title} onKeyDown={e => { if (e.key === 'Escape') onClose(); }}>
-        <header><h3>{title}</h3><button className="rs-ib" aria-label="Close" onClick={onClose}>×</button></header>
+    <div className={'modal' + (full ? ' cv-full' : '')} onPointerDown={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div ref={boxRef} className={'mbox cv-dlg' + (wide ? ' wide' : '') + (full ? ' full' : '')} role="dialog" aria-modal="true" aria-label={title} onKeyDown={e => { if (e.key === 'Escape' && !document.fullscreenElement) onClose(); }}>
+        <header><h3>{title}</h3>{tools}<button className="rs-ib" aria-label="Close" onClick={onClose}>×</button></header>
         {children}
       </div>
     </div>
@@ -883,9 +883,18 @@ function Preview({ course, fileId, what, onClose }) {
     return courseHtml(c, 'preview');
   }, [course, fileId, what]);
   const [n, setN] = useState(0);
+  // The preview fills the window; Full screen hides the browser's own bars too.
+  const box = useRef(null);
+  const [fs, setFs] = useState(false);
+  const toggleFs = () => { if (document.fullscreenElement) document.exitFullscreen?.(); else box.current?.requestFullscreen?.().catch(() => {}); };
+  useEffect(() => {
+    const on = () => setFs(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', on);
+    return () => { document.removeEventListener('fullscreenchange', on); if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {}); };
+  }, []);
   return (
-    <Modal title="Preview" onClose={onClose} wide>
-      <iframe key={n} className="cv-preview" title="Course preview" srcDoc={html} sandbox="allow-scripts allow-popups" />
+    <Modal title="Preview" onClose={onClose} full boxRef={box} tools={<button className="btn cv-fs" onClick={toggleFs} aria-pressed={fs}>{fs ? '⤡ Exit full screen' : '⤢ Full screen'}</button>}>
+      <iframe key={n} className="cv-preview" title="Course preview" srcDoc={html} sandbox="allow-scripts allow-popups" allow="fullscreen" />
       <footer className="cv-dlg-f"><span className="cv-note">{what === 'all' ? 'The whole course' : what.startsWith('scene:') ? 'This scene' : 'This slide'}, as learners will see it.</span><button className="btn" onClick={() => setN(x => x + 1)}>Replay</button><button className="btn primary" onClick={onClose}>Close preview</button></footer>
     </Modal>
   );
