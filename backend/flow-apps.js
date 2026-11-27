@@ -277,13 +277,14 @@ export const APP_NODES = {
     });
   } },
   brevo: { run: async args => {
-    const c = await cred(args);
-    // Brevo has two kinds of key: an API key (xkeysib-…) works here, an SMTP key (xsmtpsib-…) doesn't.
-    const key = String(need(c.apiKey, 'the API key')).trim().replace(/^["']|["']$/g, '');
-    if (/^xsmtpsib-/i.test(key)) throw new FlowError('That’s a Brevo SMTP key (it starts with xsmtpsib-). This step needs an API key: in Brevo open SMTP & API → API keys & MCP → Generate a new API key (it starts with xkeysib-) and put it in the credential.', 'bad_credential');
+    // The key and sender come from the server's environment (BREVO_API_KEY, BREVO_FROM), not a credential.
+    const c = args.ctx.brevo || {};
+    const key = String(c.apiKey || '').trim().replace(/^["']|["']$/g, '');
+    if (!key) throw new FlowError('Brevo isn’t set up on this server: set BREVO_API_KEY (and BREVO_FROM) in its environment, then restart it.', 'no_key');
+    if (/^xsmtpsib-/i.test(key)) throw new FlowError('BREVO_API_KEY is a Brevo SMTP key (it starts with xsmtpsib-). It needs an API key: in Brevo open SMTP & API → API keys & MCP → Generate a new API key (it starts with xkeysib-).', 'bad_key');
     const person = v => { const m = /^\s*(.*?)\s*<([^>]+)>\s*$/.exec(String(v)); return m ? { name: m[1] || undefined, email: m[2] } : { email: String(v).trim() }; };
     return each(args, async p => {
-      const b = ok(await api(args, 'https://api.brevo.com/v3/smtp/email', { method: 'POST', headers: { 'api-key': key }, body: { sender: person(p.from || need(c.from, 'the sender')), to: String(need(p.to, 'who it goes to')).split(',').map(person), subject: p.subject || '(no subject)', ...(p.html ? { htmlContent: p.html } : { textContent: p.text || ' ' }), ...withFiles(p, f => ({ attachment: f.map(a => ({ name: a.filename, content: a.base64 })) })) } }), 'Brevo');
+      const b = ok(await api(args, 'https://api.brevo.com/v3/smtp/email', { method: 'POST', headers: { 'api-key': key }, body: { sender: person(p.from || need(String(c.from || '').trim(), 'the sender (BREVO_FROM on the server, or From in the step)')), to: String(need(p.to, 'who it goes to')).split(',').map(person), subject: p.subject || '(no subject)', ...(p.html ? { htmlContent: p.html } : { textContent: p.text || ' ' }), ...withFiles(p, f => ({ attachment: f.map(a => ({ name: a.filename, content: a.base64 })) })) } }), 'Brevo');
       return { id: b.messageId };
     });
   } },
