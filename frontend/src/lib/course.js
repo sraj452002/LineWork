@@ -32,6 +32,7 @@ export const ACTIONS = [
 ];
 export const OPS = [['==', 'is equal to'], ['!=', 'is not equal to'], ['>', 'is greater than'], ['<', 'is less than'], ['>=', 'is at least'], ['<=', 'is at most'], ['contains', 'contains'], ['empty', 'is empty'], ['notEmpty', 'is not empty']];
 export const QTYPES = [['mc', 'Multiple choice'], ['mr', 'Multiple response'], ['tf', 'True / false'], ['fill', 'Fill in the blank'], ['order', 'Put in order']];
+export const TRANSITIONS = [['none', 'None'], ['fade', 'Fade'], ['push', 'Push'], ['pushUp', 'Push up'], ['cover', 'Cover'], ['zoom', 'Zoom']];
 export const BUILTIN_VARS = ['Quiz.Score', 'Quiz.MaxScore', 'Quiz.Percent', 'Quiz.Passed', 'Slide.Number', 'Slide.Count', 'Slide.Title', 'Course.Progress'];
 
 /* ---- making things ---- */
@@ -473,6 +474,8 @@ export function player(C, env) {
     const s = flat[i].s; visited.add(s.id);
     stage.style.background = s.bg || '#fff';
     drawLayer(s.layers[0]);
+    const tr = s.transition?.type; const box0 = layerEls[s.layers[0].id]?.box;
+    if (tr && tr !== 'none' && box0) { box0.style.animationDuration = (Number(s.transition.dur) || 0.6) + 's'; box0.classList.add('cp-tr-' + tr); }
     t0 = now(); if (paused) { paused = false; play.textContent = '❚❚'; root.classList.remove('cp-paused'); }
     count.textContent = `${i + 1} / ${flat.length}`;
     prev.disabled = i === 0;
@@ -500,7 +503,8 @@ export function player(C, env) {
   const start = from => {
     if (from) { Object.assign(vars, from.vars || {}); Object.assign(results, from.results || {}); Object.assign(objState, from.objState || {}); (from.visited || []).forEach(v => visited.add(v)); }
     const at = from ? byId(from.slide) : -1;
-    go(at >= 0 ? at : 0);
+    const first = C.start ? flat.findIndex(x => x.sc.id === C.start) : 0;
+    go(at >= 0 ? at : Math.max(0, first));
   };
   if (saved && saved.slide && byId(saved.slide) > 0) {
     const box = h('div', 'cp-done'); box.appendChild(h('b', '', 'Carry on where you left off?'));
@@ -566,6 +570,8 @@ export const PLAYER_CSS = `
 .cp-a-fade{animation:cpFade .6s ease both}.cp-a-fl{animation:cpFl .6s cubic-bezier(.2,.8,.2,1) both}.cp-a-fr{animation:cpFr .6s cubic-bezier(.2,.8,.2,1) both}
 .cp-a-fu{animation:cpFu .6s cubic-bezier(.2,.8,.2,1) both}.cp-a-fd{animation:cpFd .6s cubic-bezier(.2,.8,.2,1) both}.cp-a-zoom{animation:cpZoom .5s cubic-bezier(.2,.8,.2,1) both}
 .cp-a-spin{animation:cpSpin .7s ease both}.cp-a-bounce{animation:cpBounce .7s ease both}
+@keyframes cpPushL{from{transform:translateX(100%)}}@keyframes cpPushU{from{transform:translateY(100%)}}@keyframes cpCover{from{transform:translateX(-100%)}}@keyframes cpTZoom{from{opacity:0;transform:scale(.85)}}
+.cp-tr-fade{animation:cpFade ease both}.cp-tr-push{animation:cpPushL cubic-bezier(.2,.8,.2,1) both}.cp-tr-pushUp{animation:cpPushU cubic-bezier(.2,.8,.2,1) both}.cp-tr-cover{animation:cpCover cubic-bezier(.2,.8,.2,1) both}.cp-tr-zoom{animation:cpTZoom ease both}
 @media (max-width:700px){.cp-menu{position:absolute;z-index:30;height:calc(100% - 100px);box-shadow:0 10px 30px rgba(0,0,0,.2)}.cp:not(.cp-nomenu) .cp-menu{display:none}.cp.cp-nomenu .cp-menu{display:block}}
 `;
 
@@ -642,4 +648,40 @@ export function pictureUrl(file, max = 1400) {
     };
     r.readAsDataURL(file);
   });
+}
+
+/* ---- course files: export, and import from a course file, a published page or a SCORM package ---- */
+export const courseFile = course => JSON.stringify({ workline: 'course', v: 1, course }, null, 1);
+const fromPage = html => {
+  const m = String(html).match(/const COURSE = (\{[\s\S]*?\});\n\(/);
+  if (!m) throw new Error('That page isn’t a course published from Workline.');
+  return JSON.parse(m[1]);
+};
+// A course from a picked file: .json (a course file), .html (a published course) or .zip (a SCORM package).
+export async function readCourse(file) {
+  const name = file.name.toLowerCase();
+  let c;
+  if (/\.story$/.test(name)) throw new Error('.story files are Articulate’s own format and can’t be opened here. In Storyline, publish the course instead — or rebuild it here.');
+  if (/\.zip$/.test(name)) {
+    const { default: JSZip } = await import('jszip');
+    const z = await JSZip.loadAsync(file);
+    const page = z.file('index.html') || z.file(/(^|\/)index\.html$/i)[0] || z.file(/\.html$/i)[0];
+    if (!page) throw new Error('There’s no course page (index.html) in that zip.');
+    c = fromPage(await page.async('string'));
+  } else {
+    const text = await file.text();
+    if (/^\s*</.test(text)) c = fromPage(text);
+    else { let j; try { j = JSON.parse(text); } catch (e) { throw new Error('That file isn’t a course file.'); } c = j && j.workline === 'course' ? j.course : j; }
+  }
+  if (!c || !Array.isArray(c.scenes) || !c.scenes.length) throw new Error('That file has no slides in it.');
+  const base = newCourse(c.title || file.name.replace(/\.\w+$/, ''));
+  const out = { ...base, ...c, player: { ...base.player, ...(c.player || {}) }, quiz: { ...base.quiz, ...(c.quiz || {}) }, size: c.size || base.size, vars: Array.isArray(c.vars) ? c.vars : [] };
+  delete out.id;
+  return out;
+}
+// Another course's scenes and variables added to this one (with new ids, so nothing clashes).
+export function appendCourse(into, other) {
+  for (const v of other.vars || []) if (!into.vars.some(x => x.name === v.name)) into.vars.push({ ...v, id: rid('v') });
+  for (const sc of other.scenes) into.scenes.push({ id: rid('sc'), name: sc.name, slides: sc.slides.map(cloneSlide) });
+  return into;
 }

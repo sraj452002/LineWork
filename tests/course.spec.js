@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import JSZip from '../frontend/node_modules/jszip/lib/index.js';
 
-// Tools → E-learning: a course made of scenes and slides, with layers, states, triggers, variables and a quiz,
+// Home → Course Studio: a course made of scenes and slides, with layers, states, triggers, variables and a quiz,
 // previewed in its player and published as a web page and a SCORM package.
 
 test.beforeEach(async ({ page }) => {
@@ -19,18 +19,22 @@ test.beforeEach(async ({ page }) => {
 });
 test.afterEach(async () => { expect(test.info().errors_, 'page errors').toEqual([]); });
 test.use({ actionTimeout: 8000 });
-const tool = (page, name) => page.locator('.tool-card').filter({ has: page.locator('b', { hasText: new RegExp('^' + name + '$') }) });
+const studio = async (page, start) => {
+  await page.getByRole('navigation', { name: 'Files' }).getByRole('button', { name: /^Course Studio/ }).click();
+  await page.locator('.cs-new').filter({ has: page.locator('b', { hasText: new RegExp('^' + start + '$') }) }).click();
+  await expect(page.getByRole('toolbar', { name: 'Course tools' })).toBeVisible();
+};
 
 test('the sample course plays: a typed name, layers, visited states and a scored quiz', async ({ page }) => {
   test.setTimeout(60_000);
-  await page.getByRole('button', { name: 'Tools' }).first().click();
-  await tool(page, 'Interactive course').click();
+  await studio(page, 'Interactive sample');
   await expect(page.getByRole('button', { name: 'View: Course' })).toBeVisible();
-  const slides = page.getByRole('complementary', { name: 'Slides' });
-  await expect(slides.getByRole('button', { name: /^Slide \d+:/ })).toHaveCount(6);
+  // Story View: every scene and its slides.
+  await expect(page.getByRole('region', { name: /^Scene \d+:/ })).toHaveCount(3);
+  await expect(page.getByRole('button', { name: /^Slide \d+\.\d+:/ })).toHaveCount(6);
 
-  await page.getByRole('button', { name: '▶ Preview' }).click();
-  await page.getByRole('menuitem', { name: 'The whole course' }).click();
+  await page.getByRole('button', { name: 'Preview', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Entire project' }).click();
   const p = page.frameLocator('iframe[title="Course preview"]');
   await p.getByRole('button', { name: 'Start' }).click();
   await p.getByLabel('Your first name').fill('Asha');
@@ -75,38 +79,41 @@ test('the sample course plays: a typed name, layers, visited states and a scored
 
 test('build a slide: insert, format, a state, a layer and triggers; publish HTML and SCORM', async ({ page }) => {
   test.setTimeout(60_000);
-  await page.getByRole('button', { name: 'Tools' }).first().click();
-  await tool(page, 'Blank course').click();
-  await page.getByRole('button', { name: '＋ New slide' }).click();
+  await studio(page, 'Blank course');
+  await page.getByRole('button', { name: 'New Slide', exact: true }).first().click();
   await page.getByRole('menuitem', { name: 'Blank' }).click();
-  const slides = page.getByRole('complementary', { name: 'Slides' });
-  await expect(slides.getByRole('button', { name: /^Slide \d+:/ })).toHaveCount(2);
+  await expect(page.getByRole('button', { name: /^Slide \d+\.\d+:/ })).toHaveCount(2);
 
   // A button, renamed, with a Hover state and a new text.
-  await page.getByRole('toolbar', { name: 'Course tools' }).getByRole('button', { name: 'Button', exact: true }).click();
-  const props = page.getByRole('complementary', { name: 'Properties' });
-  await props.getByLabel('Object name').fill('Reveal');
-  await props.getByLabel('Text', { exact: true }).fill('Show me');
+  await page.getByRole('tab', { name: 'INSERT' }).click();
+  const ribbon = page.getByRole('toolbar', { name: 'Course tools' });
+  await ribbon.getByRole('button', { name: 'Button', exact: true }).click();
+  const panel = page.locator('.sl-bottom');
+  await panel.getByLabel('Object name').fill('Reveal');
+  await panel.getByLabel('Text', { exact: true }).fill('Show me');
   await expect(page.locator('.cv-o.sel')).toContainText('Show me');
-  await props.getByRole('tab', { name: 'States' }).click();
-  await props.getByRole('button', { name: 'Edit the Hover state' }).click();
+  await panel.getByRole('tab', { name: 'States' }).click();
+  await panel.getByRole('button', { name: 'Edit the Hover state' }).click();
   await expect(page.locator('.cv-stbar')).toContainText('Hover');
+  await page.locator('.cv-stbar').getByRole('button', { name: 'Done' }).click();
 
   // A layer with a text, shown by a trigger on the button.
-  await page.getByRole('button', { name: '＋ Layer' }).click();
-  await page.getByRole('toolbar', { name: 'Course tools' }).getByRole('button', { name: 'Text', exact: true }).click();
-  await props.getByRole('tab', { name: 'Format' }).click();
-  await props.getByLabel('Text', { exact: true }).fill('The secret is out');
-  await page.getByRole('tab', { name: /Base layer/ }).click();
+  const right = page.getByRole('complementary', { name: 'Properties' });
+  await right.getByRole('button', { name: 'New layer' }).click();
+  await ribbon.getByRole('button', { name: 'Text Box' }).click();
+  await panel.getByLabel('Text', { exact: true }).fill('The secret is out');
+  await right.getByRole('tab', { name: /base layer/ }).click();
   await page.locator('.cv-stage .cv-o', { hasText: 'Show me' }).click();
-  await props.getByRole('button', { name: '＋ Trigger' }).click();
-  await props.getByLabel('Action').selectOption('showLayer');
-  await expect(props.getByLabel('Layer', { exact: true })).toHaveValue(/./);
-  await expect(props.locator('.cv-trig-h')).toContainText('Show layer Layer 1');
-  await expect(props.locator('.cv-trig-h')).toContainText('When user clicks Reveal');
+  await panel.getByRole('tab', { name: 'Format' }).click();
+  await panel.getByRole('button', { name: '＋ Trigger' }).click();
+  const trig = right.getByRole('region', { name: 'Triggers' });
+  await trig.getByLabel('Action').selectOption('showLayer');
+  await expect(trig.locator('.cv-trig-h')).toContainText('Show layer Layer 1');
+  await expect(trig.locator('.cv-trig-h')).toContainText('When user clicks Reveal');
 
   // Preview this slide: clicking shows the layer.
-  await page.getByRole('button', { name: '▶ Preview' }).click();
+  await page.getByRole('tab', { name: 'HOME' }).click();
+  await page.getByRole('button', { name: 'Preview', exact: true }).click();
   await page.getByRole('menuitem', { name: 'This slide' }).click();
   const p = page.frameLocator('iframe[title="Course preview"]');
   await expect(p.getByText('The secret is out')).toHaveCount(0);
@@ -116,18 +123,18 @@ test('build a slide: insert, format, a state, a layer and triggers; publish HTML
 
   // Undo: first the action goes back to Jump, then the trigger goes; redo brings both back.
   await page.keyboard.press('Control+z');
-  await expect(props.locator('.cv-trig-h')).toContainText('Jump to slide');
+  await expect(trig.locator('.cv-trig-h')).toContainText('Jump to slide');
   await page.keyboard.press('Control+z');
-  await expect(props.locator('.cv-trig')).toHaveCount(0);
+  await expect(trig.locator('.cv-trig')).toHaveCount(0);
   await page.keyboard.press('Control+y');
   await page.keyboard.press('Control+y');
-  await expect(props.locator('.cv-trig-h')).toContainText('Show layer Layer 1');
+  await expect(trig.locator('.cv-trig-h')).toContainText('Show layer Layer 1');
 
   // Publish: one HTML page, and a SCORM 1.2 zip with its manifest.
-  await page.getByRole('button', { name: 'Publish' }).click();
+  await page.getByRole('button', { name: 'Publish', exact: true }).click();
   const [html] = await Promise.all([page.waitForEvent('download'), page.getByRole('menuitem', { name: /Web page/ }).click()]);
   expect(html.suggestedFilename()).toBe('Course.html');
-  await page.getByRole('button', { name: 'Publish' }).click();
+  await page.getByRole('button', { name: 'Publish', exact: true }).click();
   const [zipDl] = await Promise.all([page.waitForEvent('download'), page.getByRole('menuitem', { name: /SCORM/ }).click()]);
   const zip = await JSZip.loadAsync(await (await import('node:fs')).promises.readFile(await zipDl.path()));
   const manifest = await zip.file('imsmanifest.xml').async('string');
@@ -151,4 +158,38 @@ test('build a slide: insert, format, a state, a layer and triggers; publish HTML
   expect(calls).toContain('cmi.core.lesson_status=incomplete');
   expect(calls).toContain('cmi.core.lesson_status=completed');
   expect(calls.some(c => c.startsWith('cmi.core.lesson_location='))).toBe(true);
+});
+
+test('export a course file; import a published page and a course file; a .story file is refused', async ({ page }) => {
+  test.setTimeout(60_000);
+  await studio(page, 'Quiz');
+  await page.getByRole('button', { name: 'FILE', exact: true }).click();
+  const [json] = await Promise.all([page.waitForEvent('download'), page.getByRole('menuitem', { name: /Export course file/ }).click()]);
+  expect(json.suggestedFilename()).toBe('Quiz.course.json');
+  const jsonPath = await json.path();
+  await page.getByRole('button', { name: 'FILE', exact: true }).click();
+  const [html] = await Promise.all([page.waitForEvent('download'), page.getByRole('menuitem', { name: /Publish: web page/ }).click()]);
+  const htmlPath = await html.path();
+
+  // Import slides into this course: the published page's 5 slides are added (10 in all).
+  await page.getByRole('button', { name: 'FILE', exact: true }).click();
+  await page.getByRole('menuitem', { name: /Import slides/ }).click();
+  await page.getByLabel('Course file to import').setInputFiles({ name: 'Quiz.html', mimeType: 'text/html', buffer: await (await import('node:fs')).promises.readFile(htmlPath) });
+  await expect(page.getByRole('button', { name: /^Slide \d+\.\d+:/ })).toHaveCount(10);
+
+  // Course Studio lists the course; importing the course file makes a new one.
+  await page.getByRole('button', { name: 'Back to files' }).click();
+  await page.getByRole('navigation', { name: 'Files' }).getByRole('button', { name: /^Course Studio/ }).click();
+  await expect(page.locator('.cs-card')).toHaveCount(1);
+  await page.locator('.cs-new', { hasText: 'Import a course' }).click();
+  await page.getByLabel('Course to import').setInputFiles({ name: 'Quiz.course.json', mimeType: 'application/json', buffer: await (await import('node:fs')).promises.readFile(jsonPath) });
+  await expect(page.getByRole('toolbar', { name: 'Course tools' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Slide \d+\.\d+:/ })).toHaveCount(5);
+  // A .story file says it can't be opened.
+  await page.getByRole('button', { name: 'Back to files' }).click();
+  await page.getByRole('navigation', { name: 'Files' }).getByRole('button', { name: /^Course Studio/ }).click();
+  await expect(page.locator('.cs-card')).toHaveCount(2);
+  await page.locator('.cs-new', { hasText: 'Import a course' }).click();
+  await page.getByLabel('Course to import').setInputFiles({ name: 'old.story', mimeType: 'application/octet-stream', buffer: Buffer.from('PK') });
+  await expect(page.getByRole('alert')).toContainText('can’t be opened here');
 });
