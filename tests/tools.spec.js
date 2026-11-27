@@ -22,6 +22,7 @@ const tool = (page, name) => page.locator('.tool-card').filter({ has: page.locat
 
 test('the Tools page lists every tool, and search narrows it', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Create a Blank File' })).toBeVisible();
+  await page.waitForLoadState('networkidle'); // the app's start-up (the server check) can redraw Home and drop an early key
   await page.keyboard.press('t');
   await expect(page.getByRole('navigation', { name: 'Files' }).getByRole('button', { name: /^Tools/ })).toHaveAttribute('aria-current', 'page');
   for (const g of ['Diagrams', 'Databases', 'Docs & spreadsheets', 'Reverse engineer', 'Code']) await expect(page.getByRole('heading', { name: g })).toBeVisible();

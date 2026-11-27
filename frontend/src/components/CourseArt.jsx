@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react';
-import { interpolate } from '../lib/course.js';
+import { interpolate, srcOf } from '../lib/course.js';
 
 /* Drawing course slides and objects (the Course view, its slide list and Course Studio's cards). */
 
@@ -11,12 +11,39 @@ export function boxStyle(o, s) {
     fontWeight: s.bold ? 700 : 400, fontStyle: s.italic ? 'italic' : undefined, textAlign: s.align || 'left', borderRadius: s.shape === 'ellipse' ? '50%' : (s.radius || 0),
     border: s.borderW ? `${s.borderW}px solid ${s.border || 'transparent'}` : 0, opacity: s.opacity ?? undefined, boxShadow: s.shadow ? '0 10px 30px rgba(20,24,60,.18)' : undefined,
     justifyContent: s.valign === 'middle' ? 'center' : s.valign === 'bottom' ? 'flex-end' : 'flex-start',
+    ...(s.font ? { fontFamily: s.font } : {}), ...(s.weight && !s.bold ? { fontWeight: s.weight } : {}),
   };
 }
-export function ObjArt({ o, st = 'normal', vars = {} }) {
+// An object drawn by parts (imported from Storyline states): backgrounds, text and pictures in its box.
+function Parts({ parts, vars, assets }) {
+  return (
+    <div className="cv-parts">
+      {parts.map((pt, i) => (
+        <div key={i} className="cv-part" style={{ left: pt.x, top: pt.y, width: pt.w, height: pt.h, background: pt.fill, borderRadius: pt.ellipse ? '50%' : pt.radius || 0, border: pt.border ? `${pt.borderW || 1}px solid ${pt.border}` : undefined, justifyContent: pt.valign === 'middle' ? 'center' : pt.valign === 'bottom' ? 'flex-end' : 'flex-start' }}>
+          {pt.src && <img src={srcOf({ assets }, pt.src)} alt="" draggable={false} />}
+          {pt.text && (pt.rich ? <RichText rich={pt.rich} vars={vars} pad={pt.pad} /> : <div className="cv-t" style={{ color: pt.color, fontSize: pt.size, fontWeight: pt.bold ? 700 : undefined, textAlign: pt.align, fontFamily: pt.font, ...(Array.isArray(pt.pad) ? { padding: pt.pad.map(v => v + 'px').join(' ') } : {}) }}>{interpolate(pt.text, vars)}</div>)}
+        </div>
+      ))}
+    </div>
+  );
+}
+// Rich text (imported from Storyline): paragraphs of spans, each with its own look.
+export function RichText({ rich, vars, pad }) {
+  return (
+    <div className="cv-t" style={Array.isArray(pad) ? { padding: pad.map(v => v + 'px').join(' ') } : undefined}>
+      {rich.map((b, i) => (
+        <div key={i} className="cv-p" style={{ textAlign: b.align, marginTop: b.before, marginBottom: b.after, ...(b.spans.length ? {} : { fontSize: b.size }) }}>
+          {b.bullet && <span className="cv-bul">{b.bullet}</span>}
+          {b.spans.length ? b.spans.map((r, j) => <span key={j} style={{ fontSize: r.size, fontWeight: r.bold ? 700 : r.weight, fontStyle: r.italic ? 'italic' : undefined, textDecoration: r.under ? 'underline' : undefined, color: r.color, fontFamily: r.font }}>{interpolate(r.t, vars)}</span>) : '\u00a0'}
+        </div>
+      ))}
+    </div>
+  );
+}
+export function ObjArt({ o, st = 'normal', vars = {}, assets }) {
   const s = lookOf(o, st);
   const text = s.text != null ? s.text : o.text;
-  if (o.kind === 'image') return (s.src || o.src) ? <img src={s.src || o.src} alt="" style={{ objectFit: s.fit || 'cover' }} draggable={false} /> : <span className="cv-ph">Picture</span>;
+  if (o.kind === 'image') { const src = srcOf({ assets }, s.src || o.src); return src ? <img src={src} alt="" style={{ objectFit: s.fit || 'cover' }} draggable={false} /> : <span className="cv-ph">Picture</span>; }
   if (o.kind === 'input') return <span className="cv-input">{o.var ? `${o.placeholder || ''}  → %${o.var}%` : o.placeholder}</span>;
   if (o.kind === 'video') return <span className="cv-ph dark">▶ Video{o.src ? '' : ' (add a link)'}</span>;
   if (o.kind === 'audio') return <span className="cv-ph">♪ Audio{o.src ? '' : ' (add a link)'}</span>;
@@ -32,7 +59,10 @@ export function ObjArt({ o, st = 'normal', vars = {} }) {
     );
   }
   if (o.kind === 'result') return <div className="cv-r"><span className="cv-ring"><b>80%</b></span><b>{interpolate(text, { ...vars, 'Quiz.Percent': 80 })}</b><small>Score, pass or fail, and Retry</small></div>;
-  return <div className="cv-t">{interpolate(text, vars)}</div>;
+  if (s.parts || o.parts) return <Parts parts={s.parts || o.parts} vars={vars} assets={assets} />;
+  const rich = s.rich !== undefined ? s.rich : s.text != null ? null : o.rich;
+  if (rich) return <RichText rich={rich} vars={vars} pad={s.pad} />;
+  return <div className="cv-t" style={Array.isArray(s.pad) ? { padding: s.pad.map(v => v + 'px').join(' ') } : undefined}>{interpolate(text, vars)}</div>;
 }
 export const defaultsOf = c => Object.fromEntries((c.vars || []).map(v => [v.name, v.value === '' ? `%${v.name}%` : v.value]));
 
@@ -44,7 +74,7 @@ export function Thumb({ slide, course }) {
   return (
     <div className="cv-thumb" ref={ref} style={{ background: slide.bg, aspectRatio: `${course.size.w} / ${course.size.h}` }}>
       <div className="cv-thumb-in" style={{ width: course.size.w, height: course.size.h, transform: `scale(${k})` }}>
-        {slide.layers[0].objects.filter(o => o.initial !== 'hidden').map(o => <div key={o.id} className={'cv-o k-' + o.kind} style={boxStyle(o, lookOf(o, o.initial || 'normal'))}><ObjArt o={o} st={o.initial || 'normal'} vars={vars} /></div>)}
+        {slide.layers[0].objects.filter(o => o.initial !== 'hidden').map(o => <div key={o.id} className={'cv-o k-' + o.kind} style={boxStyle(o, lookOf(o, o.initial || 'normal'))}><ObjArt o={o} st={o.initial || 'normal'} vars={vars} assets={course.assets} /></div>)}
       </div>
     </div>
   );

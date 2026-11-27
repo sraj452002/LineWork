@@ -9,7 +9,26 @@ import { Thumb } from './CourseArt.jsx';
 
 const ago = t => { const s = (Date.now() - t) / 1000; return s < 60 ? 'just now' : s < 3600 ? `${Math.floor(s / 60)} min ago` : s < 86400 ? `${Math.floor(s / 3600)} h ago` : `${Math.floor(s / 86400)} d ago`; };
 // What a Storyline import brought over.
-export const storyNote = r => `Imported from ${r.from === 'story' ? 'the .story file' : 'the published Storyline course'}: ${r.scenes} scene${r.scenes === 1 ? '' : 's'}, ${r.slides} slide${r.slides === 1 ? '' : 's'}, ${r.texts} piece${r.texts === 1 ? '' : 's'} of text and ${r.pictures} picture${r.pictures === 1 ? '' : 's'}. Triggers, states, layers and animations don’t come over: add them again here.`;
+const pl = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+export const storyNote = r => {
+  if (r.objects == null) return `Imported from ${r.from === 'story' ? 'the .story file' : 'the published Storyline course'}: ${pl(r.scenes, 'scene')}, ${pl(r.slides, 'slide')}, ${r.texts} piece${r.texts === 1 ? '' : 's'} of text and ${pl(r.pictures, 'picture')}. Triggers, states, layers and animations don’t come over: add them again here.`;
+  const dropped = Object.values(r.dropped || {}).reduce((a, b) => a + b, 0);
+  const parts = [`${pl(r.scenes, 'scene')}, ${pl(r.slides, 'slide')}, ${pl(r.layers, 'layer')}, ${pl(r.objects, 'object')} with their states, timing and text formatting, ${pl(r.pictures, 'picture')}, ${pl(r.triggers, 'trigger')}${r.questions ? `, ${pl(r.questions, 'quiz question')}` : ''}${r.notes ? ` and the notes of ${pl(r.notes, 'slide')}` : ''}`];
+  const left = [];
+  if (r.dead) left.push(`${pl(r.dead, 'trigger')} that do nothing in Storyline either (turned off, or pointing at something no longer in the file) were left out`);
+  if (r.unsupported) left.push(`${pl(r.unsupported, 'trigger')} this player can’t run yet`);
+  if (dropped) left.push(`${pl(dropped, 'object')} of a kind not supported yet`);
+  if (r.picturesSkipped) left.push(`${pl(r.picturesSkipped, 'picture')} that didn’t fit (a course keeps about 1.5 MB of pictures)`);
+  const check = r.total != null ? (r.accounted ? ` All ${r.total} triggers in the file are accounted for.` : ` Check: ${r.total} triggers in the file, ${r.triggers + (r.copies || 0) + r.dead + r.unsupported} accounted for.`) : '';
+  return `Imported: ${parts[0]}.${left.length ? ' Not imported: ' + left.join('; ') + '.' : ' Everything in the file came over.'}${check}`;
+};
+// The details of what didn't come over, for the editor's Details dialog.
+export const storyDetails = r => [
+  ...Object.entries(r.skips || {}).map(([k, n]) => [k.replace(/^dead: /, 'Left out — ').replace(/^unsupported: /, 'Not supported yet — '), `${n} trigger${n === 1 ? '' : 's'}`]),
+  ...Object.entries(r.dropped || {}).map(([k, n]) => [`Object kind “${k}”`, `${n} not imported`]),
+  ...(r.picturesSkipped ? [['Pictures over the size limit', `${r.picturesSkipped}`]] : []),
+  ...Object.entries(r.where || {}).map(([slide, kinds]) => [`On “${slide}”`, kinds.map(k => k.replace(/^dead: /, 'left out: ').replace(/^unsupported: /, 'not supported: ')).join('; ')]),
+];
 const START = [
   ['blank', 'Blank course', 'One title slide, ready for your own', '<rect x="5" y="8" width="38" height="26" rx="3" fill="#fff" stroke="#2b6fd6" stroke-width="2"/><path d="M24 15v12M18 21h12" stroke="#17a05b" stroke-width="3" stroke-linecap="round"/><path d="M18 40h12M24 34v6" stroke="#6b7591" stroke-width="2"/>'],
   ['sample', 'Interactive sample', 'A typed name, click-to-reveal layers, a quiz and results', '<rect x="5" y="8" width="38" height="26" rx="3" fill="#eef3ff" stroke="#2b6fd6" stroke-width="2"/><rect x="10" y="14" width="8" height="8" rx="2" fill="#17a05b"/><rect x="20" y="14" width="8" height="8" rx="2" fill="#e5484d"/><rect x="30" y="14" width="8" height="8" rx="2" fill="#f5a623"/><path d="M18 40h12M24 34v6" stroke="#6b7591" stroke-width="2"/>'],
@@ -36,7 +55,7 @@ export default function CourseStudio({ files, q = '', onCreate, onOpen }) {
     try {
       const { imported, ...c } = await readCourse(f);
       setNote('');
-      make(c.title || 'Imported course', imported ? { ...c, importNote: storyNote(imported) } : c);
+      make(c.title || 'Imported course', imported ? { ...c, importNote: storyNote(imported), importDetails: storyDetails(imported) } : c);
     } catch (e) { setNote(''); setErr(e.message || 'That file couldn’t be opened.'); }
   };
   const ql = q.trim().toLowerCase();

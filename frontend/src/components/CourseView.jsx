@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { rid } from '../lib/utils.js';
 import { useUI } from './ui.jsx';
 import { ObjArt, Thumb, boxStyle, defaultsOf, lookOf } from './CourseArt.jsx';
-import { storyNote } from './CourseStudio.jsx';
+import { storyDetails, storyNote } from './CourseStudio.jsx';
 import {
   ACTIONS, ANIMS, BUILTIN_VARS, EVENTS, KINDS, OPS, QTYPES, STATES, allSlides, cloneSlide, courseHtml, findSlide, interpolate,
   TRANSITIONS, appendCourse, courseFile, newCourse, newLayer, newObject, newScene, newSlide, pictureUrl, readCourse, scormZip,
@@ -64,7 +64,7 @@ const Svg = ({ d, s = 32 }) => <svg viewBox="0 0 32 32" width={s} height={s} fil
 function Big({ icon, label, onClick, menu, on, disabled, small }) {
   return (
     <button type="button" className={'sl-big' + (on ? ' on' : '') + (small ? ' small' : '')} onClick={e => onClick?.(e.currentTarget)} disabled={disabled} aria-haspopup={menu ? 'menu' : undefined} aria-pressed={on === undefined ? undefined : !!on}>
-      <Svg d={icon} s={small ? 24 : 32} />
+      <Svg d={icon} s={small ? 20 : 26} />
       <span>{label}{menu && <i aria-hidden="true"> ▾</i>}</span>
     </button>
   );
@@ -94,6 +94,13 @@ export default function CourseView({ file, update, visible = true }) {
   const undo = useRef([]), redo = useRef([]);
   const picRef = useRef(null), picFor = useRef(null), importRef = useRef(null);
   const go = m => { setMode(m); savePref('linework:course-mode', m); };
+  // The ribbon can fold down to its tabs, and each panel can be hidden (kept for next time).
+  const [ribbonOpen, setRibbonOpen] = useState(() => readPref('linework:course-ribbon', 'open') === 'open');
+  const foldRibbon = v => { setRibbonOpen(v); savePref('linework:course-ribbon', v ? 'open' : 'closed'); };
+  const [panels, setPanels] = useState(() => { try { return { slides: true, right: true, bottom: true, ...JSON.parse(readPref('linework:course-panels', '{}')) }; } catch (e) { return { slides: true, right: true, bottom: true }; } });
+  const togglePanel = (key, v) => setPanels(p => { const n = { ...p, [key]: v ?? !p[key] }; savePref('linework:course-panels', JSON.stringify(n)); return n; });
+  const focusMode = !panels.slides && !panels.right && !panels.bottom;
+  const setFocus = on => setPanels(() => { const n = { slides: !on, right: !on, bottom: !on }; savePref('linework:course-panels', JSON.stringify(n)); return n; });
 
   const flat = course ? allSlides(course) : [];
   const here = course && (findSlide(course, slideId) || flat[0]);
@@ -114,7 +121,13 @@ export default function CourseView({ file, update, visible = true }) {
   const inLayer = (c, sid = slide.id, lid = layer.id) => inSlide(c, sid)?.layers.find(l => l.id === lid);
   const inObj = (c, id = sel) => inLayer(c)?.objects.find(o => o.id === id);
   const editObj = fn => write(c => { const o = inObj(c); if (o) fn(o); });
-  const setLook = (k, v) => editObj(o => { const t = editState === 'normal' ? (o.style ||= {}) : ((o.states ||= {})[editState] ||= {}); if (v === undefined) delete t[k]; else t[k] = v; });
+  const setLook = (k, v) => editObj(o => {
+    const t = editState === 'normal' ? (o.style ||= {}) : ((o.states ||= {})[editState] ||= {});
+    if (v === undefined) delete t[k]; else t[k] = v;
+    // Imported rich text: a change of size, color or weight applies to all of it.
+    const RUN = { size: 'size', color: 'color', bold: 'bold', italic: 'italic' }[k];
+    for (const rich of [editState === 'normal' ? o.rich : t.rich]) if (Array.isArray(rich)) for (const b of rich) { if (k === 'align') b.align = v; if (RUN) for (const r of b.spans) { delete r[RUN]; if (k === 'bold') delete r.weight; } }
+  });
   const openSlide = id => { setSlideId(id); setLayerId(null); setSel(null); go('slide'); };
 
   /* ---- inserting ---- */
@@ -189,9 +202,9 @@ export default function CourseView({ file, update, visible = true }) {
   const [fitK, setFitK] = useState(0.6);
   useLayoutEffect(() => {
     const el = holder.current; if (!el || !course) return undefined;
-    const fit = () => { const r = el.getBoundingClientRect(); if (r.width && r.height) setFitK(Math.max(0.15, Math.min((r.width - 40) / course.size.w, (r.height - 30) / course.size.h, 1.4))); };
+    const fit = () => { const r = el.getBoundingClientRect(); if (r.width && r.height) setFitK(Math.max(0.15, Math.min((r.width - 24) / course.size.w, (r.height - 20) / course.size.h, 2))); };
     fit(); const ro = new ResizeObserver(fit); ro.observe(el); return () => ro.disconnect();
-  }, [course?.size?.w, course?.size?.h, visible, mode]); // eslint-disable-line
+  }, [course?.size?.w, course?.size?.h, visible, mode, panels.slides, panels.right, panels.bottom, ribbonOpen]); // eslint-disable-line
   const k = zoom ? zoom / 100 : fitK;
   const drag = (e, o, how) => {
     e.stopPropagation(); e.preventDefault();
@@ -229,8 +242,8 @@ export default function CourseView({ file, update, visible = true }) {
     if (!f) return;
     try {
       const { imported, ...c } = await readCourse(f);
-      if (how === 'replace') { write(x => { Object.keys(x).forEach(key => delete x[key]); Object.assign(x, c); if (imported) x.importNote = storyNote(imported); }); setSlideId(null); if (!imported) toast(`Opened “${c.title}”`); }
-      else { const n = c.scenes.reduce((a, sc) => a + sc.slides.length, 0); write(x => { appendCourse(x, c); if (imported) x.importNote = storyNote(imported); }); if (!imported) toast(`Added ${n} slide${n === 1 ? '' : 's'} from “${c.title}”`); }
+      if (how === 'replace') { write(x => { Object.keys(x).forEach(key => delete x[key]); Object.assign(x, c); if (imported) { x.importNote = storyNote(imported); x.importDetails = storyDetails(imported); } }); setSlideId(null); if (!imported) toast(`Opened “${c.title}”`); }
+      else { const n = c.scenes.reduce((a, sc) => a + sc.slides.length, 0); write(x => { appendCourse(x, c); if (imported) { x.importNote = storyNote(imported); x.importDetails = storyDetails(imported); } }); if (!imported) toast(`Added ${n} slide${n === 1 ? '' : 's'} from “${c.title}”`); }
     } catch (e) { toast(e.message || 'That file couldn’t be opened.'); }
   };
   const pickImport = how => { importRef.current.dataset.how = how; importRef.current.click(); };
@@ -310,6 +323,12 @@ export default function CourseView({ file, update, visible = true }) {
     </> : <p className="sl-hint">Select an object on a slide to give it an entrance animation.</p>,
     VIEW: <>
       <Group label="Views"><Big icon={ICO.story} label="Story View" on={mode === 'story'} onClick={() => go('story')} /><Big icon={ICO.slideview} label="Slide View" on={mode === 'slide'} onClick={() => go('slide')} /></Group>
+      <Group label="Panels">
+        <Big small icon={ICO.slideview} label="Slides" on={panels.slides} onClick={() => togglePanel('slides')} />
+        <Big small icon={ICO.layer} label="Triggers & Layers" on={panels.right} onClick={() => togglePanel('right')} />
+        <Big small icon={ICO.keys} label="Timeline & Format" on={panels.bottom} onClick={() => togglePanel('bottom')} />
+        <Big small icon={ICO.fit} label="Focus" on={focusMode} onClick={() => setFocus(!focusMode)} />
+      </Group>
       <Group label="Zoom"><Big icon={ICO.zoomin} label="Zoom In" onClick={() => (mode === 'story' ? setStoryZoom(z => Math.min(200, z + 10)) : setZoom(z => Math.min(300, (z || Math.round(fitK * 100)) + 10)))} /><Big icon={ICO.zoomout} label="Zoom Out" onClick={() => (mode === 'story' ? setStoryZoom(z => Math.max(40, z - 10)) : setZoom(z => Math.max(15, (z || Math.round(fitK * 100)) - 10)))} /><Big icon={ICO.fit} label="Fit" onClick={() => (mode === 'story' ? setStoryZoom(100) : setZoom(0))} /></Group>
     </>,
     HELP: <>
@@ -365,7 +384,7 @@ export default function CourseView({ file, update, visible = true }) {
       <div className={'cv-holder' + (zoom ? ' zoomed' : '')} ref={holder} onPointerDown={() => { setSel(null); setEditing(null); }}>
         <div className="cv-stage-box" style={{ width: course.size.w * k, height: course.size.h * k }}>
           <div className="cv-stage" style={{ width: course.size.w, height: course.size.h, transform: `scale(${k})`, background: slide.bg, fontFamily: course.font }} aria-label={`Slide: ${slide.title}`} role="region">
-            {baseUnder && <div className="cv-under">{slide.layers[0].objects.map(o => <div key={o.id} className={'cv-o k-' + o.kind} style={boxStyle(o, lookOf(o))}><ObjArt o={o} vars={vars} /></div>)}</div>}
+            {baseUnder && <div className="cv-under">{slide.layers[0].objects.map(o => <div key={o.id} className={'cv-o k-' + o.kind} style={boxStyle(o, lookOf(o))}><ObjArt o={o} vars={vars} assets={course.assets} /></div>)}</div>}
             {layer.objects.map(o => {
               const st = lookState(o), s = lookOf(o, st);
               return (
@@ -374,8 +393,8 @@ export default function CourseView({ file, update, visible = true }) {
                   {editing === o.id
                     ? <textarea className="cv-edit" autoFocus defaultValue={s.text != null ? s.text : o.text} aria-label="Edit the text" style={{ textAlign: s.align, color: s.color, fontSize: s.size, fontWeight: s.bold ? 700 : 400 }}
                       onPointerDown={e => e.stopPropagation()} onKeyDown={e => { if (e.key === 'Escape') e.currentTarget.blur(); }}
-                      onBlur={e => { const v = e.target.value.replace(/\r\n?/g, '\n'); setEditing(null); editObj(x => { if (editState === 'normal') x.text = v; else ((x.states ||= {})[editState] ||= {}).text = v; }); }} />
-                    : <ObjArt o={o} st={st} vars={vars} />}
+                      onBlur={e => { const v = e.target.value.replace(/\r\n?/g, '\n'); setEditing(null); editObj(x => { if (editState === 'normal') { if (v !== x.text) { x.text = v; delete x.rich; } } else { const st = ((x.states ||= {})[editState] ||= {}); if (v !== st.text) { st.text = v; delete st.rich; } } }); }} />
+                    : <ObjArt o={o} st={st} vars={vars} assets={course.assets} />}
                   {o.id === sel && !editing && ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].map(h => <i key={h} className={'cv-h h-' + h} onPointerDown={e => drag(e, o, h)} />)}
                 </div>
               );
@@ -383,20 +402,21 @@ export default function CourseView({ file, update, visible = true }) {
           </div>
         </div>
       </div>
-      <div className="sl-bottom">
+      {panels.bottom && <div className="sl-bottom">
         <div className="sl-btabs" role="tablist" aria-label="Slide panels">
           {[['timeline', 'Timeline'], ['states', 'States'], ['format', 'Format'], ['notes', 'Notes']].map(([t, l]) => <button key={t} role="tab" aria-selected={bottom === t} className={bottom === t ? 'on' : ''} onClick={() => setBottom(t)}>{l}</button>)}
           <span className="sl-btabs-sp">{obj ? `${KINDS[obj.kind]}: ${obj.name}` : `Slide: ${slide.title}`}</span>
+          <button className="sl-x" aria-label="Hide the Timeline panel" title="Hide this panel" onClick={() => togglePanel('bottom', false)}>×</button>
         </div>
         <div className="sl-bbody">
           {bottom === 'timeline' && <Timeline slide={slide} layer={layer} sel={sel} setSel={setSel} write={write} inLayer={inLayer} inSlide={inSlide} />}
           {bottom === 'states' && <States o={obj} editState={editState} setEditState={setEditState} editObj={editObj} />}
           {bottom === 'format' && (obj ? <ObjFormat o={obj} course={course} layer={layer} editState={editState} setLook={setLook} editObj={editObj} write={write} inLayer={inLayer} setSel={setSel} duplicate={duplicate}
-            onPicture={() => { picFor.current = obj.id; picRef.current?.click(); }} onTrigger={() => { const t = { id: rid('t'), event: 'click', source: obj.id, action: 'jump', target: 'next', conds: [] }; write(c => { inLayer(c).triggers.push(t); }); setOpenTrig(t.id); }} />
+            onPicture={() => { picFor.current = obj.id; picRef.current?.click(); }} onTrigger={() => { const t = { id: rid('t'), event: 'click', source: obj.id, action: 'jump', target: 'next', conds: [] }; write(c => { inLayer(c).triggers.push(t); }); setOpenTrig(t.id); togglePanel('right', true); }} />
             : <SlideFormat slide={slide} write={write} inSlide={inSlide} />)}
           {bottom === 'notes' && <textarea className="sl-notes" value={slide.notes || ''} onChange={e => setSlideProp('notes', e.target.value)} aria-label="Slide notes" placeholder="Notes for this slide (not shown to learners)" />}
         </div>
-      </div>
+      </div>}
     </div>
   );
   const layersPane = (
@@ -437,42 +457,49 @@ export default function CourseView({ file, update, visible = true }) {
     <div className="cv sl" data-course>
       <div className="sl-tabs" role="tablist" aria-label="Ribbon">
         <button className="sl-file" aria-haspopup="menu" onClick={e => fileMenu(e.currentTarget)}>FILE</button>
-        {TABS.map(t => <button key={t} role="tab" aria-selected={ribbon === t} className={ribbon === t ? 'on' : ''} onClick={() => setRibbon(t)}>{t}</button>)}
+        {TABS.map(t => <button key={t} role="tab" aria-selected={ribbon === t} className={ribbon === t ? 'on' : ''} onClick={() => { if (!ribbonOpen || ribbon !== t) foldRibbon(true); setRibbon(t); }} onDoubleClick={() => foldRibbon(!ribbonOpen)}>{t}</button>)}
         <span className="sl-qa">
+          <button aria-label={ribbonOpen ? 'Collapse the ribbon' : 'Expand the ribbon'} aria-expanded={ribbonOpen} title={ribbonOpen ? 'Collapse the ribbon (double-click a tab)' : 'Expand the ribbon'} onClick={() => foldRibbon(!ribbonOpen)}>{ribbonOpen ? '⌃' : '⌄'}</button>
           <button aria-label="Undo" title="Undo (Ctrl Z)" disabled={!undo.current.length} onClick={() => back(undo, redo)}>↶</button>
           <button aria-label="Redo" title="Redo (Ctrl Y)" disabled={!redo.current.length} onClick={() => back(redo, undo)}>↷</button>
         </span>
       </div>
-      <div className="sl-ribbon" role="toolbar" aria-label="Course tools">{ribbonBody[ribbon]}</div>
+      {ribbonOpen && <div className="sl-ribbon" role="toolbar" aria-label="Course tools">{ribbonBody[ribbon]}</div>}
       <input ref={picRef} type="file" accept="image/*" hidden aria-label="Picture to insert" onChange={e => { insertPicture(e.target.files[0]); e.target.value = ''; }} />
       <input ref={importRef} type="file" accept=".json,.html,.htm,.zip,.story,application/json,text/html,application/zip" hidden aria-label="Course file to import" onChange={e => { importInto(e.target.files[0], e.target.dataset.how); e.target.value = ''; }} />
       <div className="sl-viewbar">
         <button className={mode === 'story' ? 'on' : ''} onClick={() => go('story')}><Svg d={ICO.story} s={16} />STORY VIEW</button>
         <button className={mode === 'slide' ? 'on' : ''} onClick={() => go('slide')}><Svg d={ICO.slideview} s={16} />{here.sc.name.toUpperCase()} · {sceneNo}.{here.i + 1} {slide.title}</button>
+        <span className="sl-toggles" role="group" aria-label="Panels">
+          {mode === 'slide' && <button className={panels.slides ? 'on' : ''} aria-pressed={panels.slides} title="Slide list" aria-label="Slide list panel" onClick={() => togglePanel('slides')}><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2" y="3" width="16" height="14" rx="2" /><path d="M7 3v14" /></svg></button>}
+          {mode === 'slide' && <button className={panels.bottom ? 'on' : ''} aria-pressed={panels.bottom} title="Timeline, States, Format, Notes" aria-label="Timeline panel" onClick={() => togglePanel('bottom')}><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2" y="3" width="16" height="14" rx="2" /><path d="M2 12h16" /></svg></button>}
+          <button className={panels.right ? 'on' : ''} aria-pressed={panels.right} title="Triggers and layers" aria-label="Right panel" onClick={() => togglePanel('right')}><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2" y="3" width="16" height="14" rx="2" /><path d="M13 3v14" /></svg></button>
+          {mode === 'slide' && <button className={focusMode ? 'on' : ''} aria-pressed={focusMode} title="Focus: only the slide" aria-label="Focus on the slide" onClick={() => setFocus(!focusMode)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4" /></svg></button>}
+        </span>
       </div>
-      {course.importNote && <div className="sl-import" role="status"><b>Storyline import</b><span>{course.importNote}</span><button className="rs-ib" aria-label="Dismiss the import note" onClick={() => write(c => { delete c.importNote; })}>×</button></div>}
+      {course.importNote && <div className="sl-import" role="status"><b>Storyline import</b><span>{course.importNote}</span>{course.importDetails?.length > 0 && <button className="btn" onClick={() => setDialog('import')}>Details</button>}<button className="rs-ib" aria-label="Dismiss the import note" onClick={() => write(c => { delete c.importNote; delete c.importDetails; })}>×</button></div>}
       {mode === 'story' ? (
-        <div className="sl-main story">
+        <div className="sl-main story" style={{ gridTemplateColumns: panels.right ? undefined : 'minmax(0,1fr)' }}>
           {storyView}
-          <aside className="sl-right" aria-label="Properties">
+          {panels.right && <aside className="sl-right" aria-label="Properties">
             <section className="sl-pane sl-trigpane" aria-label="Triggers">
-              <header><h4>Triggers</h4><button className="sl-ico" aria-label="Variables" title="Variables" onClick={() => setDialog('vars')}>%x%</button></header>
+              <header><h4>Triggers</h4><span className="sl-hbtns"><button className="sl-ico" aria-label="Variables" title="Variables" onClick={() => setDialog('vars')}>%x%</button><button className="sl-x" aria-label="Hide the right panel" title="Hide this panel" onClick={() => togglePanel('right', false)}>×</button></span></header>
               <div className="sl-pbody"><Triggers course={course} slide={slide} layer={slide.layers[0]} write={write} inLayer={(c) => inLayer(c, slide.id, slide.layers[0].id)} open={openTrig} setOpen={setOpenTrig} /></div>
             </section>
             {slideProps}
-          </aside>
+          </aside>}
         </div>
       ) : (
-        <div className="sl-main slide">
-          {slideList}
+        <div className="sl-main slide" style={{ gridTemplateColumns: `${panels.slides ? 'var(--sl-left) ' : ''}minmax(0,1fr)${panels.right ? ' var(--sl-rightw)' : ''}` }}>
+          {panels.slides && slideList}
           {stage}
-          <aside className="sl-right" aria-label="Properties">
+          {panels.right && <aside className="sl-right" aria-label="Properties">
             <section className="sl-pane sl-trigpane" aria-label="Triggers">
-              <header><h4>Triggers</h4><button className="sl-ico" aria-label="Variables" title="Variables" onClick={() => setDialog('vars')}>%x%</button></header>
+              <header><h4>Triggers</h4><span className="sl-hbtns"><button className="sl-ico" aria-label="Variables" title="Variables" onClick={() => setDialog('vars')}>%x%</button><button className="sl-x" aria-label="Hide the right panel" title="Hide this panel" onClick={() => togglePanel('right', false)}>×</button></span></header>
               <div className="sl-pbody"><Triggers course={course} slide={slide} layer={layer} write={write} inLayer={inLayer} open={openTrig} setOpen={setOpenTrig} /></div>
             </section>
             {layersPane}
-          </aside>
+          </aside>}
         </div>
       )}
       <footer className="sl-status">
@@ -489,6 +516,7 @@ export default function CourseView({ file, update, visible = true }) {
       {dialog === 'vars' && <VarsDialog course={course} write={write} onClose={() => setDialog(null)} />}
       {dialog === 'player' && <PlayerDialog course={course} write={write} onClose={() => setDialog(null)} />}
       {dialog === 'keys' && <InfoDialog title="Keyboard shortcuts" onClose={() => setDialog(null)} rows={[['Ctrl Z / Ctrl Y', 'Undo / redo'], ['Ctrl C, Ctrl X, Ctrl V', 'Copy, cut, paste an object'], ['Ctrl D', 'Duplicate the object'], ['Arrows (Shift: 10 px)', 'Nudge the object'], ['Delete', 'Delete the object (Story View: the slide)'], ['Double-click', 'Edit text · open a slide from Story View'], ['Enter', 'Story View: open the slide'], ['Alt while dragging', 'Move without snapping'], ['F12', 'Preview the entire project']]} />}
+      {dialog === 'import' && <InfoDialog title="What didn’t come over" onClose={() => setDialog(null)} rows={course.importDetails || []} />}
       {dialog === 'help' && <InfoDialog title="How it works" onClose={() => setDialog(null)} rows={[['Story View', 'Every scene and its slides. Double-click a slide to edit it.'], ['Slide View', 'The slide, its layers (right), triggers (right) and the Timeline, States, Format and Notes (below).'], ['Layers', 'Extra parts of a slide shown and hidden by triggers — pop-ups, feedback, details.'], ['States', 'How an object looks when hovered, pressed, selected, visited, disabled, or a state of your own.'], ['Triggers', '“Do this when that happens, if…”: jump, show a layer, change a state, adjust a variable…'], ['Variables', 'Remember things while the course runs; show one in text as %Name%.'], ['Publish', 'One web page, or a SCORM 1.2 zip for an LMS. Export saves a course file to open again.']]} />}
       {dialog?.preview && <Preview course={course} fileId={file.id} what={dialog.preview} onClose={() => setDialog(null)} />}
     </div>
@@ -530,7 +558,7 @@ function ObjFormat({ o, course, layer, editState, setLook, editObj, write, inLay
       <div className="cv-row"><Field label="Name" wide><input value={o.name} onChange={e => set('name', e.target.value)} aria-label="Object name" /></Field></div>
       <p className="cv-kind">{KINDS[o.kind]}{editState !== 'normal' && <> · <b>{STATE_LABEL[editState] || editState} state</b></>}</p>
       {editState === 'normal' && <div className="cv-row4"><Num label="X" value={Math.round(o.x)} onChange={v => set('x', v || 0)} /><Num label="Y" value={Math.round(o.y)} onChange={v => set('y', v || 0)} /><Num label="Width" value={Math.round(o.w)} onChange={v => set('w', Math.max(10, v || 10))} /><Num label="Height" value={Math.round(o.h)} onChange={v => set('h', Math.max(10, v || 10))} /></div>}
-      {textual && <Field label="Text" wide><textarea rows={3} value={s.text != null ? s.text : o.text || ''} onChange={e => (editState === 'normal' ? set('text', e.target.value) : setLook('text', e.target.value))} aria-label="Text" /><small>Show a variable with %Name%.</small></Field>}
+      {textual && <Field label="Text" wide><textarea rows={3} value={s.text != null ? s.text : o.text || ''} onChange={e => (editState === 'normal' ? editObj(x => { x.text = e.target.value; delete x.rich; }) : editObj(x => { const st = ((x.states ||= {})[editState] ||= {}); st.text = e.target.value; delete st.rich; }))} aria-label="Text" /><small>Show a variable with %Name%.</small></Field>}
       {(textual || ['input', 'question'].includes(o.kind)) && (
         <>
           <div className="cv-row">
@@ -664,7 +692,7 @@ function States({ o, editState, setEditState, editObj }) {
 
 /* ---- Triggers ---- */
 export function describeTrigger(t, course, slide) {
-  const objName = id => slide.layers.flatMap(l => l.objects).find(o => o.id === id)?.name || '(gone)';
+  const objName = id => ({ 'player:next': 'the Next button', 'player:prev': 'the Prev button', freeform: 'the slide’s question' }[id] || slide.layers.flatMap(l => l.objects).find(o => o.id === id)?.name || '(gone)');
   const slideName = id => ({ next: 'next slide', prev: 'previous slide', first: 'first slide', last: 'last slide' }[id] || allSlides(course).find(x => x.s.id === id)?.s.title || '(gone)');
   const layerName = id => (id === 'this' ? 'this layer' : slide.layers.find(l => l.id === id)?.name || '(gone)');
   const a = t.action, act = ACTIONS.find(x => x[0] === a)?.[1] || a;
@@ -672,7 +700,8 @@ export function describeTrigger(t, course, slide) {
     : a === 'setVar' ? `Set ${t.target || '?'} ${{ set: '=', add: '+', subtract: '−', multiply: '×', divide: '÷', toggle: 'toggle' }[t.op || 'set']} ${t.op === 'toggle' ? '' : t.value ?? ''}` : a === 'media' ? `${cap(t.value || 'play')} ${objName(t.target)}`
       : a === 'timeline' ? `${cap(t.value || 'pause')} the timeline` : a === 'submit' ? `Submit ${objName(t.target)}` : a === 'url' ? `Open ${t.value || '?'}` : act;
   const ev = EVENTS.find(x => x[0] === t.event);
-  const when = ev?.[2] === 'object' ? `${ev[1].toLowerCase()} ${objName(t.source)}${t.event === 'drop' && t.value ? ' on ' + objName(t.value) : ''}${t.event === 'stateChange' && t.value ? ' ' + (STATE_LABEL[t.value] || t.value) : ''}` : ev?.[2] === 'var' ? `${t.source || '?'} changes` : t.event === 'key' ? `the learner presses ${t.value || '?'}` : (ev?.[1] || t.event).toLowerCase();
+  const on = t.on !== undefined ? t.on : t.value;
+  const when = ev?.[2] === 'object' ? `${ev[1].toLowerCase()} ${objName(t.source)}${t.event === 'drop' && on ? ' on ' + objName(on) : ''}${t.event === 'stateChange' && on ? ' ' + (STATE_LABEL[on] || on) : ''}` : ev?.[2] === 'var' ? `${t.source || '?'} changes` : t.event === 'key' ? `the learner presses ${on || '?'}` : (ev?.[1] || t.event).toLowerCase();
   return { what, when: 'When ' + when, ifs: (t.conds || []).length };
 }
 function Triggers({ course, slide, layer, write, inLayer, open, setOpen }) {
@@ -703,9 +732,9 @@ function TriggerForm({ t, course, slide, layer, edit, onMove, onDelete }) {
   const kind = ACTIONS.find(a => a[0] === t.action)?.[2];
   const evKind = EVENTS.find(e => e[0] === t.event)?.[2];
   const objOpts = (list = objs) => list.map(o => <option key={o.id} value={o.id}>{o.name}</option>);
-  const stateOpts = id => { const o = objs.find(x => x.id === id); return [...new Set(['normal', 'hidden', 'disabled', ...STATES.filter(s => o?.states?.[s]), ...Object.keys(o?.states || {})])].map(s => <option key={s} value={s}>{STATE_LABEL[s] || s}</option>); };
+  const stateOpts = id => { if (String(id).startsWith('player:')) return ['normal', 'disabled', 'hidden'].map(st => <option key={st} value={st}>{STATE_LABEL[st]}</option>); const o = objs.find(x => x.id === id); return [...new Set(['normal', 'hidden', 'disabled', ...STATES.filter(s => o?.states?.[s]), ...Object.keys(o?.states || {})])].map(s => <option key={s} value={s}>{STATE_LABEL[s] || s}</option>); };
   const setAction = a => edit(x => { x.action = a; const kd = ACTIONS.find(y => y[0] === a)?.[2]; x.target = kd === 'slide' ? 'next' : kd === 'layer' ? (slide.layers[1]?.id || 'this') : kd === 'object' ? (objs.find(o => (a === 'media' ? ['video', 'audio'].includes(o.kind) : a === 'submit' ? o.kind === 'question' : true))?.id || '') : kd === 'var' ? (varNames[0] || '') : ''; x.value = a === 'state' ? 'normal' : a === 'media' ? 'play' : a === 'timeline' ? 'pause' : ''; x.op = 'set'; });
-  const setEvent = ev => edit(x => { x.event = ev; const kd = EVENTS.find(y => y[0] === ev)?.[2]; x.source = kd === 'object' ? (objs[0]?.id || '') : kd === 'var' ? (varNames[0] || '') : ''; x.value = ev === 'key' ? 'Enter' : ''; });
+  const setEvent = ev => edit(x => { x.event = ev; const kd = EVENTS.find(y => y[0] === ev)?.[2]; x.source = kd === 'object' ? (objs[0]?.id || '') : kd === 'var' ? (varNames[0] || '') : ''; x.on = ev === 'key' ? 'Enter' : ''; });
   const def = course.vars.find(v => v.name === t.target);
   const condLeft = [...varNames, ...BUILTIN_VARS];
   return (
@@ -713,7 +742,9 @@ function TriggerForm({ t, course, slide, layer, edit, onMove, onDelete }) {
       <Field label="Action" wide><select value={t.action} onChange={e => setAction(e.target.value)} aria-label="Action">{ACTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
       {kind === 'slide' && <Field label="Slide" wide><select value={t.target} onChange={e => edit(x => { x.target = e.target.value; })} aria-label="Slide"><option value="next">Next slide</option><option value="prev">Previous slide</option><option value="first">First slide</option><option value="last">Last slide</option>{course.scenes.map(sc => <optgroup key={sc.id} label={sc.name}>{sc.slides.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}</optgroup>)}</select></Field>}
       {kind === 'layer' && <Field label="Layer" wide><select value={t.target} onChange={e => edit(x => { x.target = e.target.value; })} aria-label="Layer"><option value="this">This layer</option>{slide.layers.slice(1).map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select>{slide.layers.length < 2 && <small>Add a layer below the slide first.</small>}</Field>}
-      {kind === 'object' && <Field label="Object" wide><select value={t.target} onChange={e => edit(x => { x.target = e.target.value; })} aria-label="Target object"><option value="">(pick one)</option>{objOpts(t.action === 'media' ? objs.filter(o => ['video', 'audio'].includes(o.kind)) : t.action === 'submit' ? objs.filter(o => o.kind === 'question') : objs)}</select></Field>}
+      {kind === 'object' && <Field label="Object" wide><select value={t.target} onChange={e => edit(x => { x.target = e.target.value; })} aria-label="Target object"><option value="">(pick one)</option>{objOpts(t.action === 'media' ? objs.filter(o => ['video', 'audio'].includes(o.kind)) : t.action === 'submit' ? objs.filter(o => o.kind === 'question') : objs)}
+        {t.action === 'state' && <optgroup label="Player"><option value="player:next">Next button</option><option value="player:prev">Prev button</option></optgroup>}
+        {t.action === 'submit' && slide.freeform && <option value="freeform">The slide’s question</option>}</select></Field>}
       {t.action === 'state' && <Field label="To the state" wide><select value={t.value || 'normal'} onChange={e => edit(x => { x.value = e.target.value; })} aria-label="To the state">{stateOpts(t.target)}</select></Field>}
       {kind === 'var' && <>
         <Field label="Variable" wide><select value={t.target} onChange={e => edit(x => { x.target = e.target.value; })} aria-label="Variable"><option value="">(pick one)</option>{varNames.map(v => <option key={v}>{v}</option>)}</select>{!varNames.length && <small>Make one in Variables first.</small>}</Field>
@@ -727,10 +758,10 @@ function TriggerForm({ t, course, slide, layer, edit, onMove, onDelete }) {
       {t.action === 'url' && <Field label="Web address" wide><input value={t.value || ''} onChange={e => edit(x => { x.value = e.target.value; })} aria-label="Web address" placeholder="https://…" /></Field>}
       <Field label="When" wide><select value={t.event} onChange={e => setEvent(e.target.value)} aria-label="When">{EVENTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
       {evKind === 'object' && <Field label="Object" wide><select value={t.source} onChange={e => edit(x => { x.source = e.target.value; })} aria-label="Source object"><option value="">(pick one)</option>{objOpts(t.event === 'mediaEnd' ? objs.filter(o => ['video', 'audio'].includes(o.kind)) : ['correct', 'incorrect'].includes(t.event) ? objs.filter(o => o.kind === 'question') : objs)}</select></Field>}
-      {t.event === 'drop' && <Field label="Dropped on" wide><select value={t.value || ''} onChange={e => edit(x => { x.value = e.target.value; })} aria-label="Dropped on"><option value="">(anything)</option>{objOpts(objs.filter(o => o.id !== t.source))}</select></Field>}
-      {t.event === 'stateChange' && <Field label="State" wide><select value={t.value || ''} onChange={e => edit(x => { x.value = e.target.value; })} aria-label="Becomes the state"><option value="">(any)</option>{stateOpts(t.source)}</select></Field>}
+      {t.event === 'drop' && <Field label="Dropped on" wide><select value={(t.on ?? t.value) || ''} onChange={e => edit(x => { x.on = e.target.value; })} aria-label="Dropped on"><option value="">(anything)</option>{objOpts(objs.filter(o => o.id !== t.source))}</select></Field>}
+      {t.event === 'stateChange' && <Field label="State" wide><select value={(t.on ?? t.value) || ''} onChange={e => edit(x => { x.on = e.target.value; })} aria-label="Becomes the state"><option value="">(any)</option>{stateOpts(t.source)}</select></Field>}
       {evKind === 'var' && <Field label="Variable" wide><select value={t.source} onChange={e => edit(x => { x.source = e.target.value; })} aria-label="Watched variable"><option value="">(pick one)</option>{varNames.map(v => <option key={v}>{v}</option>)}</select></Field>}
-      {t.event === 'key' && <Field label="Key" wide><input value={t.value || ''} onChange={e => edit(x => { x.value = e.target.value; })} aria-label="Key" placeholder="Enter, a, ArrowRight…" /></Field>}
+      {t.event === 'key' && <Field label="Key" wide><input value={(t.on ?? t.value) || ''} onChange={e => edit(x => { x.on = e.target.value; })} aria-label="Key" placeholder="Enter, a, ArrowRight…" /></Field>}
       <div className="cv-conds">
         <span>Only if</span>
         {(t.conds || []).map((c, i) => (
@@ -781,6 +812,7 @@ function Timeline({ slide, layer, sel, setSel, write, inLayer, inSlide }) {
             <p className="cv-kind">“{o.name}”</p>
             <div className="cv-row"><Num label="Appears at (s)" value={o.start || 0} step={0.25} min={0} onChange={v => set(o.id, 'start', Math.max(0, v || 0))} /><Num label="Shown for (s, blank: to the end)" value={o.dur ?? ''} step={0.25} min={0} onChange={v => set(o.id, 'dur', v || null)} /></div>
             <Field label="Comes in with" wide><select value={o.anim || 'none'} onChange={e => set(o.id, 'anim', e.target.value)} aria-label="Entrance animation">{ANIMS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
+            <Field label="Goes out with" wide><select value={o.out || 'none'} onChange={e => set(o.id, 'out', e.target.value === 'none' ? undefined : e.target.value)} aria-label="Exit animation"><option value="none">Nothing (just goes)</option><option value="fade">Fade out</option></select></Field>
           </div>
         );
       })()}
@@ -790,11 +822,11 @@ function Timeline({ slide, layer, sel, setSel, write, inLayer, inSlide }) {
 }
 
 /* ---- dialogs ---- */
-function Modal({ title, onClose, children, wide }) {
+function Modal({ title, onClose, children, wide, full, tools, boxRef }) {
   return (
-    <div className="modal" onPointerDown={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className={'mbox cv-dlg' + (wide ? ' wide' : '')} role="dialog" aria-modal="true" aria-label={title} onKeyDown={e => { if (e.key === 'Escape') onClose(); }}>
-        <header><h3>{title}</h3><button className="rs-ib" aria-label="Close" onClick={onClose}>×</button></header>
+    <div className={'modal' + (full ? ' cv-full' : '')} onPointerDown={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div ref={boxRef} className={'mbox cv-dlg' + (wide ? ' wide' : '') + (full ? ' full' : '')} role="dialog" aria-modal="true" aria-label={title} onKeyDown={e => { if (e.key === 'Escape' && !document.fullscreenElement) onClose(); }}>
+        <header><h3>{title}</h3>{tools}<button className="rs-ib" aria-label="Close" onClick={onClose}>×</button></header>
         {children}
       </div>
     </div>
@@ -851,9 +883,18 @@ function Preview({ course, fileId, what, onClose }) {
     return courseHtml(c, 'preview');
   }, [course, fileId, what]);
   const [n, setN] = useState(0);
+  // The preview fills the window; Full screen hides the browser's own bars too.
+  const box = useRef(null);
+  const [fs, setFs] = useState(false);
+  const toggleFs = () => { if (document.fullscreenElement) document.exitFullscreen?.(); else box.current?.requestFullscreen?.().catch(() => {}); };
+  useEffect(() => {
+    const on = () => setFs(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', on);
+    return () => { document.removeEventListener('fullscreenchange', on); if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {}); };
+  }, []);
   return (
-    <Modal title="Preview" onClose={onClose} wide>
-      <iframe key={n} className="cv-preview" title="Course preview" srcDoc={html} sandbox="allow-scripts allow-popups" />
+    <Modal title="Preview" onClose={onClose} full boxRef={box} tools={<button className="btn cv-fs" onClick={toggleFs} aria-pressed={fs}>{fs ? '⤡ Exit full screen' : '⤢ Full screen'}</button>}>
+      <iframe key={n} className="cv-preview" title="Course preview" srcDoc={html} sandbox="allow-scripts allow-popups" allow="fullscreen" />
       <footer className="cv-dlg-f"><span className="cv-note">{what === 'all' ? 'The whole course' : what.startsWith('scene:') ? 'This scene' : 'This slide'}, as learners will see it.</span><button className="btn" onClick={() => setN(x => x + 1)}>Replay</button><button className="btn primary" onClick={onClose}>Close preview</button></footer>
     </Modal>
   );
