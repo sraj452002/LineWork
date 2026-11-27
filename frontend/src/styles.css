@@ -5060,7 +5060,7 @@ body{background:radial-gradient(1100px 620px at 8% -10%,color-mix(in srgb,var(--
 .sl-zoom{margin-left:12px}
 /* Preview on a device: the course in a frame of that size */
 .cv-dlg.full .cv-device{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--ink) 6%,var(--surface));border-radius:6px}
-.cv-device .cv-preview{width:100%;height:100%;border-radius:6px}
+.cv-device .cv-preview{width:100%;height:100%;border-radius:6px}.cv-dlg.full .cv-device.dev-desktop .cv-preview{height:100%}
 .cv-device.dev-tablet-l .cv-preview,.cv-device.dev-tablet-p .cv-preview,.cv-device.dev-phone-l .cv-preview,.cv-device.dev-phone-p .cv-preview{flex:none;border:10px solid #1f2433;border-radius:22px;box-shadow:var(--shadow)}
 .cv-device.dev-tablet-l .cv-preview{width:min(1024px,96%);height:min(768px,96%)}
 .cv-device.dev-tablet-p .cv-preview{width:min(768px,70%);height:min(1024px,96%)}
@@ -5069,3 +5069,6 @@ body{background:radial-gradient(1100px 620px at 8% -10%,color-mix(in srgb,var(--
 .sl-main.story{grid-template-columns:minmax(0,1fr) 380px}
 .sl-checks{grid-template-columns:62px repeat(3,max-content);gap:6px 12px}
 @media (max-width:1100px){.sl-main.story{grid-template-columns:minmax(0,1fr) 320px}}
+.cv-fit{max-height:100%;min-height:0}.cv-fit.cv-scroll{overflow:auto;scrollbar-width:thin}
+.cv-fbrow{display:grid;grid-template-columns:110px 1fr auto auto;gap:8px 12px;align-items:end;margin-top:10px}
+.cv-fbprev{padding:10px;border-radius:8px;font-weight:700;text-align:center;align-self:stretch;display:grid;place-items:center}

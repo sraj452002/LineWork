@@ -12,7 +12,18 @@ export function boxStyle(o, s) {
     border: s.borderW ? `${s.borderW}px solid ${s.border || 'transparent'}` : 0, opacity: s.opacity ?? undefined, boxShadow: s.shadow ? '0 10px 30px rgba(20,24,60,.18)' : undefined,
     justifyContent: s.valign === 'middle' ? 'center' : s.valign === 'bottom' ? 'flex-end' : 'flex-start',
     ...(s.font ? { fontFamily: s.font } : {}), ...(s.weight && !s.bold ? { fontWeight: s.weight } : {}),
+    ...(s.autofit === 'shape' ? { height: 'auto', minHeight: o.h } : {}),
   };
+}
+// Text that shrinks to fit its box (Autofit: shrink text on overflow), or scrolls (Text scrollbars).
+function FitText({ s, children }) {
+  const ref = useRef(null);
+  useLayoutEffect(() => {
+    const el = ref.current; if (!el || s.autofit !== 'shrink') { if (el) el.style.zoom = ''; return; }
+    const box = el.parentElement; el.style.zoom = ''; let k = 1;
+    for (let n = 0; n < 12 && el.scrollHeight > box.clientHeight + 1 && k > 0.4; n++) { k = Math.max(0.4, k * Math.min(0.95, Math.sqrt(box.clientHeight / el.scrollHeight))); el.style.zoom = k; }
+  });
+  return <div ref={ref} className={'cv-fit' + (s.scroll && s.autofit !== 'shrink' ? ' cv-scroll' : '')}>{children}</div>;
 }
 // An object drawn by parts (imported from Storyline states): backgrounds, text and pictures in its box.
 function Parts({ parts, vars, assets }) {
@@ -61,8 +72,8 @@ export function ObjArt({ o, st = 'normal', vars = {}, assets }) {
   if (o.kind === 'result') return <div className="cv-r"><span className="cv-ring"><b>80%</b></span><b>{interpolate(text, { ...vars, 'Quiz.Percent': 80 })}</b><small>Score, pass or fail, and Retry</small></div>;
   if (s.parts || o.parts) return <Parts parts={s.parts || o.parts} vars={vars} assets={assets} />;
   const rich = s.rich !== undefined ? s.rich : s.text != null ? null : o.rich;
-  if (rich) return <RichText rich={rich} vars={vars} pad={s.pad} />;
-  return <div className="cv-t" style={Array.isArray(s.pad) ? { padding: s.pad.map(v => v + 'px').join(' ') } : undefined}>{interpolate(text, vars)}</div>;
+  if (rich) return <FitText s={s}><RichText rich={rich} vars={vars} pad={s.pad} /></FitText>;
+  return <FitText s={s}><div className="cv-t" style={Array.isArray(s.pad) ? { padding: s.pad.map(v => v + 'px').join(' ') } : undefined}>{interpolate(text, vars)}</div></FitText>;
 }
 export const defaultsOf = c => Object.fromEntries((c.vars || []).map(v => [v.name, v.value === '' ? `%${v.name}%` : v.value]));
 

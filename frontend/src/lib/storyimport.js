@@ -457,6 +457,14 @@ export async function fromStoryPackage(zip, fileName) {
     return assetOf.get(path);
   };
   const course = newCourse(story.getAttribute('name') || fileName.replace(/\.[^.]+$/, ''));
+  // The player: font scale, notes.
+  const pp = await read('story/playerProps.xml');
+  if (pp) {
+    const pd = parse(pp).documentElement;
+    const fsc = num(pd?.getAttribute('fontscale'));
+    if (fsc && fsc !== 100) course.player.fontScale = fsc;
+    if (/name="shownotes"\s+value="true"|shownotes="true"/i.test(pp)) course.player.notes = true;
+  }
   course.size = { w: W, h: H }; course.vars = vars; course.scenes = []; course.assets = assets;
   const pendingTrig = []; // resolved once every id is known
   const objId = new Map(), layerId = new Map(), slideIdOf = new Map();
@@ -482,7 +490,14 @@ export async function fromStoryPackage(zip, fileName) {
       const line = lineOf(kid(el, 'bG'), theme);
       const style = { ...(line || {}), fill: fill || 'transparent', color: look.color || '#1f2433', size: look.size || 18, bold: look.bold, italic: look.italic, align: look.align || ({ c: 'center', r: 'right' }[el.getAttribute('horzAlign')] || 'left'), valign: { ctr: 'middle', m: 'middle', b: 'bottom' }[el.getAttribute('vertAlign')] || 'top',
         ...(look.font ? { font: look.font } : {}), ...(look.weight ? { weight: look.weight } : {}), ...(tmg ? { pad: ['t', 'r', 'b', 'l'].map(k2 => Math.round(num(tmg.getAttribute(k2)) * 1.333)) } : {}) };
-      if (tag === 'roundRect' || tag === 'roundSameSideCorner') style.radius = Math.round(Math.min(w, h) * 0.18);
+      // Corner radius: Storyline keeps it as a share of the shorter side.
+      const rEl = [el, ...el.children].find(c => c.hasAttribute && c.hasAttribute('radius')) || el.querySelector(':scope > * > [radius]');
+      if (rEl) style.radius = Math.round(Math.min(w, h) * Math.min(0.5, num(rEl.getAttribute('radius'))));
+      else if (tag === 'roundRect' || tag === 'roundSameSideCorner') style.radius = Math.round(Math.min(w, h) * 0.18);
+      // Text autofit and scrollbars.
+      const af = el.getAttribute('autoFit');
+      if (af === 'shape' || (af === 'def' && tag === 'textBox')) style.autofit = 'shape'; else if (af === 'text' || af === 'shrink') style.autofit = 'shrink';
+      if (el.getAttribute('scrollOverflow') === 'true' && text) style.scroll = true;
       if (tag === 'oval' || tag === 'ellipse') style.shape = 'ellipse';
       let o;
       if (tag === 'pic' || tag === 'svgimage') {

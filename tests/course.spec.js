@@ -420,3 +420,70 @@ test('Slide Properties choose the slide’s buttons and how it is revisited', as
   await p.locator('.cp-bar').getByRole('button', { name: 'Submit' }).click();
   await expect(p.locator('.cp-fb.on')).toBeVisible();
 });
+
+// The newer authoring features: text autofit and scrollbars, corner radius, the feedback master (and theme colors),
+// global notes formatting with the player's Notes, sharper font scaling, and answered questions locked on revisit.
+test('autofit, scrollbars, corner radius, feedback master, notes format, font scaling and locked questions', async ({ page }) => {
+  test.setTimeout(60_000);
+  await studio(page, 'Quiz');
+  // Slide 1: a text box that grows with its text, one that shrinks its text, one that scrolls.
+  await page.getByRole('button', { name: /^Slide 1\.1:/ }).dblclick();
+  const ribbon = page.getByRole('toolbar', { name: 'Course tools' });
+  const panel = page.locator('.sl-bottom');
+  const long = Array(30).fill('A long line of text that keeps going').join(' ');
+  const addText = async (fit, scroll) => {
+    await page.getByRole('tab', { name: 'INSERT' }).click();
+    await ribbon.getByRole('button', { name: 'Text Box' }).click();
+    await panel.getByLabel('Text', { exact: true }).fill(long);
+    await panel.getByLabel('Autofit').selectOption(fit);
+    if (scroll) await panel.getByLabel('Text scrollbar').check();
+    await panel.getByLabel('Corners').fill('20');
+  };
+  await addText('shape'); await addText('shrink'); await addText('none', true);
+  // Feedback master with theme colors; notes format; the player's notes, locked questions.
+  await page.getByRole('tab', { name: 'DESIGN' }).click();
+  await ribbon.getByRole('button', { name: 'Feedback Master' }).click();
+  const fbd = page.getByRole('dialog', { name: 'Feedback Master' });
+  await fbd.getByLabel('Correct title', { exact: true }).fill('Well done!');
+  await fbd.getByLabel('Feedback theme colors').check();
+  await fbd.getByRole('button', { name: 'Done' }).click();
+  await ribbon.getByRole('button', { name: 'Notes Format' }).click();
+  await page.getByRole('dialog', { name: 'Notes Format' }).getByLabel('Size (px)').fill('20');
+  await page.getByRole('dialog', { name: 'Notes Format' }).getByRole('button', { name: 'Done' }).click();
+  await panel.getByRole('tab', { name: 'Notes' }).click();
+  await page.getByLabel('Slide notes').fill('Remember to smile');
+  await expect(page.getByLabel('Slide notes')).toHaveCSS('font-size', '20px');
+  await page.getByRole('tab', { name: 'HOME' }).click();
+  await ribbon.getByRole('button', { name: 'Player', exact: true }).click();
+  const pd = page.getByRole('dialog', { name: 'Player' });
+  await pd.getByText('Notes (each slide’s notes, beside the slide)').click();
+  await pd.getByText('Disable navigation within a question when it’s revisited').click();
+  await pd.getByRole('button', { name: 'Done' }).click();
+
+  await page.getByRole('button', { name: 'Preview', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Entire project' }).click();
+  const p = page.frameLocator('iframe[title="Course preview"]');
+  // The preview fills the window (not a 150px-tall strip).
+  expect(await page.locator('iframe[title="Course preview"]').evaluate(e => e.offsetHeight)).toBeGreaterThan(400);
+  const boxes = p.locator('.cp-o.cp-text', { hasText: 'A long line of text' });
+  await expect(boxes).toHaveCount(3);
+  // Grows: taller than its box; shrinks: its text is zoomed down; scrolls: a scrollbar.
+  expect(await boxes.nth(0).evaluate(e => e.offsetHeight)).toBeGreaterThan(70);
+  await expect.poll(() => boxes.nth(1).locator('.cp-t').evaluate(e => Number(e.style.zoom || 1))).toBeLessThan(1);
+  expect(await boxes.nth(2).locator('.cp-t').evaluate(e => getComputedStyle(e).overflowY)).toBe('auto');
+  await expect(boxes.nth(0)).toHaveCSS('border-top-left-radius', '20px');
+  // Sharper font scaling: the slide is zoomed, not scaled as a picture.
+  expect(await p.locator('.cp-stage').evaluate(e => e.style.zoom)).not.toBe('');
+  // Notes, in their format.
+  await p.getByRole('button', { name: 'Notes' }).click();
+  await expect(p.getByRole('complementary', { name: 'Notes' })).toHaveText('Remember to smile');
+  await expect(p.getByRole('complementary', { name: 'Notes' })).toHaveCSS('font-size', '20px');
+  // The feedback master's title, and a question locked once answered.
+  await p.locator('.cp-menu button', { hasText: 'Question 1' }).click();
+  await p.locator('.cp-qo').first().click();
+  await p.locator('.cp-question').getByRole('button', { name: 'Submit' }).click();
+  await expect(p.locator('.cp-fb.on')).toContainText('Well done!');
+  await p.locator('.cp-menu button', { hasText: 'Quiz' }).first().click();
+  await p.locator('.cp-menu button', { hasText: 'Question 1' }).click();
+  await expect(p.locator('.cp-question').getByRole('button', { name: 'Submit' })).toBeDisabled();
+});

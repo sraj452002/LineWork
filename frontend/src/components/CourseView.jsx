@@ -5,7 +5,7 @@ import { ObjArt, Thumb, boxStyle, defaultsOf, lookOf } from './CourseArt.jsx';
 import { storyDetails, storyNote } from './CourseStudio.jsx';
 import {
   ACTIONS, ANIMS, BUILTIN_VARS, EVENTS, KINDS, OPS, QTYPES, STATES, allSlides, cloneSlide, courseHtml, findSlide, interpolate,
-  TRANSITIONS, appendCourse, courseFile, newCourse, newLayer, newObject, newScene, newSlide, pictureUrl, readCourse, scormZip,
+  TRANSITIONS, appendCourse, courseFile, feedbackOf, newCourse, newLayer, newObject, newScene, newSlide, pictureUrl, readCourse, scormZip,
 } from '../lib/course.js';
 
 /* The Course view: e-learning made of scenes and slides (see lib/course.js), laid out like a desktop authoring
@@ -349,6 +349,7 @@ export default function CourseView({ file, update, visible = true }) {
     DESIGN: <>
       <Group label="Setup"><Big icon={ICO.size} label="Slide Size" onClick={btn => popup(btn, [['960x540', '16:9 (960 × 540)'], ['720x540', '4:3 (720 × 540)'], ['1280x720', '16:9 large (1280 × 720)'], ['1920x1080', 'Full HD (1920 × 1080)'], ['540x960', 'Phone, portrait (540 × 960)']].map(([v, l]) => ({ label: (v === `${course.size.w}x${course.size.h}` ? '✓ ' : '') + l, act: () => { const [w, h] = v.split('x').map(Number); write(c => { c.size = { w, h }; }); } })))} menu /></Group>
       <Group label="Background"><label className="sl-colorbig"><Svg d={ICO.bg} /><span>Slide color</span><input type="color" value={hex(slide.bg)} onChange={e => setSlideProp('bg', e.target.value)} aria-label="Slide background color" /></label><Big icon={ICO.dup} label="Apply to All" onClick={() => write(c => { allSlides(c).forEach(x => { x.s.bg = slide.bg; }); })} /></Group>
+      <Group label="Masters"><Big icon={ICO.result} label="Feedback Master" onClick={() => setDialog('feedback')} /><Big icon={ICO.text} label="Notes Format" onClick={() => setDialog('notes')} /></Group>
       <Group label="Theme"><label className="sl-colorbig"><Svg d={ICO.theme} /><span>Accent</span><input type="color" value={hex(course.accent)} onChange={e => write(c => { c.accent = e.target.value; })} aria-label="Accent color" /></label>
         <Big icon={ICO.font} label="Fonts" onClick={btn => popup(btn, [['Inter, system-ui, sans-serif', 'Inter'], ['Georgia, serif', 'Georgia'], ['"Trebuchet MS", sans-serif', 'Trebuchet'], ['"Segoe UI", Roboto, sans-serif', 'Segoe UI'], ['"Courier New", monospace', 'Courier']].map(([v, l]) => ({ label: (course.font === v ? '✓ ' : '') + l, act: () => write(c => { c.font = v; }) })))} menu /></Group>
     </>,
@@ -453,7 +454,7 @@ export default function CourseView({ file, update, visible = true }) {
           {bottom === 'format' && (obj ? <ObjFormat o={obj} course={course} layer={layer} editState={editState} setLook={setLook} editObj={editObj} write={write} inLayer={inLayer} setSel={setSel} duplicate={duplicate}
             onPicture={() => { picFor.current = obj.id; picRef.current?.click(); }} onTrigger={() => { const t = { id: rid('t'), event: 'click', source: obj.id, action: 'jump', target: 'next', conds: [] }; write(c => { inLayer(c).triggers.push(t); }); setOpenTrig(t.id); togglePanel('right', true); }} />
             : <SlideFormat slide={slide} write={write} inSlide={inSlide} />)}
-          {bottom === 'notes' && <textarea className="sl-notes" value={slide.notes || ''} onChange={e => setSlideProp('notes', e.target.value)} aria-label="Slide notes" placeholder="Notes for this slide (not shown to learners)" />}
+          {bottom === 'notes' && <textarea className="sl-notes" style={{ fontFamily: course.notesStyle?.font, fontSize: course.notesStyle?.size, color: course.notesStyle?.color }} value={slide.notes || ''} onChange={e => setSlideProp('notes', e.target.value)} aria-label="Slide notes" placeholder="Notes for this slide (not shown to learners)" />}
         </div>
       </div>}
     </div>
@@ -572,11 +573,48 @@ export default function CourseView({ file, update, visible = true }) {
       </footer>
       {dialog === 'vars' && <VarsDialog course={course} write={write} onClose={() => setDialog(null)} />}
       {dialog === 'player' && <PlayerDialog course={course} write={write} onClose={() => setDialog(null)} />}
+      {dialog === 'feedback' && <FeedbackDialog course={course} write={write} onClose={() => setDialog(null)} />}
+      {dialog === 'notes' && <NotesDialog course={course} write={write} onClose={() => setDialog(null)} />}
       {dialog === 'keys' && <InfoDialog title="Keyboard shortcuts" onClose={() => setDialog(null)} rows={[['Ctrl Z / Ctrl Y', 'Undo / redo'], ['Ctrl C, Ctrl X, Ctrl V', 'Copy, cut, paste an object'], ['Ctrl D', 'Duplicate the object'], ['Arrows (Shift: 10 px)', 'Nudge the object'], ['Delete', 'Delete the object (Story View: the slide)'], ['Double-click', 'Edit text · open a slide from Story View'], ['Enter', 'Story View: open the slide'], ['Alt while dragging', 'Move without snapping'], ['F12', 'Preview the entire project']]} />}
       {dialog === 'import' && <InfoDialog title="What didn’t come over" onClose={() => setDialog(null)} rows={course.importDetails || []} />}
       {dialog === 'help' && <InfoDialog title="How it works" onClose={() => setDialog(null)} rows={[['Story View', 'Every scene and its slides. Double-click a slide to edit it.'], ['Slide View', 'The slide, its layers (right), triggers (right) and the Timeline, States, Format and Notes (below).'], ['Layers', 'Extra parts of a slide shown and hidden by triggers — pop-ups, feedback, details.'], ['States', 'How an object looks when hovered, pressed, selected, visited, disabled, or a state of your own.'], ['Triggers', '“Do this when that happens, if…”: jump, show a layer, change a state, adjust a variable…'], ['Variables', 'Remember things while the course runs; show one in text as %Name%.'], ['Publish', 'One web page, or a SCORM 1.2 zip for an LMS. Export saves a course file to open again.']]} />}
       {dialog?.preview && <Preview course={course} fileId={file.id} what={dialog.preview} device={dialog.device} onClose={() => setDialog(null)} />}
     </div>
+  );
+}
+function FeedbackDialog({ course, write, onClose }) {
+  const fb = feedbackOf(course);
+  const set = (k, key, v) => write(c => { ((c.feedback ||= {})[k] ||= {})[key] = v; });
+  return (
+    <Modal title="Feedback Master" onClose={onClose}>
+      <p className="cv-note">How every question’s feedback looks: its title and colors. Questions can still write their own feedback text.</p>
+      <label className="cv-checks"><span><input type="checkbox" checked={!!course.feedback?.theme} onChange={e => write(c => { (c.feedback ||= {}).theme = e.target.checked; if (e.target.checked) for (const k of ['correct', 'incorrect', 'tryAgain']) if (c.feedback[k]) { delete c.feedback[k].fill; delete c.feedback[k].color; } })} aria-label="Feedback theme colors" /> Use the theme’s colors (the course’s accent)</span></label>
+      {[['correct', 'Correct'], ['tryAgain', 'Try again'], ['incorrect', 'Incorrect']].map(([k, l]) => (
+        <div key={k} className="cv-fbrow">
+          <div className="cv-fbprev" style={{ background: fb[k].fill, color: fb[k].color }}>{fb[k].title || l}</div>
+          <Field label={`${l}: title`}><input value={fb[k].title || ''} placeholder={`The question’s own text (e.g. ${l})`} onChange={e => set(k, 'title', e.target.value)} aria-label={`${l} title`} /></Field>
+          <Color label={`${l} fill`} value={fb[k].fill.startsWith('#') ? fb[k].fill : '#ffffff'} onChange={v => set(k, 'fill', v)} clear={false} />
+          <Color label={`${l} text`} value={fb[k].color} onChange={v => set(k, 'color', v)} clear={false} />
+        </div>
+      ))}
+      <footer className="cv-dlg-f"><button className="btn primary" onClick={onClose}>Done</button></footer>
+    </Modal>
+  );
+}
+// Global notes formatting: one look for every slide's notes (in the editor and the player's Notes).
+function NotesDialog({ course, write, onClose }) {
+  const ns = course.notesStyle || {};
+  const set = (k, v) => write(c => { (c.notesStyle ||= {})[k] = v; });
+  return (
+    <Modal title="Notes Format" onClose={onClose}>
+      <p className="cv-note">One format for the notes of every slide.</p>
+      <div className="cv-form">
+        <Field label="Font" wide><select value={ns.font || ''} onChange={e => set('font', e.target.value || undefined)} aria-label="Notes font"><option value="">The course font</option><option value="Georgia, serif">Georgia</option><option value="Inter, system-ui, sans-serif">Inter</option><option value='"Segoe UI", Roboto, sans-serif'>Segoe UI</option><option value='"Courier New", monospace'>Courier</option></select></Field>
+        <div className="cv-row"><Num label="Size (px)" value={ns.size || 14} min={9} onChange={v => set('size', Math.max(9, Math.min(40, v || 14)))} /><Color label="Color" value={ns.color || '#1f2433'} onChange={v => set('color', v)} clear={false} /></div>
+        <p className="cv-note" style={{ fontFamily: ns.font, fontSize: ns.size, color: ns.color, border: '1px solid var(--hair)', borderRadius: 8, padding: 10 }}>Notes will look like this.</p>
+      </div>
+      <footer className="cv-dlg-f"><button className="btn primary" onClick={onClose}>Done</button></footer>
+    </Modal>
   );
 }
 function InfoDialog({ title, rows, onClose }) {
@@ -630,6 +668,10 @@ function ObjFormat({ o, course, layer, editState, setLook, editObj, write, inLay
           </div>
         </>
       )}
+      {textual && <div className="cv-row">
+        <Field label="Autofit"><select value={s.autofit || 'none'} onChange={e => setLook('autofit', e.target.value === 'none' ? undefined : e.target.value)} aria-label="Autofit"><option value="none">Do not autofit</option><option value="shrink">Shrink text on overflow</option><option value="shape">Resize shape to fit text</option></select></Field>
+        <Field label="Scrollbar if it overflows"><input type="checkbox" checked={!!s.scroll} onChange={e => setLook('scroll', e.target.checked || undefined)} aria-label="Text scrollbar" /></Field>
+      </div>}
       {o.kind !== 'audio' && (
         <div className="cv-row">
           <Color label="Fill" value={s.fill} onChange={v => setLook('fill', v)} />
@@ -947,11 +989,14 @@ function PlayerDialog({ course, write, onClose }) {
       <div className="cv-form">
         <Field label="Course title" wide><input value={course.title} onChange={e => write(c => { c.title = e.target.value; })} aria-label="Course title" /></Field>
         <div className="cv-checks">
-          {[['title', 'Title bar'], ['menu', 'Menu of slides'], ['freeNav', 'Learners may jump to any slide in the menu'], ['seekbar', 'Seekbar and play / pause'], ['prevNext', 'Prev and Next buttons'], ['resume', 'Offer to carry on where they left off']].map(([kk, l]) => <label key={kk}><input type="checkbox" checked={p[kk] !== false && !!p[kk]} onChange={() => tog(kk)} />{l}</label>)}
+          {[['title', 'Title bar'], ['menu', 'Menu of slides'], ['freeNav', 'Learners may jump to any slide in the menu'], ['seekbar', 'Seekbar and play / pause'], ['prevNext', 'Prev and Next buttons'], ['resume', 'Offer to carry on where they left off'], ['notes', 'Notes (each slide’s notes, beside the slide)']].map(([kk, l]) => <label key={kk}><input type="checkbox" checked={p[kk] !== false && !!p[kk]} onChange={() => tog(kk)} />{l}</label>)}
+          <label><input type="checkbox" checked={p.sharpText !== false} onChange={() => write(c => { c.player.sharpText = c.player.sharpText === false; })} />Better font scaling (text stays sharp at any player size)</label>
+          <label><input type="checkbox" checked={!!course.quiz.lockRevisit} onChange={() => write(c => { c.quiz.lockRevisit = !c.quiz.lockRevisit; })} />Disable navigation within a question when it’s revisited (answers can’t change)</label>
         </div>
         <div className="cv-row">
           <Color label="Accent color" value={course.accent} onChange={v => write(c => { c.accent = v === 'transparent' ? '#4f5bd5' : v; })} clear={false} />
           <Num label="Pass mark (%)" value={course.quiz.pass} min={0} onChange={v => write(c => { c.quiz.pass = Math.max(0, Math.min(100, v || 0)); })} />
+          <Num label="Player font scale (%)" value={p.fontScale || 100} min={50} onChange={v => write(c => { c.player.fontScale = Math.max(50, Math.min(200, v || 100)); })} />
         </div>
         <Field label="Size" wide><select value={`${course.size.w}x${course.size.h}`} onChange={e => { const [w, h] = e.target.value.split('x').map(Number); write(c => { c.size = { w, h }; }); }} aria-label="Slide size"><option value="960x540">16:9 (960 × 540)</option><option value="720x540">4:3 (720 × 540)</option><option value="1280x720">16:9 large (1280 × 720)</option><option value="540x960">Phone, portrait (540 × 960)</option></select></Field>
         <Field label="In an LMS, the course is complete when" wide><select value={course.complete} onChange={e => write(c => { c.complete = e.target.value; })} aria-label="Completion"><option value="viewed">Every slide has been seen</option><option value="quiz">The quiz is passed</option></select></Field>
