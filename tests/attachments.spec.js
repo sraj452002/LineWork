@@ -172,3 +172,20 @@ test('an email step that can’t reach its SMTP server says why and what works i
   expect(r.error).toContain('SMTP blocked');
   expect(r.error).toContain('Resend, Brevo, SendGrid, Mailgun or Postmark');
 });
+
+test('Brevo: an SMTP key is caught with a plain answer, and a key with spaces round it still works', async () => {
+  const flow = key => ({ nodes: [{ id: 't', type: 'trigger.manual', name: 'Start' }, { id: 'n', type: 'brevo', name: 'Brevo', params: { to: 'me@example.com', subject: 'x', text: 'y' }, credential: 'c1' }], edges: [{ from: 't', to: 'n' }], key });
+  const go = async (key, fetchImpl) => {
+    const real = globalThis.fetch, realLookup = dns.lookup;
+    if (fetchImpl) { globalThis.fetch = fetchImpl; dns.lookup = async () => [{ address: '93.184.216.34', family: 4 }]; syncBuiltinESMExports(); }
+    try { return await runFlow(flow(key), { startId: 't', input: [{ json: {} }], types: { ...NODE_TYPES, ...APP_NODES }, ctx: { cred: async () => ({ apiKey: key, from: 'me@example.com' }) } }); }
+    finally { globalThis.fetch = real; dns.lookup = realLookup; syncBuiltinESMExports(); }
+  };
+  const smtp = await go('xsmtpsib-abc');
+  expect(smtp.error).toContain('SMTP key');
+  expect(smtp.error).toContain('xkeysib-');
+  let sentKey;
+  const ok = await go('  xkeysib-abc \n', async (url, init) => { sentKey = new Headers(init.headers).get('api-key'); return new Response(JSON.stringify({ messageId: 'm1' }), { status: 201, headers: { 'content-type': 'application/json' } }); });
+  expect(ok.status).toBe('success');
+  expect(sentKey).toBe('xkeysib-abc');
+});
