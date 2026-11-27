@@ -33,6 +33,8 @@ const app = createApp(store, {
   dbAllowPrivate: env.DB_ALLOW_PRIVATE === '1' || env.DB_ALLOW_PRIVATE === 'true',
   // Workflows: the key their saved credentials are encrypted with (without it, one kept in meta.json).
   flowSecret: env.FLOW_SECRET || '',
+  // Storage (drive.js): S3_BUCKET, S3_ENDPOINT, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY… keep files in a bucket for good.
+  driveEnv: env,
 });
 
 const port = num(env.PORT, 8787), host = env.HOST || '0.0.0.0';

@@ -1,143 +1,130 @@
 import { test, expect } from '@playwright/test';
-import { mkdtempSync, rmSync, existsSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { createServer } from 'node:http';
 import { openStore } from '../backend/store.js';
-import { folderBackend, memoryBackend } from '../backend/storage.js';
+import { memoryBackend } from '../backend/storage.js';
 import { createApp } from '../backend/app.js';
+import { PART, createDrive, signS3 } from '../backend/drive.js';
 
-// Where the Workline API keeps each account's data, and how much it may keep.
+const J = { 'content-type': 'application/json' };
+const post = (url, body) => fetch(url, { method: 'POST', headers: J, body: JSON.stringify(body) });
 
-const doc = (id, n) => JSON.stringify({ id, title: 'x'.repeat(n), diagrams: [] });
-
-test('each account\'s files are in its own folder, and ones kept side by side before move there', async () => {
-  const blobs = new Map();
-  blobs.set('meta.json', JSON.stringify({
-    nextVid: 2,
-    users: { u1: { id: 'u1', email: 'ada@example.com', name: '', pass: '', created: 1 }, u2: { id: 'u2', email: 'grace@example.com', name: '', pass: '', created: 2 } },
-    files: { u1: { f1: { updated: 1, hash: 'h', size: 2 } } },
-    versions: { u1: { f1: [{ vid: 1, saved: 1, size: 2, title: '' }] } },
-    images: { u2: { img1: { size: 15, saved: 1 } } },
-  }));
-  blobs.set('file.u1.f1.json', '{}');
-  blobs.set('version.1.json', '{}');
-  blobs.set('image.u2.img1.json', '{"data":"data:x"}');
-
-  const st = await openStore(memoryBackend(blobs));
-  expect([...blobs.keys()].sort()).toEqual(['ada@example.com/file.f1.json', 'ada@example.com/version.1.json', 'grace@example.com/image.img1.json', 'meta.json']);
-  expect(await st.readFile('u1', 'f1')).toBe('{}');
-  expect((await st.readVersion('u1', 'f1', 1)).data).toBe('{}');
-  expect(await st.readImage('u2', 'img1')).toBe('data:x');
-
-  await st.saveFile('u2', 'f9', doc('f9', 5), 5);
-  expect(blobs.has('grace@example.com/file.f9.json')).toBe(true);
-  expect([...blobs.keys()].filter(k => k.startsWith('grace@example.com/version.'))).toHaveLength(1);
-  // Opening it again moves nothing.
-  await openStore(memoryBackend(blobs));
-  expect(blobs.size).toBe(6);
+// AWS's own example (S3 docs, "GET Object"): the same signature comes out.
+test('S3 requests are signed like AWS’s example', () => {
+  const h = signS3({ method: 'GET', url: 'https://examplebucket.s3.amazonaws.com/test.txt', headers: { range: 'bytes=0-9' }, region: 'us-east-1',
+    accessKeyId: 'AKIAIOSFODNN7EXAMPLE', secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY', now: new Date('2013-05-24T00:00:00Z') });
+  expect(h.authorization).toBe('AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request, SignedHeaders=host;range;x-amz-content-sha256;x-amz-date, Signature=f0e8bdb87c964420e857bd35b5d6ed310bd44f0170aba48dd91039c6036bdb41');
 });
 
-test('a local folder keeps each account in a folder too', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'lw-folders-'));
+// Storage over the API: a big file goes up in parts and comes back the same; folders, renames, moves, deletes.
+test('files go into Storage in parts, in folders, and come back the same', async () => {
+  const app = createApp(await openStore(memoryBackend()), { noAccounts: true });
+  const srv = app.listen(0), base = `http://localhost:${srv.address().port}/api`;
   try {
-    const b = folderBackend(dir);
-    await b.open();
-    await b.write('ada@example.com/file.f1.json', '{"a":1}');
-    await b.write('meta.json', '{}');
-    expect(existsSync(join(dir, 'ada@example.com', 'file.f1.json'))).toBe(true);
-    expect((await b.open()).sort()).toEqual(['ada@example.com/file.f1.json', 'meta.json']);
-    await b.move('ada@example.com/file.f1.json', 'grace@example.com/file.f1.json');
-    expect(await b.read('grace@example.com/file.f1.json')).toBe('{"a":1}');
-    expect(await b.read('ada@example.com/file.f1.json')).toBe(null);
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+    const big = Buffer.alloc(PART * 2 + 1234); for (let i = 0; i < big.length; i++) big[i] = (i * 7) % 251;
+    const up = await (await post(`${base}/drive/uploads`, { name: 'video.mp4', folder: 'Media/Clips', size: big.length })).json();
+    expect(up.parts).toBe(3);
+    for (let n = 0; n < up.parts; n++) expect((await post(`${base}/drive/uploads/${up.id}/${n}`, { data: big.subarray(n * PART, (n + 1) * PART).toString('base64') })).ok).toBe(true);
+    // A part of the wrong size is turned away.
+    const small = await (await post(`${base}/drive/uploads`, { name: 'a.txt', size: 5 })).json();
+    expect((await post(`${base}/drive/uploads/${small.id}/0`, { data: Buffer.from('abc').toString('base64') })).status).toBe(400);
+    expect((await post(`${base}/drive/uploads/${small.id}`, {})).status).toBe(400); // not all parts
+    const done = await (await post(`${base}/drive/uploads/${up.id}`, {})).json();
+    expect(done).toMatchObject({ name: 'video.mp4', folder: 'Media/Clips', type: 'video/mp4', size: big.length });
+
+    let list = await (await fetch(`${base}/drive`)).json();
+    expect(list.files.map(f => f.name)).toEqual(['video.mp4']);
+    expect(list.folders).toEqual(['Media', 'Media/Clips']);
+    expect(list).toMatchObject({ used: big.length, where: 'memory', persistent: false });
+
+    const raw = await fetch(`${base}/drive/files/${done.id}/raw?download=1`);
+    expect(raw.headers.get('content-type')).toBe('video/mp4');
+    expect(raw.headers.get('content-disposition')).toMatch(/^attachment; filename="video.mp4"/);
+    expect(raw.headers.get('content-security-policy')).toMatch(/sandbox/);
+    expect(Buffer.from(await raw.arrayBuffer()).equals(big)).toBe(true);
+
+    // Same name in the same folder: the second one gets “(2)”.
+    const again = await (await post(`${base}/drive/uploads`, { name: 'video.mp4', folder: 'Media/Clips', size: 3 })).json();
+    await post(`${base}/drive/uploads/${again.id}/0`, { data: Buffer.from('abc').toString('base64') });
+    const second = await (await post(`${base}/drive/uploads/${again.id}`, {})).json();
+    expect(second.name).toBe('video (2).mp4');
+
+    // Rename and move one file; rename the folder (its files go with it); delete.
+    const moved = await (await post(`${base}/drive/files/${second.id}`, { name: 'notes.txt', folder: 'Docs' })).json();
+    expect(moved).toMatchObject({ name: 'notes.txt', folder: 'Docs', type: 'video/mp4' });
+    expect((await post(`${base}/drive/folders/move`, { from: 'Media', to: 'Media/Inside' })).status).toBe(400);
+    await post(`${base}/drive/folders/move`, { from: 'Media', to: 'Videos' });
+    list = await (await fetch(`${base}/drive`)).json();
+    expect(list.files.find(f => f.id === done.id).folder).toBe('Videos/Clips');
+    expect(list.folders).toEqual(['Docs', 'Videos', 'Videos/Clips']);
+    await post(`${base}/drive/folders`, { path: 'Empty/../One' });
+    expect((await (await fetch(`${base}/drive`)).json()).folders).toContain('Empty/One');
+    expect((await fetch(`${base}/drive/files/${second.id}`, { method: 'DELETE' })).ok).toBe(true);
+    expect((await fetch(`${base}/drive/files/${second.id}/raw`)).status).toBe(404);
+    expect(await (await post(`${base}/drive/folders/remove`, { path: 'Videos' })).json()).toMatchObject({ removed: 1 });
+    list = await (await fetch(`${base}/drive`)).json();
+    expect(list.files).toEqual([]);
+    expect(list.used).toBe(0);
+
+    // Too big for one file.
+    expect((await post(`${base}/drive/uploads`, { name: 'huge.bin', size: 51 * 1024 * 1024 })).status).toBe(413);
+  } finally { srv.close(); app.flows.close(); }
 });
 
-test('the storage limit: the oldest versions make room, then saving stops', async () => {
-  const st = await openStore(memoryBackend(), { versionEvery: 0, storageLimit: 900 });
-  st.s.addUser.run('u', 'ada@example.com', '', '', 1, 1);
-  const a = doc('f', 200), b = doc('f', 210), c = doc('f', 220);
-  await st.saveFile('u', 'f', a, 1, 1000);
-  await st.saveFile('u', 'f', b, 2, 2000);
-  expect(st.storage('u')).toEqual({ used: b.length + a.length + b.length, limit: 900 });
-  // The next one needs room: the oldest version (a) goes.
-  await st.saveFile('u', 'f', c, 3, 3000);
-  expect(st.versions('u', 'f').map(v => v.size)).toEqual([c.length, b.length]);
-  expect(st.storage('u').used).toBe(c.length * 2 + b.length);
-  expect(st.storage('u').used).toBeLessThanOrEqual(900);
-
-  // Too big even without any versions: refused, and nothing changes.
-  const before = st.storage('u').used;
-  await expect(st.saveFile('u', 'g', doc('g', 900), 4, 4000)).rejects.toMatchObject({ code: 'storage_full', limit: 900 });
-  expect(st.storage('u').used).toBe(before);
-  expect(st.hasFile('u', 'g')).toBe(false);
-  expect(st.versions('u', 'f')).toHaveLength(2);
-  // Pictures count too.
-  await expect(st.saveImage('u', 'img1', 'data:image/png;base64,' + 'A'.repeat(1500))).rejects.toMatchObject({ code: 'storage_full' });
-  // No limit: anything goes.
-  const free = await openStore(memoryBackend(), { storageLimit: 0 });
-  await free.saveFile('u', 'g', doc('g', 5000), 1);
-  expect(free.storage('u')).toEqual({ used: doc('g', 5000).length * 2, limit: 0 });
-});
-
-test('the API says how much storage is used, and refuses a save when it\'s full', async () => {
-  const st = await openStore(memoryBackend(), { versionEvery: 0, storageLimit: 3000 });
-  const srv = createApp(st, { requireVerified: false }).listen(0);
-  const base = `http://localhost:${srv.address().port}/api`;
+// With a bucket (here a stand-in S3 on this machine): the files and their list are in the bucket, so a
+// new server (after a restart, with empty memory) still has them.
+test('with a bucket, Storage survives a restart', async () => {
+  const objects = new Map(), seen = [];
+  const s3 = createServer((req, res) => {
+    const chunks = []; req.on('data', c => chunks.push(c));
+    req.on('end', () => {
+      seen.push({ method: req.method, url: req.url, auth: req.headers.authorization || '' });
+      if (req.method === 'PUT') { objects.set(req.url, Buffer.concat(chunks)); return res.end(); }
+      if (req.method === 'DELETE') { objects.delete(req.url); res.statusCode = 204; return res.end(); }
+      if (!objects.has(req.url)) { res.statusCode = 404; return res.end('<Error><Code>NoSuchKey</Code></Error>'); }
+      res.end(objects.get(req.url));
+    });
+  }).listen(0);
+  const env = { S3_BUCKET: 'files', S3_ENDPOINT: `http://localhost:${s3.address().port}`, S3_ACCESS_KEY_ID: 'id', S3_SECRET_ACCESS_KEY: 'secret' };
   try {
-    let cookie = '';
-    const call = async (method, path, body) => {
-      const r = await fetch(base + path, { method, headers: { 'content-type': 'application/json', cookie }, body: body === undefined ? undefined : JSON.stringify(body) });
-      const set = r.headers.get('set-cookie'); if (set) cookie = set.split(';')[0];
-      return { status: r.status, json: await r.json() };
-    };
-    const up = await call('POST', '/auth/signup', { email: 'ada@example.com', password: 'a long password' });
-    expect(up.json.user.storage).toEqual({ used: 0, limit: 3000 });
-    const saved = await call('PUT', '/files/f1', JSON.parse(doc('f1', 400)));
-    expect(saved.json).toEqual({ ok: true, storage: { used: doc('f1', 400).length * 2, limit: 3000 } });
-    const full = await call('PUT', '/files/f2', JSON.parse(doc('f2', 2000)));
-    expect(full.status).toBe(507);
-    expect(full.json).toMatchObject({ error: 'storage_full', storage: { limit: 3000 } });
-    expect(full.json.message).toMatch(/storage is full/);
-    // Deleting makes room again.
-    expect((await call('DELETE', '/files/f1')).json.storage.used).toBe(0);
-    expect((await call('PUT', '/files/f2', JSON.parse(doc('f2', 1000)))).status).toBe(200);
-    expect((await call('GET', '/auth/me')).json.user.storage.used).toBe(doc('f2', 1000).length * 2);
-  } finally { srv.close(); }
+    const one = createDrive({ store: await openStore(memoryBackend()), env }).forUser('u1');
+    const saved = await one.put({ name: 'hello.txt', folder: 'Notes', buf: Buffer.from('Hello there') });
+    expect(seen.every(r => r.auth.startsWith('AWS4-HMAC-SHA256 Credential=id/') && r.url.startsWith('/files/workline/u-'))).toBe(true);
+
+    const two = createDrive({ store: await openStore(memoryBackend()), env });
+    const list = await two.forUser('u1').list();
+    expect(list).toMatchObject({ where: 'bucket', persistent: true });
+    expect(list.files.map(f => `${f.folder}/${f.name}`)).toEqual(['Notes/hello.txt']);
+    expect((await two.forUser('u1').read(saved.id)).buf.toString()).toBe('Hello there');
+    expect((await two.forUser('someone else').list()).files).toEqual([]);
+  } finally { s3.close(); }
 });
 
-test('the app warns when storage is nearly full, and when it is full', async ({ browser }) => {
-  test.setTimeout(120_000);
-  // A blank file and its first version take about 500 bytes: one nearly fills this, a second doesn't fit.
-  const st = await openStore(memoryBackend(), { versionEvery: 0, storageLimit: 540 });
-  const srv = createApp(st, { requireVerified: false }).listen(0);
-  const { spawn } = await import('node:child_process');
-  const port = 5194;
-  const vite = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--port', String(port), '--strictPort'], { cwd: 'frontend', env: { ...process.env, LINEWORK_API: `http://localhost:${srv.address().port}` }, stdio: 'ignore', detached: true });
+// The Storage node: save text and a file, list the folder, read one back, delete it.
+test('the Storage node saves, lists, reads and deletes files', async () => {
+  const app = createApp(await openStore(memoryBackend()), { noAccounts: true });
+  const srv = app.listen(0), base = `http://localhost:${srv.address().port}/api`;
+  const run = async (nodes, input) => {
+    const flow = { nodes: [{ id: 't', type: 'trigger.manual', name: 'Start', params: {} }, ...nodes.map((n, i) => ({ id: 's' + i, type: 'core.storage', name: 'S' + i, params: n }))],
+      edges: nodes.map((n, i) => ({ id: 'e' + i, from: i ? 's' + (i - 1) : 't', to: 's' + i, fromPort: 'main', toPort: 'main' })) };
+    const { runId } = await (await post(`${base}/flows/wfstore/run`, { flow, startId: 't', input })).json();
+    let r;
+    for (let i = 0; i < 50; i++) { ({ run: r } = await (await fetch(`${base}/runs/${runId}`)).json()); if (r.status !== 'running') break; await new Promise(res => setTimeout(res, 100)); }
+    expect(r.error || '').toBe('');
+    return r.nodes['s' + (nodes.length - 1)].output.main;
+  };
   try {
-    const appUrl = `http://localhost:${port}`;
-    for (let i = 0; i < 60; i++) { try { if ((await fetch(appUrl)).ok) break; } catch (e) {} await new Promise(r => setTimeout(r, 500)); }
-    const page = await (await browser.newContext({ baseURL: appUrl })).newPage();
-    const errors = [];
-    page.on('pageerror', e => errors.push(e.message));
-    await page.goto('/');
-    await page.getByRole('button', { name: 'Create an account' }).click();
-    await page.getByLabel('Email').fill('ada@example.com');
-    await page.getByLabel('Password').fill('a long password');
-    await page.getByRole('button', { name: 'Create account' }).click();
-    await page.getByRole('button', { name: 'Create a Blank File' }).click();
-    const warn = page.locator('.storage-warn');
-    await expect(warn).toContainText(/You’ve used .* of your/);
-    await warn.getByRole('button', { name: 'OK' }).click();
-    await expect(warn).toHaveCount(0);
-    // A second file doesn't fit: saving stops, and the notice stays.
-    await page.goto('/');
-    await page.getByRole('button', { name: 'Create a Blank File' }).click();
-    await expect(warn).toContainText('Your storage is full');
-    await expect(page.locator('.saved')).toHaveText('Storage full');
-    await expect(warn.getByRole('button')).toHaveCount(0);
-    expect(errors).toEqual([]);
-  } finally {
-    try { process.kill(-vite.pid); } catch (e) { vite.kill(); }
-    srv.close();
-  }
+    const cv = { name: 'cv.pdf', type: 'application/pdf', size: 4, data: Buffer.from('%PDF').toString('base64') };
+    await run([
+      { operation: 'save', source: 'text', text: 'Hi {{ $json.who }}', name: 'note.txt', folder: 'Inbox' },
+      { operation: 'save', source: 'file', file: '{{ $json.cv }}', folder: 'Inbox', output: 'saved' },
+    ], [{ who: 'Asha', cv }]);
+    const listed = await run([{ operation: 'list', folder: 'Inbox', each: true }], [{}]);
+    expect(listed.map(i => i.path).sort()).toEqual(['Inbox/cv.pdf', 'Inbox/note.txt']);
+    const [read] = await run([{ operation: 'read', path: 'Inbox/note.txt', as: 'text', output: 'text' }], [{}]);
+    expect(read.text).toBe('Hi Asha');
+    const [file] = await run([{ operation: 'read', path: 'inbox/CV.pdf', as: 'file' }], [{}]);
+    expect(file.file).toMatchObject({ name: 'cv.pdf', type: 'application/pdf', size: 4 });
+    await run([{ operation: 'delete', path: 'Inbox/cv.pdf' }], [{}]);
+    expect((await (await fetch(`${base}/drive`)).json()).files.map(f => f.name)).toEqual(['note.txt']);
+  } finally { srv.close(); app.flows.close(); }
 });
