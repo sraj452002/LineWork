@@ -157,3 +157,18 @@ test('a big file is kept out of the run’s record, by name and size', async () 
     expect(item.doc.data).toMatch(/file contents, \d+ KB, not kept/);
   } finally { srv.close(); app.flows.close(); }
 });
+
+test('an email step that can’t reach its SMTP server says why and what works instead', async () => {
+  const net = await import('node:net');
+  // A port nothing listens on: the connection is refused, as a blocked email port is.
+  const server = net.createServer();
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const port = server.address().port;
+  await new Promise(r => server.close(r));
+  const ctx = { cred: async () => ({ smtpUrl: `smtp://u:p@127.0.0.1:${port}` }) };
+  const flow = { nodes: [{ id: 't', type: 'trigger.manual', name: 'Start' }, { id: 'n', type: 'app.email', name: 'Mail', params: { to: 'me@example.com', subject: 'x', text: 'y' }, credential: 'c1' }], edges: [{ from: 't', to: 'n' }] };
+  const r = await runFlow(flow, { startId: 't', input: [{ json: {} }], types: { ...NODE_TYPES, ...APP_NODES }, ctx });
+  expect(r.status).not.toBe('success');
+  expect(r.error).toContain('SMTP blocked');
+  expect(r.error).toContain('Resend, Brevo, SendGrid, Mailgun or Postmark');
+});

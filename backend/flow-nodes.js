@@ -162,8 +162,8 @@ export const NODE_TYPES = {
     let send;
     if (c && c.smtpUrl) {
       const { default: nodemailer } = await import('nodemailer');
-      const t = nodemailer.createTransport(c.smtpUrl);
-      send = m => t.sendMail({ from: c.from || undefined, ...m });
+      const t = nodemailer.createTransport(c.smtpUrl, { connectionTimeout: 15_000, greetingTimeout: 15_000, socketTimeout: 30_000 });
+      send = m => t.sendMail({ from: c.from || undefined, ...m }).catch(e => { throw smtpError(e, c.smtpUrl); });
     } else if (args.ctx.mailer?.configured) send = m => args.ctx.mailer.send(m);
     else throw new FlowError('Pick an email (SMTP) credential: this server has no email set up.', 'no_credential');
     return each(args, async p => {
@@ -186,6 +186,15 @@ export const NODE_TYPES = {
 };
 
 /* ---- more logic and data: filtering, shaping, text, dates, files and public feeds ---- */
+// Couldn't connect to the mail server: say why that usually happens and what works instead.
+// Many hosts (Render's free plan among them) block outgoing SMTP on ports 25, 465 and 587.
+function smtpError(e, url) {
+  const msg = String(e?.message || e);
+  if (!/ETIMEDOUT|ECONNECTION|ESOCKET|ECONNREFUSED|ECONNRESET|EHOSTUNREACH|timeout|timed out|Greeting never received/i.test(`${e?.code || ''} ${msg}`)) return e;
+  let host = 'the mail server', port = '';
+  try { const u = new URL(url); host = u.hostname || host; port = u.port || (u.protocol === 'smtps:' ? '465' : '587'); } catch { /* keep the defaults */ }
+  return new FlowError(`SMTP blocked: couldn’t connect to ${host}${port ? ':' + port : ''} (${msg}). This server’s host may block outgoing email ports 25, 465 and 587 (Render’s free plan does). Send with an email step that works over HTTPS instead (Resend, Brevo, SendGrid, Mailgun or Postmark), try port 2525 if your provider offers it, or move the server to a paid plan.`, 'smtp_blocked');
+}
 const field = (item, f) => (f ? getPath(item.json, f) : item.json);
 const put = (item, out, value) => { const j = structuredClone(item.json); setPath(j, out || 'result', value); return j; };
 const csvSplit = (line, sep) => {
