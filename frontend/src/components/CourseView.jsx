@@ -64,7 +64,7 @@ const Svg = ({ d, s = 32 }) => <svg viewBox="0 0 32 32" width={s} height={s} fil
 function Big({ icon, label, onClick, menu, on, disabled, small }) {
   return (
     <button type="button" className={'sl-big' + (on ? ' on' : '') + (small ? ' small' : '')} onClick={e => onClick?.(e.currentTarget)} disabled={disabled} aria-haspopup={menu ? 'menu' : undefined} aria-pressed={on === undefined ? undefined : !!on}>
-      <Svg d={icon} s={small ? 24 : 32} />
+      <Svg d={icon} s={small ? 20 : 26} />
       <span>{label}{menu && <i aria-hidden="true"> ▾</i>}</span>
     </button>
   );
@@ -94,6 +94,13 @@ export default function CourseView({ file, update, visible = true }) {
   const undo = useRef([]), redo = useRef([]);
   const picRef = useRef(null), picFor = useRef(null), importRef = useRef(null);
   const go = m => { setMode(m); savePref('linework:course-mode', m); };
+  // The ribbon can fold down to its tabs, and each panel can be hidden (kept for next time).
+  const [ribbonOpen, setRibbonOpen] = useState(() => readPref('linework:course-ribbon', 'open') === 'open');
+  const foldRibbon = v => { setRibbonOpen(v); savePref('linework:course-ribbon', v ? 'open' : 'closed'); };
+  const [panels, setPanels] = useState(() => { try { return { slides: true, right: true, bottom: true, ...JSON.parse(readPref('linework:course-panels', '{}')) }; } catch (e) { return { slides: true, right: true, bottom: true }; } });
+  const togglePanel = (key, v) => setPanels(p => { const n = { ...p, [key]: v ?? !p[key] }; savePref('linework:course-panels', JSON.stringify(n)); return n; });
+  const focusMode = !panels.slides && !panels.right && !panels.bottom;
+  const setFocus = on => setPanels(() => { const n = { slides: !on, right: !on, bottom: !on }; savePref('linework:course-panels', JSON.stringify(n)); return n; });
 
   const flat = course ? allSlides(course) : [];
   const here = course && (findSlide(course, slideId) || flat[0]);
@@ -189,9 +196,9 @@ export default function CourseView({ file, update, visible = true }) {
   const [fitK, setFitK] = useState(0.6);
   useLayoutEffect(() => {
     const el = holder.current; if (!el || !course) return undefined;
-    const fit = () => { const r = el.getBoundingClientRect(); if (r.width && r.height) setFitK(Math.max(0.15, Math.min((r.width - 40) / course.size.w, (r.height - 30) / course.size.h, 1.4))); };
+    const fit = () => { const r = el.getBoundingClientRect(); if (r.width && r.height) setFitK(Math.max(0.15, Math.min((r.width - 24) / course.size.w, (r.height - 20) / course.size.h, 2))); };
     fit(); const ro = new ResizeObserver(fit); ro.observe(el); return () => ro.disconnect();
-  }, [course?.size?.w, course?.size?.h, visible, mode]); // eslint-disable-line
+  }, [course?.size?.w, course?.size?.h, visible, mode, panels.slides, panels.right, panels.bottom, ribbonOpen]); // eslint-disable-line
   const k = zoom ? zoom / 100 : fitK;
   const drag = (e, o, how) => {
     e.stopPropagation(); e.preventDefault();
@@ -310,6 +317,12 @@ export default function CourseView({ file, update, visible = true }) {
     </> : <p className="sl-hint">Select an object on a slide to give it an entrance animation.</p>,
     VIEW: <>
       <Group label="Views"><Big icon={ICO.story} label="Story View" on={mode === 'story'} onClick={() => go('story')} /><Big icon={ICO.slideview} label="Slide View" on={mode === 'slide'} onClick={() => go('slide')} /></Group>
+      <Group label="Panels">
+        <Big small icon={ICO.slideview} label="Slides" on={panels.slides} onClick={() => togglePanel('slides')} />
+        <Big small icon={ICO.layer} label="Triggers & Layers" on={panels.right} onClick={() => togglePanel('right')} />
+        <Big small icon={ICO.keys} label="Timeline & Format" on={panels.bottom} onClick={() => togglePanel('bottom')} />
+        <Big small icon={ICO.fit} label="Focus" on={focusMode} onClick={() => setFocus(!focusMode)} />
+      </Group>
       <Group label="Zoom"><Big icon={ICO.zoomin} label="Zoom In" onClick={() => (mode === 'story' ? setStoryZoom(z => Math.min(200, z + 10)) : setZoom(z => Math.min(300, (z || Math.round(fitK * 100)) + 10)))} /><Big icon={ICO.zoomout} label="Zoom Out" onClick={() => (mode === 'story' ? setStoryZoom(z => Math.max(40, z - 10)) : setZoom(z => Math.max(15, (z || Math.round(fitK * 100)) - 10)))} /><Big icon={ICO.fit} label="Fit" onClick={() => (mode === 'story' ? setStoryZoom(100) : setZoom(0))} /></Group>
     </>,
     HELP: <>
@@ -383,20 +396,21 @@ export default function CourseView({ file, update, visible = true }) {
           </div>
         </div>
       </div>
-      <div className="sl-bottom">
+      {panels.bottom && <div className="sl-bottom">
         <div className="sl-btabs" role="tablist" aria-label="Slide panels">
           {[['timeline', 'Timeline'], ['states', 'States'], ['format', 'Format'], ['notes', 'Notes']].map(([t, l]) => <button key={t} role="tab" aria-selected={bottom === t} className={bottom === t ? 'on' : ''} onClick={() => setBottom(t)}>{l}</button>)}
           <span className="sl-btabs-sp">{obj ? `${KINDS[obj.kind]}: ${obj.name}` : `Slide: ${slide.title}`}</span>
+          <button className="sl-x" aria-label="Hide the Timeline panel" title="Hide this panel" onClick={() => togglePanel('bottom', false)}>×</button>
         </div>
         <div className="sl-bbody">
           {bottom === 'timeline' && <Timeline slide={slide} layer={layer} sel={sel} setSel={setSel} write={write} inLayer={inLayer} inSlide={inSlide} />}
           {bottom === 'states' && <States o={obj} editState={editState} setEditState={setEditState} editObj={editObj} />}
           {bottom === 'format' && (obj ? <ObjFormat o={obj} course={course} layer={layer} editState={editState} setLook={setLook} editObj={editObj} write={write} inLayer={inLayer} setSel={setSel} duplicate={duplicate}
-            onPicture={() => { picFor.current = obj.id; picRef.current?.click(); }} onTrigger={() => { const t = { id: rid('t'), event: 'click', source: obj.id, action: 'jump', target: 'next', conds: [] }; write(c => { inLayer(c).triggers.push(t); }); setOpenTrig(t.id); }} />
+            onPicture={() => { picFor.current = obj.id; picRef.current?.click(); }} onTrigger={() => { const t = { id: rid('t'), event: 'click', source: obj.id, action: 'jump', target: 'next', conds: [] }; write(c => { inLayer(c).triggers.push(t); }); setOpenTrig(t.id); togglePanel('right', true); }} />
             : <SlideFormat slide={slide} write={write} inSlide={inSlide} />)}
           {bottom === 'notes' && <textarea className="sl-notes" value={slide.notes || ''} onChange={e => setSlideProp('notes', e.target.value)} aria-label="Slide notes" placeholder="Notes for this slide (not shown to learners)" />}
         </div>
-      </div>
+      </div>}
     </div>
   );
   const layersPane = (
@@ -437,42 +451,49 @@ export default function CourseView({ file, update, visible = true }) {
     <div className="cv sl" data-course>
       <div className="sl-tabs" role="tablist" aria-label="Ribbon">
         <button className="sl-file" aria-haspopup="menu" onClick={e => fileMenu(e.currentTarget)}>FILE</button>
-        {TABS.map(t => <button key={t} role="tab" aria-selected={ribbon === t} className={ribbon === t ? 'on' : ''} onClick={() => setRibbon(t)}>{t}</button>)}
+        {TABS.map(t => <button key={t} role="tab" aria-selected={ribbon === t} className={ribbon === t ? 'on' : ''} onClick={() => { if (!ribbonOpen || ribbon !== t) foldRibbon(true); setRibbon(t); }} onDoubleClick={() => foldRibbon(!ribbonOpen)}>{t}</button>)}
         <span className="sl-qa">
+          <button aria-label={ribbonOpen ? 'Collapse the ribbon' : 'Expand the ribbon'} aria-expanded={ribbonOpen} title={ribbonOpen ? 'Collapse the ribbon (double-click a tab)' : 'Expand the ribbon'} onClick={() => foldRibbon(!ribbonOpen)}>{ribbonOpen ? '⌃' : '⌄'}</button>
           <button aria-label="Undo" title="Undo (Ctrl Z)" disabled={!undo.current.length} onClick={() => back(undo, redo)}>↶</button>
           <button aria-label="Redo" title="Redo (Ctrl Y)" disabled={!redo.current.length} onClick={() => back(redo, undo)}>↷</button>
         </span>
       </div>
-      <div className="sl-ribbon" role="toolbar" aria-label="Course tools">{ribbonBody[ribbon]}</div>
+      {ribbonOpen && <div className="sl-ribbon" role="toolbar" aria-label="Course tools">{ribbonBody[ribbon]}</div>}
       <input ref={picRef} type="file" accept="image/*" hidden aria-label="Picture to insert" onChange={e => { insertPicture(e.target.files[0]); e.target.value = ''; }} />
       <input ref={importRef} type="file" accept=".json,.html,.htm,.zip,.story,application/json,text/html,application/zip" hidden aria-label="Course file to import" onChange={e => { importInto(e.target.files[0], e.target.dataset.how); e.target.value = ''; }} />
       <div className="sl-viewbar">
         <button className={mode === 'story' ? 'on' : ''} onClick={() => go('story')}><Svg d={ICO.story} s={16} />STORY VIEW</button>
         <button className={mode === 'slide' ? 'on' : ''} onClick={() => go('slide')}><Svg d={ICO.slideview} s={16} />{here.sc.name.toUpperCase()} · {sceneNo}.{here.i + 1} {slide.title}</button>
+        <span className="sl-toggles" role="group" aria-label="Panels">
+          {mode === 'slide' && <button className={panels.slides ? 'on' : ''} aria-pressed={panels.slides} title="Slide list" aria-label="Slide list panel" onClick={() => togglePanel('slides')}><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2" y="3" width="16" height="14" rx="2" /><path d="M7 3v14" /></svg></button>}
+          {mode === 'slide' && <button className={panels.bottom ? 'on' : ''} aria-pressed={panels.bottom} title="Timeline, States, Format, Notes" aria-label="Timeline panel" onClick={() => togglePanel('bottom')}><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2" y="3" width="16" height="14" rx="2" /><path d="M2 12h16" /></svg></button>}
+          <button className={panels.right ? 'on' : ''} aria-pressed={panels.right} title="Triggers and layers" aria-label="Right panel" onClick={() => togglePanel('right')}><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2" y="3" width="16" height="14" rx="2" /><path d="M13 3v14" /></svg></button>
+          {mode === 'slide' && <button className={focusMode ? 'on' : ''} aria-pressed={focusMode} title="Focus: only the slide" aria-label="Focus on the slide" onClick={() => setFocus(!focusMode)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4" /></svg></button>}
+        </span>
       </div>
       {course.importNote && <div className="sl-import" role="status"><b>Storyline import</b><span>{course.importNote}</span><button className="rs-ib" aria-label="Dismiss the import note" onClick={() => write(c => { delete c.importNote; })}>×</button></div>}
       {mode === 'story' ? (
-        <div className="sl-main story">
+        <div className="sl-main story" style={{ gridTemplateColumns: panels.right ? undefined : 'minmax(0,1fr)' }}>
           {storyView}
-          <aside className="sl-right" aria-label="Properties">
+          {panels.right && <aside className="sl-right" aria-label="Properties">
             <section className="sl-pane sl-trigpane" aria-label="Triggers">
-              <header><h4>Triggers</h4><button className="sl-ico" aria-label="Variables" title="Variables" onClick={() => setDialog('vars')}>%x%</button></header>
+              <header><h4>Triggers</h4><span className="sl-hbtns"><button className="sl-ico" aria-label="Variables" title="Variables" onClick={() => setDialog('vars')}>%x%</button><button className="sl-x" aria-label="Hide the right panel" title="Hide this panel" onClick={() => togglePanel('right', false)}>×</button></span></header>
               <div className="sl-pbody"><Triggers course={course} slide={slide} layer={slide.layers[0]} write={write} inLayer={(c) => inLayer(c, slide.id, slide.layers[0].id)} open={openTrig} setOpen={setOpenTrig} /></div>
             </section>
             {slideProps}
-          </aside>
+          </aside>}
         </div>
       ) : (
-        <div className="sl-main slide">
-          {slideList}
+        <div className="sl-main slide" style={{ gridTemplateColumns: `${panels.slides ? 'var(--sl-left) ' : ''}minmax(0,1fr)${panels.right ? ' var(--sl-rightw)' : ''}` }}>
+          {panels.slides && slideList}
           {stage}
-          <aside className="sl-right" aria-label="Properties">
+          {panels.right && <aside className="sl-right" aria-label="Properties">
             <section className="sl-pane sl-trigpane" aria-label="Triggers">
-              <header><h4>Triggers</h4><button className="sl-ico" aria-label="Variables" title="Variables" onClick={() => setDialog('vars')}>%x%</button></header>
+              <header><h4>Triggers</h4><span className="sl-hbtns"><button className="sl-ico" aria-label="Variables" title="Variables" onClick={() => setDialog('vars')}>%x%</button><button className="sl-x" aria-label="Hide the right panel" title="Hide this panel" onClick={() => togglePanel('right', false)}>×</button></span></header>
               <div className="sl-pbody"><Triggers course={course} slide={slide} layer={layer} write={write} inLayer={inLayer} open={openTrig} setOpen={setOpenTrig} /></div>
             </section>
             {layersPane}
-          </aside>
+          </aside>}
         </div>
       )}
       <footer className="sl-status">

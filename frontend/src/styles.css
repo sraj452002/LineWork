@@ -4455,7 +4455,7 @@ button.rv-line:hover{background:rgba(255,255,255,.04)}
   background:linear-gradient(145deg,var(--acc2),var(--acc));box-shadow:0 8px 18px -8px var(--acc)}
 .ed-card-ttl{flex:1;min-width:0}.ed-card-head h3{margin:0;font-size:18px;letter-spacing:-.01em}.ed-card-head small{color:var(--ink2);display:flex;align-items:center;gap:8px}
 .ed-card-kind{font-size:10px;letter-spacing:.06em;text-transform:uppercase;padding:2px 8px;border-radius:999px;color:var(--acc);background:var(--acc-soft);border:1px solid color-mix(in srgb,var(--acc) 30%,transparent)}
-.ed-card-text{flex:1;min-height:min(54vh,500px);resize:vertical;padding:14px 16px;border:1px solid var(--hair);border-radius:14px;background:color-mix(in srgb,var(--ink) 2.5%,var(--surface));color:var(--ink);font:14px/1.65 inherit;transition:border-color .2s,box-shadow .2s}
+.ed-card-text{flex:1;min-height:min(54vh,500px);resize:vertical;padding:14px 16px;border:1px solid var(--hair);border-radius:14px;background:color-mix(in srgb,var(--ink) 2.5%,var(--surface));color:var(--ink);font-family:inherit;font-size:14px;line-height:1.65;transition:border-color .2s,box-shadow .2s}
 .ed-card-text.mono{font:13px/1.65 ui-monospace,SFMono-Regular,Menlo,monospace}
 .ed-card-text:focus{outline:none;border-color:var(--acc);box-shadow:0 0 0 4px color-mix(in srgb,var(--acc) 16%,transparent)}
 .ed-card-grid{flex:1;min-height:200px;max-height:56vh;overflow:auto;border:1px solid var(--hair);border-radius:14px;background:var(--surface)}
@@ -4971,3 +4971,39 @@ body{background:radial-gradient(1100px 620px at 8% -10%,color-mix(in srgb,var(--
 .cs-note{margin:10px 0 0;padding:10px 14px;border-radius:12px;background:color-mix(in srgb,#2b6fd6 9%,var(--surface));border:1px solid color-mix(in srgb,#2b6fd6 25%,var(--hair));font-size:13px;color:var(--ink)}
 .sl-import{display:flex;align-items:center;gap:10px;padding:8px 14px;background:color-mix(in srgb,#f5a623 14%,var(--surface));border-bottom:1px solid color-mix(in srgb,#f5a623 40%,var(--hair));font-size:13px}
 .sl-import span{flex:1}
+
+/* ---- Course view: a compact, foldable ribbon; panels that hide; more room for the slide ---- */
+.cv.sl{--sl-left:168px;--sl-rightw:292px}
+.sl-ribbon{min-height:0;padding:2px 4px 0}
+.sl-group{padding:0 6px}
+.sl-gbody{gap:1px}
+.sl-glabel{font-size:10.5px;padding:1px 0 3px}
+.sl-big{min-width:46px;max-width:78px;padding:3px 5px;gap:2px;font-size:11.5px}
+.sl-big.small{min-width:48px}
+.sl-col{gap:0;padding-top:1px}
+.sl-sm{padding:3px 7px;font-size:11.5px}
+.sl-tabs button{padding:6px 11px;font-size:11.5px}
+.sl-tabs .sl-file{padding:6px 16px}
+.sl-qa button{padding:3px 8px;font-size:14px;border:0;background:none;color:var(--ink2);cursor:pointer}
+.sl-qa button:hover:not(:disabled){color:var(--ink);background:color-mix(in srgb,var(--ink) 6%,transparent)}
+.sl-viewbar{align-items:center;padding:3px 10px 0}
+.sl-viewbar>button{padding:5px 11px}
+.sl-toggles{margin-left:auto;display:flex;gap:2px;padding-bottom:3px}
+.sl-toggles button{display:grid;place-items:center;width:28px;height:24px;border:1px solid transparent;border-radius:6px;background:none;color:var(--ink2);cursor:pointer;padding:0}
+.sl-toggles button svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5}
+.sl-toggles button:hover{background:color-mix(in srgb,var(--ink) 6%,transparent)}
+.sl-toggles button.on{color:var(--sl-blue);background:color-mix(in srgb,var(--sl-blue) 12%,transparent);border-color:color-mix(in srgb,var(--sl-blue) 30%,transparent)}
+.sl-main.story{grid-template-columns:minmax(0,1fr) var(--sl-rightw)}
+.sl-bottom{height:200px}
+.sl-btabs button{padding:6px 11px}
+.sl-x{border:0;background:none;color:var(--ink2);cursor:pointer;font-size:16px;line-height:1;padding:2px 6px;border-radius:5px;margin-left:6px}
+.sl-x:hover{background:color-mix(in srgb,var(--ink) 8%,transparent);color:var(--ink)}
+.sl-hbtns{display:flex;align-items:center;gap:2px}
+.sl-pane header{padding:6px 10px}
+.sl-pane h4{font-size:14px}
+.sl .cv-slides{padding:6px}
+.sl .cv-sl-b>span{font-size:11.5px}
+.sl .cv-holder{padding:0}
+@media (max-width:1100px){.cv.sl{--sl-left:140px;--sl-rightw:250px}}
+@media (max-width:800px){.cv.sl .sl-main.slide,.cv.sl .sl-main.story{grid-template-columns:1fr!important}}
+.sl .cv-scene header b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1}

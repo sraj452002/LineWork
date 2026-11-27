@@ -303,3 +303,39 @@ test('a Storyline 360 package imports with positions, pictures, layers, states, 
   await p.getByText('Details of tab A').click();
   await expect(p.getByText('Details of tab A')).toHaveCount(0);
 });
+
+// The ribbon folds to its tabs and each panel hides; the editor remembers both.
+test('the ribbon folds and every panel can be hidden, and stays so', async ({ page }) => {
+  await studio(page, 'Interactive sample');
+  const ribbon = page.getByRole('toolbar', { name: 'Course tools' });
+  await page.getByRole('button', { name: 'Collapse the ribbon' }).click();
+  await expect(ribbon).toHaveCount(0);
+  await page.getByRole('tab', { name: 'INSERT' }).click(); // a tab opens it again
+  await expect(ribbon.getByRole('button', { name: 'Text Box' })).toBeVisible();
+  await page.getByRole('tab', { name: 'INSERT' }).dblclick(); // double-click folds it
+  await expect(ribbon).toHaveCount(0);
+
+  await page.getByRole('button', { name: /^Slide 2\.1:/ }).dblclick();
+  const box = async () => (await page.locator('.cv-stage-box').boundingBox()).width;
+  const before = await box();
+  await page.getByRole('button', { name: 'Slide list panel' }).click();
+  await expect(page.getByRole('complementary', { name: 'Slides' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Hide the right panel' }).click();
+  await expect(page.getByRole('complementary', { name: 'Properties' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Hide the Timeline panel' }).click();
+  await expect(page.locator('.sl-bottom')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Focus on the slide' })).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(box).toBeGreaterThan(before * 1.3); // the slide gets the room
+
+  // Remembered after a reload.
+  await page.reload();
+  await page.getByRole('navigation', { name: 'Files' }).getByRole('button', { name: /^Course Studio/ }).click();
+  await page.locator('.cs-card').first().click();
+  await expect(page.getByRole('tablist', { name: 'Ribbon' })).toBeVisible();
+  await expect(ribbon).toHaveCount(0);
+  await expect(page.locator('.sl-bottom')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Focus on the slide' }).click(); // everything back
+  await expect(page.getByRole('complementary', { name: 'Slides' })).toBeVisible();
+  await expect(page.getByRole('complementary', { name: 'Properties' })).toBeVisible();
+  await expect(page.locator('.sl-bottom')).toBeVisible();
+});
