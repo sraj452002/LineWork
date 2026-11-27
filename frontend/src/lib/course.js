@@ -207,8 +207,9 @@ export function player(C, env) {
   const play = h('button', 'cp-ib', '❚❚'); play.setAttribute('aria-label', 'Pause');
   const seek = h('div', 'cp-seek'); const seekIn = h('i'); seek.appendChild(seekIn); seek.setAttribute('role', 'progressbar');
   const count = h('span', 'cp-count');
-  const prev = h('button', 'cp-btn', '‹ Prev'); const next = h('button', 'cp-btn cp-next', 'Next ›');
-  bar.append(play, seek, count, prev, next);
+  const prev = h('button', 'cp-btn', '‹ Prev'); const next = h('button', 'cp-btn cp-next', 'Next ›'); const submitBtn = h('button', 'cp-btn cp-next', 'Submit');
+  submitBtn.style.display = 'none';
+  bar.append(play, seek, count, prev, next, submitBtn);
   root.append(top, body, bar);
   if (C.player?.title === false) top.style.display = 'none';
   if (!C.player?.menu) { menu.style.display = 'none'; menuBtn.style.display = 'none'; }
@@ -575,7 +576,10 @@ export function player(C, env) {
     cur = i; ended = false; layerOn = []; live = {};
     for (const k in layerEls) delete layerEls[k];
     stage.innerHTML = '';
-    const s = flat[i].s; visited.add(s.id);
+    const s = flat[i].s;
+    // Coming back: "reset to initial state" forgets what changed on the slide.
+    if (visited.has(s.id) && s.revisit === 'reset') { for (const l of s.layers) for (const o of l.objects) delete objState[o.id]; delete results['ff:' + s.id]; for (const l of s.layers) for (const o of l.objects) if (o.kind === 'question') delete results[o.id]; }
+    visited.add(s.id);
     stage.style.background = s.bg || '#fff';
     drawLayer(s.layers[0]);
     const tr = s.transition?.type; const box0 = layerEls[s.layers[0].id]?.box;
@@ -584,6 +588,11 @@ export function player(C, env) {
     count.textContent = `${i + 1} / ${flat.length}`;
     prev.disabled = i === 0;
     navState('next', 'normal'); navState('prev', 'normal');
+    // The slide's own navigation: which of Prev / Next / Submit show.
+    const nav = s.nav || {};
+    prev.style.display = nav.prev === false || C.player?.prevNext === false ? 'none' : '';
+    next.style.display = nav.next === false || C.player?.prevNext === false ? 'none' : '';
+    submitBtn.style.display = nav.submit ? '' : 'none';
     lockNext();
     next.textContent = i === flat.length - 1 ? 'Finish' : 'Next ›';
     drawMenu(); fit(); tick(); loop();
@@ -595,6 +604,15 @@ export function player(C, env) {
   const lockNext = () => { const s = flat[cur].s; if (next.dataset.state === 'disabled') return; next.disabled = s.next === 'question' && !s.layers[0].objects.filter(o => o.kind === 'question').every(o => results[o.id] && (results[o.id].correct || results[o.id].tries >= (Number(o.q.attempts) || 1))); };
   const finish = () => { report(true); env.exit?.(); const done = h('div', 'cp-done'); done.appendChild(h('b', '', 'You’ve reached the end of the course.')); const again = h('button', 'cp-btn', 'Start again'); again.onclick = () => { done.remove(); act({ action: 'restart' }); }; done.appendChild(again); stage.appendChild(done); };
   // Prev / Next: a slide's own triggers for them (imported from Storyline) run instead of the usual move.
+  submitBtn.onclick = () => { const s = flat[cur].s; if (s.freeform) submitFreeform(); else for (const l of visibleLayers()) for (const o of l.objects) if (o.kind === 'question') live[o.id]?._submit?.(); };
+  // Swipe on touch screens, where the slide allows it.
+  let touchX = null;
+  wrap.addEventListener('touchstart', e => { touchX = e.touches[0].clientX; }, { passive: true });
+  wrap.addEventListener('touchend', e => {
+    if (touchX == null) return; const dx = e.changedTouches[0].clientX - touchX; touchX = null;
+    const sw = flat[cur].s.swipe || {};
+    if (dx < -60 && sw.next !== false && !next.disabled) next.onclick(); else if (dx > 60 && sw.prev !== false && !prev.disabled) prev.onclick();
+  });
   prev.onclick = () => { if (!fire('prevButton')) go(cur - 1); };
   next.onclick = () => { if (!fire('nextButton')) (cur === flat.length - 1 ? finish() : go(cur + 1)); };
   addEventListener('keydown', e => {

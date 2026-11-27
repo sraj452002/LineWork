@@ -108,8 +108,8 @@ test('build a slide: insert, format, a state, a layer and triggers; publish HTML
   await panel.getByRole('button', { name: '＋ Trigger' }).click();
   const trig = right.getByRole('region', { name: 'Triggers' });
   await trig.getByLabel('Action').selectOption('showLayer');
-  await expect(trig.locator('.cv-trig-h')).toContainText('Show layer Layer 1');
-  await expect(trig.locator('.cv-trig-h')).toContainText('When user clicks Reveal');
+  await expect(trig.locator('.cv-trig:not(.static) .cv-trig-h')).toContainText('Show layer Layer 1');
+  await expect(trig.locator('.cv-trig:not(.static) .cv-trig-h')).toContainText('When user clicks Reveal');
 
   // Preview this slide: clicking shows the layer.
   await page.getByRole('tab', { name: 'HOME' }).click();
@@ -123,12 +123,12 @@ test('build a slide: insert, format, a state, a layer and triggers; publish HTML
 
   // Undo: first the action goes back to Jump, then the trigger goes; redo brings both back.
   await page.keyboard.press('Control+z');
-  await expect(trig.locator('.cv-trig-h')).toContainText('Jump to slide');
+  await expect(trig.locator('.cv-trig:not(.static) .cv-trig-h')).toContainText('Jump to slide');
   await page.keyboard.press('Control+z');
-  await expect(trig.locator('.cv-trig')).toHaveCount(0);
+  await expect(trig.locator('.cv-trig:not(.static)')).toHaveCount(0);
   await page.keyboard.press('Control+y');
   await page.keyboard.press('Control+y');
-  await expect(trig.locator('.cv-trig-h')).toContainText('Show layer Layer 1');
+  await expect(trig.locator('.cv-trig:not(.static) .cv-trig-h')).toContainText('Show layer Layer 1');
 
   // Publish: one HTML page, and a SCORM 1.2 zip with its manifest.
   await page.getByRole('button', { name: 'Publish', exact: true }).click();
@@ -236,7 +236,7 @@ test('Storyline .story files and published courses import as courses', async ({ 
   await page.getByRole('menuitem', { name: /Import slides/ }).click();
   await page.getByLabel('Course file to import').setInputFiles({ name: 'Fire drill.zip', mimeType: 'application/zip', buffer: pubBuf });
   await expect(page.locator('.sl-import')).toContainText('published Storyline course: 1 scene, 2 slides');
-  await page.getByRole('button', { name: 'STORY VIEW' }).click();
+  await page.getByRole('button', { name: 'STORY VIEW', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Scene 3: Drill' })).toBeVisible();
   await page.getByRole('button', { name: /^Slide 3\.1: Alarm sounds/ }).dblclick();
   await expect(page.locator('.cv-stage')).toContainText('Leave the building calmly');
@@ -399,4 +399,24 @@ test('the ribbon folds and every panel can be hidden, and stays so', async ({ pa
   await expect(page.getByRole('complementary', { name: 'Slides' })).toBeVisible();
   await expect(page.getByRole('complementary', { name: 'Properties' })).toBeVisible();
   await expect(page.locator('.sl-bottom')).toBeVisible();
+});
+
+// Slide Properties as in desktop authoring tools: which player buttons a slide shows, and what happens when it's revisited.
+test('Slide Properties choose the slide’s buttons and how it is revisited', async ({ page }) => {
+  await studio(page, 'Quiz');
+  await page.getByRole('button', { name: /^Slide 1\.2:/ }).click();
+  const props = page.getByRole('region', { name: 'Slide Properties' });
+  await expect(props).toContainText('Properties for “1.2');
+  await props.getByLabel('Next button').uncheck();
+  await props.getByLabel('Submit button').check();
+  await props.getByLabel('When revisiting').selectOption('reset');
+  await page.getByRole('button', { name: 'Preview', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'This slide' }).click();
+  const p = page.frameLocator('iframe[title="Course preview"]');
+  await expect(p.getByRole('button', { name: 'Submit', exact: true }).last()).toBeVisible();
+  await expect(p.locator('.cp-bar').getByRole('button', { name: /Next|Finish/ })).toBeHidden();
+  // The player's Submit sends the question.
+  await p.locator('.cp-qo').first().click();
+  await p.locator('.cp-bar').getByRole('button', { name: 'Submit' }).click();
+  await expect(p.locator('.cp-fb.on')).toBeVisible();
 });

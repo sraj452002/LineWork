@@ -5017,3 +5017,55 @@ body{background:radial-gradient(1100px 620px at 8% -10%,color-mix(in srgb,var(--
 .cv-dlg.full .cv-preview{flex:1;height:auto;min-height:0;border-radius:6px}
 .cv-dlg.full .cv-dlg-f{margin-top:8px}
 .cv-dlg.full:fullscreen{background:var(--surface)}
+
+/* ---- Course view: the Triggers pane, Slide Properties, devices and views, as in desktop authoring tools ---- */
+.sl-trigbar{display:flex;align-items:center;gap:3px;padding:6px 0 8px;border-bottom:1px solid var(--hair);margin-bottom:6px;position:sticky;top:-10px;background:var(--surface);z-index:1}
+.sl-tb{display:grid;place-items:center;width:30px;height:28px;border:1px solid var(--line);border-radius:3px;background:var(--surface);cursor:pointer;padding:0}
+.sl-tb:hover:not(:disabled){border-color:var(--sl-blue);background:color-mix(in srgb,var(--sl-blue) 8%,var(--surface))}
+.sl-tb:disabled{opacity:.4;cursor:default}
+.sl-tb-sp{flex:1}
+.sl-tgroup{margin-bottom:6px}
+.sl-tgroup h5{margin:8px 0 4px;font:600 13px var(--ui);color:var(--ink)}
+.sl .cv-trigs{gap:0}
+.sl .cv-trig{border:0;border-radius:0}
+.sl .cv-trig-h{padding:5px 8px 6px 10px;gap:1px}
+.sl .cv-trig-h b{font-weight:500;font-size:13px}
+.sl .cv-trig-h span{font-size:12.5px;padding-left:18px;color:var(--ink2)}
+.sl .cv-trig-h u{color:var(--sl-blue);text-underline-offset:2px}
+.sl .cv-trig:not(.static):hover .cv-trig-h{background:color-mix(in srgb,var(--sl-blue) 7%,transparent)}
+.sl .cv-trig.on>.cv-trig-h{background:var(--sl-blue);color:#fff}
+.sl .cv-trig.on>.cv-trig-h span{color:#e6eeff}
+.sl .cv-trig.static .cv-trig-h{cursor:default}
+.sl .cv-trig .cv-tform{border:1px solid var(--sl-blue);border-top:0}
+.sl-props{gap:10px}
+.sl-props-for{margin:0;font:600 14px var(--ui);color:var(--ink2)}
+.sl-prow{display:grid;grid-template-columns:120px 1fr;align-items:center;gap:8px;font-size:13.5px}
+.sl-props select,.sl-prow select{font:13.5px var(--ui);padding:6px 8px;border:1px solid var(--line);border-radius:3px;background:var(--surface);color:var(--ink);width:100%}
+.sl-props h5{margin:8px 0 0;font:600 14px var(--ui);color:var(--ink2)}
+.sl-checks{display:grid;grid-template-columns:70px repeat(3,auto);align-items:center;gap:6px 14px;font-size:13.5px;justify-content:start}
+.sl-checks label{display:flex;align-items:center;gap:6px}
+.sl-checks input{width:16px;height:16px;accent-color:var(--sl-blue)}
+.sl-more summary{cursor:pointer;font-size:12.5px;color:var(--ink2);margin-top:4px}
+.sl-more[open]{display:flex;flex-direction:column;gap:8px}
+.sl-devices{margin-left:auto;display:flex;align-items:center;gap:2px;padding:0 10px 3px 0;border-right:1px solid var(--hair);margin-right:8px}
+.sl-devices button{display:grid;place-items:center;width:30px;height:24px;border:0;border-radius:5px;background:none;color:var(--ink2);cursor:pointer;padding:0}
+.sl-devices button svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.5}
+.sl-devices button:hover{background:color-mix(in srgb,var(--ink) 7%,transparent);color:var(--ink)}
+.sl-toggles{margin-left:0}
+.sl-sm svg{vertical-align:-3px;margin-right:4px}
+.sl-sm i{font-style:normal;font-size:9px}
+.sl-views{margin-left:auto;display:flex;gap:2px}
+.sl-views button{border:0;background:none;color:#d6dae6;cursor:pointer;font-size:14px;padding:0 6px;border-radius:4px}
+.sl-views button.on{background:rgba(255,255,255,.16);color:#fff}
+.sl-zoom{margin-left:12px}
+/* Preview on a device: the course in a frame of that size */
+.cv-dlg.full .cv-device{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--ink) 6%,var(--surface));border-radius:6px}
+.cv-device .cv-preview{width:100%;height:100%;border-radius:6px}
+.cv-device.dev-tablet-l .cv-preview,.cv-device.dev-tablet-p .cv-preview,.cv-device.dev-phone-l .cv-preview,.cv-device.dev-phone-p .cv-preview{flex:none;border:10px solid #1f2433;border-radius:22px;box-shadow:var(--shadow)}
+.cv-device.dev-tablet-l .cv-preview{width:min(1024px,96%);height:min(768px,96%)}
+.cv-device.dev-tablet-p .cv-preview{width:min(768px,70%);height:min(1024px,96%)}
+.cv-device.dev-phone-l .cv-preview{width:min(812px,96%);height:min(375px,80%)}
+.cv-device.dev-phone-p .cv-preview{width:min(375px,60%);height:min(812px,96%)}
+.sl-main.story{grid-template-columns:minmax(0,1fr) 380px}
+.sl-checks{grid-template-columns:62px repeat(3,max-content);gap:6px 12px}
+@media (max-width:1100px){.sl-main.story{grid-template-columns:minmax(0,1fr) 320px}}
