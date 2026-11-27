@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { rid } from '../lib/utils.js';
 import { useUI } from './ui.jsx';
 import { ObjArt, Thumb, boxStyle, defaultsOf, lookOf } from './CourseArt.jsx';
+import { storyNote } from './CourseStudio.jsx';
 import {
   ACTIONS, ANIMS, BUILTIN_VARS, EVENTS, KINDS, OPS, QTYPES, STATES, allSlides, cloneSlide, courseHtml, findSlide, interpolate,
   TRANSITIONS, appendCourse, courseFile, newCourse, newLayer, newObject, newScene, newSlide, pictureUrl, readCourse, scormZip,
@@ -227,14 +228,14 @@ export default function CourseView({ file, update, visible = true }) {
   const importInto = async (f, how) => {
     if (!f) return;
     try {
-      const c = await readCourse(f);
-      if (how === 'replace') { write(x => { Object.keys(x).forEach(key => delete x[key]); Object.assign(x, c); }); setSlideId(null); toast(`Opened “${c.title}”`); }
-      else { const n = c.scenes.reduce((a, sc) => a + sc.slides.length, 0); write(x => { appendCourse(x, c); }); toast(`Added ${n} slide${n === 1 ? '' : 's'} from “${c.title}”`); }
+      const { imported, ...c } = await readCourse(f);
+      if (how === 'replace') { write(x => { Object.keys(x).forEach(key => delete x[key]); Object.assign(x, c); if (imported) x.importNote = storyNote(imported); }); setSlideId(null); if (!imported) toast(`Opened “${c.title}”`); }
+      else { const n = c.scenes.reduce((a, sc) => a + sc.slides.length, 0); write(x => { appendCourse(x, c); if (imported) x.importNote = storyNote(imported); }); if (!imported) toast(`Added ${n} slide${n === 1 ? '' : 's'} from “${c.title}”`); }
     } catch (e) { toast(e.message || 'That file couldn’t be opened.'); }
   };
   const pickImport = how => { importRef.current.dataset.how = how; importRef.current.click(); };
   const fileMenu = btn => popup(btn, [
-    { label: 'Import slides…', note: 'Add the slides of a course file, published page or SCORM zip', act: () => pickImport('append') },
+    { label: 'Import slides…', note: 'From a Storyline .story or published zip, a course file, a page or a SCORM zip', act: () => pickImport('append') },
     { label: 'Open a course over this one…', note: 'Replace this course with one from a file', act: () => pickImport('replace') },
     { label: 'Export course file (.course.json)', note: 'Everything, to open again here or share', act: exportFile },
     '-',
@@ -449,6 +450,7 @@ export default function CourseView({ file, update, visible = true }) {
         <button className={mode === 'story' ? 'on' : ''} onClick={() => go('story')}><Svg d={ICO.story} s={16} />STORY VIEW</button>
         <button className={mode === 'slide' ? 'on' : ''} onClick={() => go('slide')}><Svg d={ICO.slideview} s={16} />{here.sc.name.toUpperCase()} · {sceneNo}.{here.i + 1} {slide.title}</button>
       </div>
+      {course.importNote && <div className="sl-import" role="status"><b>Storyline import</b><span>{course.importNote}</span><button className="rs-ib" aria-label="Dismiss the import note" onClick={() => write(c => { delete c.importNote; })}>×</button></div>}
       {mode === 'story' ? (
         <div className="sl-main story">
           {storyView}

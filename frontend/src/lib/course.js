@@ -661,10 +661,18 @@ const fromPage = html => {
 export async function readCourse(file) {
   const name = file.name.toLowerCase();
   let c;
-  if (/\.story$/.test(name)) throw new Error('.story files are Articulate’s own format and can’t be opened here. In Storyline, publish the course instead — or rebuild it here.');
-  if (/\.zip$/.test(name)) {
+  if (/\.(story|zip)$/.test(name)) {
     const { default: JSZip } = await import('jszip');
-    const z = await JSZip.loadAsync(file);
+    let z;
+    try { z = await JSZip.loadAsync(file); } catch (e) { throw new Error(/\.story$/.test(name) ? 'That .story file couldn’t be opened (it may be from an old Storyline version or damaged). In Storyline, use Publish → Web, zip the output folder and import the zip.' : 'That zip couldn’t be opened.'); }
+    const files = Object.keys(z.files);
+    // A Storyline file or a Storyline-published course.
+    if (/\.story$/.test(name) || files.some(f => /html5\/data\/js\/data\.js$/i.test(f) || /(^|\/)story\.html$/i.test(f))) {
+      const { storyToCourse } = await import('./storyimport.js');
+      const { course, report } = await storyToCourse(z, file.name);
+      course.imported = report;
+      return course;
+    }
     const page = z.file('index.html') || z.file(/(^|\/)index\.html$/i)[0] || z.file(/\.html$/i)[0];
     if (!page) throw new Error('There’s no course page (index.html) in that zip.');
     c = fromPage(await page.async('string'));
