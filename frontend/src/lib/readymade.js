@@ -601,6 +601,27 @@ const WORKFLOWS = [
     ];
     return flowFile('Failure alerts', nodes);
   } },
+  { k: 'w-jobs', name: 'Job applications', note: 'Finds remote jobs for your role, AI ranks them against your CV and writes each a cover letter, you check them, and each comes to your inbox with its Apply link', make: () => {
+    const me = f => `{{ $node["Your search"].json.${f} }}`;
+    const nodes = [
+      node('trigger.manual', 'Your search', 80, { fields: 'Role*\nYour name*\nYour email* (email)\nYour CV* (long)\nHow many to apply to (number)' }),
+      // Remotive's free, public job API (remote jobs); swap in another job board's API or RSS feed if you like.
+      node('core.http', 'Find jobs', 340, { method: 'GET', url: 'https://remotive.com/api/remote-jobs', query: [{ name: 'search', value: '{{ $json.role }}' }, { name: 'limit', value: '40' }], bodyType: 'none' }),
+      node('core.split', 'One job each', 600, { field: 'jobs' }),
+      node('core.dedupe', 'No repeats', 860, { field: 'url' }),
+      node('ai.score', 'Rank by fit', 1120, { criteria: `How well this job fits the candidate (skills, experience, seniority, location). The candidate’s CV: ${me('yourCv')}`, text: '{{ $json.title }} at {{ $json.company_name }} ({{ $json.candidate_required_location }}): {{ String($json.description || "").replace(/<[^>]+>/g, " ").slice(0, 2500) }}', max: 10, sort: true }),
+      node('core.filter', 'Good fits only', 1380, { left: '{{ $json.score }}', op: 'gte', right: '6' }),
+      node('core.limit', 'Top picks', 1640, { max: '{{ Number($node["Your search"].json.howManyToApplyTo) || 5 }}', from: 'start' }),
+      node('ai.claude', 'Write the cover letter', 1900, { system: 'You write short, specific cover letters (120 to 180 words): why this role, two concrete matches between the CV and the job, a friendly close. No placeholders, no made-up facts: use only what the CV says. Plain text.',
+        prompt: `Job: {{ $json.title }} at {{ $json.company_name }}\nAbout the job: {{ String($json.description || "").replace(/<[^>]+>/g, " ").slice(0, 3000) }}\n\nMy name: ${me('yourName')}\nMy CV: ${me('yourCv')}\n\nWrite my cover letter.` }),
+      // The letter's item lines up with its job (the same place in the list): $node["Top picks"].items[$index].
+      node('core.set', 'Application', 2160, { keep: false, fields: [{ name: 'job', value: '{{ $node["Top picks"].items[$index].title }} at {{ $node["Top picks"].items[$index].company_name }}' }, { name: 'fit', value: '{{ $node["Top picks"].items[$index].score }}/10: {{ $node["Top picks"].items[$index].reason }}' }, { name: 'apply', value: '{{ $node["Top picks"].items[$index].url }}' }, { name: 'letter', value: '{{ $json.text }}' }, { name: 'to', value: me('yourEmail') }] }),
+      node('ui.editor', 'Check before sending', 2420, { source: 'data', title: 'Check the applications: edit the letters, delete any you don’t want', button: 'Send them to my inbox' }),
+      // (After the check the run goes on from the Editor, so the address travels with each application.)
+      node('brevo', 'To my inbox', 2680, { to: '{{ $json.to }}', subject: 'Apply: {{ $json.job }}', text: '{{ $json.fit }}\n\nApply here: {{ $json.apply }}\n\n--- Cover letter ---\n\n{{ $json.letter }}' }),
+    ];
+    return flowFile('Job applications', nodes);
+  } },
   { k: 'w-course', name: 'Course from a topic', note: 'AI drafts a course outline, you check it in the Editor, and it becomes a Course Studio course with a quiz', make: () => {
     const nodes = [
       node('trigger.manual', 'Topic', 80, { fields: 'Topic*\nWho it’s for' }),
