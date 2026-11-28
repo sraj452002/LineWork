@@ -197,3 +197,57 @@ test.describe('pages made of nodes', () => {
     } finally { osrv.close(); ott.flows.close(); list.close(); }
   });
 });
+
+// The Job applications template, run end to end with a stand-in job board and AI: it finds the jobs,
+// ranks them against the CV, keeps the good fits, writes each a letter, stops for a check, then mails each.
+test('the Job applications template finds, ranks, writes, waits for a check and mails each', async () => {
+  const dns = (await import('node:dns/promises')).default;
+  const { syncBuiltinESMExports } = await import('node:module');
+  const { runFlow } = await import('../backend/flow-engine.js');
+  const { NODE_TYPES } = await import('../backend/flow-nodes.js');
+  const { APP_NODES } = await import('../backend/flow-apps.js');
+  const { EXTRA_NODES } = await import('../backend/flow-extra.js');
+  const { UI_NODES } = await import('../backend/flow-ui.js');
+  const f = READY.find(t => t.k === 'w-jobs').make();
+  const jobs = [
+    { title: 'Senior React developer', company_name: 'Acme', url: 'https://jobs.example/1', candidate_required_location: 'Worldwide', description: '<p>React, TypeScript</p>' },
+    { title: 'Java architect', company_name: 'Big Co', url: 'https://jobs.example/2', candidate_required_location: 'USA', description: 'Java, Spring' },
+    { title: 'Frontend engineer (React)', company_name: 'Beta', url: 'https://jobs.example/3', candidate_required_location: 'Europe', description: 'React, CSS' },
+    { title: 'Senior React developer', company_name: 'Acme', url: 'https://jobs.example/1', description: 'a repeat' },
+  ];
+  const sent = [], asked = [];
+  const real = globalThis.fetch, realLookup = dns.lookup;
+  dns.lookup = async () => [{ address: '93.184.216.34', family: 4 }]; syncBuiltinESMExports();
+  globalThis.fetch = async (url, init = {}) => {
+    const u = String(url);
+    if (u.startsWith('https://remotive.com/api/remote-jobs')) { asked.push(u); return new Response(JSON.stringify({ 'job-count': jobs.length, jobs }), { status: 200, headers: { 'content-type': 'application/json' } }); }
+    if (u.startsWith('https://api.brevo.com')) { sent.push(JSON.parse(init.body)); return new Response('{"messageId":"m"}', { status: 201, headers: { 'content-type': 'application/json' } }); }
+    throw new Error('unexpected ' + u);
+  };
+  // The AI, played: React jobs fit the CV, the Java one doesn't; the letter names the job.
+  const types = { ...NODE_TYPES, ...APP_NODES, ...EXTRA_NODES, ...UI_NODES,
+    'ai.score': { run: async args => ({ main: args.items.map(i => ({ json: { ...i.json, score: /react/i.test(i.json.title) ? 9 : 3, reason: 'skills match' } })).sort((a, b) => b.json.score - a.json.score) }) },
+    'ai.claude': { run: async args => ({ main: args.items.map((i, k) => ({ json: { text: `Dear team, letter ${k + 1} for ${args.params(i, k).prompt.split('\n')[0]}` } })) }) } };
+  const ctx = { brevo: { apiKey: 'xkeysib-k', from: 'me@example.com' } };
+  try {
+    const input = [{ json: { role: 'react', yourName: 'Asha', yourEmail: 'asha@example.com', yourCv: 'React, TypeScript, 5 years', howManyToApplyTo: 5 } }];
+    const start = f.flow.nodes.find(n => n.type === 'trigger.manual').id, ed = f.flow.nodes.find(n => n.type === 'ui.editor');
+    const r = await runFlow(f.flow, { startId: start, input, types, ctx });
+    expect(r.status, r.error).toBe('success');
+    expect(asked[0]).toContain('search=react');
+    // It stops at the check with the two good fits (the repeat and the poor fit gone), each with its letter.
+    const card = r.nodes[ed.id].output.editor[0].json || r.nodes[ed.id].output.editor[0];
+    const apps = JSON.parse(card.text);
+    expect(apps.map(a => a.job)).toEqual(['Senior React developer at Acme', 'Frontend engineer (React) at Beta']);
+    expect(apps[1]).toMatchObject({ apply: 'https://jobs.example/3', fit: '9/10: skills match' });
+    expect(apps[1].letter).toContain('Frontend engineer (React) at Beta');
+    expect(sent).toHaveLength(0);
+    // Checked (one taken out): each one left goes to the inbox with its Apply link.
+    const c = await runFlow(f.flow, { startId: ed.id, input: [{ json: { _edited: { ...card, text: JSON.stringify([apps[1]]) } } }], types, ctx });
+    expect(c.status, c.error).toBe('success');
+    expect(sent).toHaveLength(1);
+    expect(sent[0].to).toEqual([{ email: 'asha@example.com' }]);
+    expect(sent[0].subject).toBe('Apply: Frontend engineer (React) at Beta');
+    expect(sent[0].textContent).toContain('Apply here: https://jobs.example/3');
+  } finally { globalThis.fetch = real; dns.lookup = realLookup; syncBuiltinESMExports(); }
+});
