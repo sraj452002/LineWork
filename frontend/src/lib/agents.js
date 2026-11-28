@@ -6,6 +6,9 @@ export const AGENT_TOOLS = [
   ['nodes', 'Run nodes', 'Any of the 650 nodes: text, dates, AI, apps with your saved accounts'],
   ['files', 'Read my files', 'Your docs, sheets, diagrams and workflows'],
   ['docs', 'Write docs', 'Save what it writes as a new doc'],
+  ['memory', 'Remember', 'Keep notes between chats (shown under Memory) and recall them'],
+  ['team', 'Work with my agents', 'Hand parts of a job to your other agents'],
+  ['build', 'Build workflows', 'Make new workflows out of nodes'],
 ];
 export const listAgents = () => api('/agents').then(r => r.agents || []);
 export const saveAgent = agent => (agent.id
