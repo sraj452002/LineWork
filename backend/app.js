@@ -254,6 +254,7 @@ export function createApp(store, opts = {}) {
   api.post('/ai/chat', signedIn, (req, res) => (providers.length ? agentChat(req, res) : res.status(503).json({ error: 'not_configured' })));
   // The AI Agent workflow node runs agents the same way.
   flows.setAgentRunner(agentChat.runTask);
+  agentChat.routes(api, signedIn); // missions and memory
 
   api.post('/ai', signedIn, async (req, res) => {
     if (!providers.length) return res.status(503).json({ error: 'not_configured' });

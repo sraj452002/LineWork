@@ -6,6 +6,7 @@ import { aiProvider, aiProviders, prepImage, sampleP, setAIProvider } from '../l
 import { ask, errorText, loadChats, newChatId, saveChats, titleOf, toolLabel } from '../lib/assistant.js';
 import { AGENT_TOOLS, deleteAgent, listAgents, saveAgent } from '../lib/agents.js';
 import { listFiles } from '../lib/cloud.js';
+import { Memory, Missions } from './Missions.jsx';
 
 /* The AI assistant, like a chat with Claude: past chats on the side, answers in Markdown that stream in,
    copy / retry / edit, pictures and text files attached, and the account's own tools (workflows, nodes,
@@ -171,6 +172,8 @@ export default function Assistant({ user, compact = false, onOpenFile, onShowMen
   const msgs = chat ? chat.msgs : [];
   // Agents: the account's own AI helpers. A new chat can be with one of them instead of Nemo.
   const [agents, setAgents] = useState([]), [agentId, setAgentId] = useState(null), [editing, setEditing] = useState(null);
+  // Missions (a goal Nemo works through in the background) and Memory, in place of a chat.
+  const [panel, setPanel] = useState(null);
   const loadAgents = () => listAgents().then(setAgents, () => {});
   useEffect(() => { loadAgents(); }, []);
   const agent = agents.find(x => x.id === (chat ? chat.agentId : agentId)) || null;
@@ -276,12 +279,14 @@ export default function Assistant({ user, compact = false, onOpenFile, onShowMen
     <div className={'as' + (compact ? ' compact' : '') + (side ? ' side-open' : '')}>
       {side && (
         <aside className="as-side" aria-label="Chats">
-          <button className="as-new" onClick={() => fresh()}><Ico d={IC.plus} />New chat</button>
+          <button className="as-new" onClick={() => { setPanel(null); fresh(); }}><Ico d={IC.plus} />New chat</button>
+          <button className={'as-place' + (panel === 'missions' ? ' on' : '')} aria-pressed={panel === 'missions'} onClick={() => setPanel('missions')}><i aria-hidden="true">🎯</i>Missions</button>
+          <button className={'as-place' + (panel === 'memory' ? ' on' : '')} aria-pressed={panel === 'memory'} onClick={() => setPanel('memory')}><i aria-hidden="true">🧠</i>Memory</button>
           <h2>Agents</h2>
           <nav className="as-agents" aria-label="Agents">
             {agents.map(x => (
               <div key={x.id} className="as-item" aria-current={!chat && agentId === x.id ? 'true' : undefined}>
-                <button className="as-pick as-agentpick" onClick={() => fresh(x.id)} aria-label={`Chat with ${x.name}`}><i aria-hidden="true">{x.icon}</i><span>{x.name}</span></button>
+                <button className="as-pick as-agentpick" onClick={() => { setPanel(null); fresh(x.id); }} aria-label={`Chat with ${x.name}`}><i aria-hidden="true">{x.icon}</i><span>{x.name}</span></button>
                 <button className="as-del" aria-label={`Edit ${x.name}`} title="Edit" onClick={() => setEditing(x)}>✎</button>
               </div>
             ))}
@@ -291,14 +296,15 @@ export default function Assistant({ user, compact = false, onOpenFile, onShowMen
           <nav className="as-list">
             {chats.length ? chats.map(c => (
               <div key={c.id} className="as-item" aria-current={c.id === id ? 'true' : undefined}>
-                <button className="as-pick" onClick={() => { setId(c.id); if (compact) setSide(false); }}><span>{c.agentId ? `${agents.find(x => x.id === c.agentId)?.icon || '🤖'} ` : ''}{c.title}</span><small>{ago(c.at)}</small></button>
+                <button className="as-pick" onClick={() => { setPanel(null); setId(c.id); if (compact) setSide(false); }}><span>{c.agentId ? `${agents.find(x => x.id === c.agentId)?.icon || '🤖'} ` : ''}{c.title}</span><small>{ago(c.at)}</small></button>
                 <button className="as-del" aria-label={`Delete chat ${c.title}`} title="Delete" onClick={() => remove(c.id)}>×</button>
               </div>
             )) : <p className="as-none">Your chats show here.</p>}
           </nav>
         </aside>
       )}
-      <section className="as-main" aria-label="Nemo, the AI assistant">
+      {panel && <section className="as-main as-panel">{panel === 'missions' ? <Missions agents={agents} /> : <Memory />}</section>}
+      <section className="as-main" aria-label="Nemo, the AI assistant" hidden={!!panel}>
         <header className="as-top">
           {onShowMenu && <button className="as-ib" aria-label="Show the menu panel" title="Show the menu panel (\)" onClick={onShowMenu}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg></button>}
           <button className="as-ib" aria-label={side ? 'Hide chats' : 'Show chats'} title={side ? 'Hide chats' : 'Show chats'} aria-pressed={side} onClick={() => setSide(s => !s)}>{compact ? <Ico d={IC.clock} /> : <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM9.5 5v14" /></svg>}</button>

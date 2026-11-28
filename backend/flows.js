@@ -120,7 +120,7 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
   const publicCred = ({ id, type, name, created, updated }) => ({ id, type, name, created, updated });
 
   /* ---- AI agents the user makes (see agent.js): a name, instructions, what to know, what it may use ---- */
-  const AGENT_TOOLS = ['workflows', 'nodes', 'files', 'docs'];
+  const AGENT_TOOLS = ['workflows', 'nodes', 'files', 'docs', 'memory', 'team', 'build'];
   const agentsOf = uid => ((m.agents ||= {})[uid] ||= {});
   const str = (v, n) => String(v ?? '').slice(0, n).trim();
   const saveAgent = (uid, data, id) => {
@@ -930,6 +930,13 @@ export function createFlows({ store, ai = {}, mailer, allowPrivate = false, secr
   const agent = {
     runForItems, savedFlow, creds: uid => Object.values(credsOf(uid)).map(publicCred),
     getAgent: (uid, id) => agentsOf(uid)[id] || null, saveAgent: (uid, data) => saveAgent(uid, data),
+    listAgents: uid => Object.values(agentsOf(uid)),
+    // What the account's agents remember (agent.js: remember / recall), and its missions (agent.js: missions).
+    memory: uid => ((m.memory ||= {})[uid] ||= []),
+    missions: uid => ((m.missions ||= {})[uid] ||= {}),
+    allMissions: () => Object.entries(m.missions || {}).flatMap(([uid, ms]) => Object.values(ms).map(x => ({ uid, mission: x }))),
+    touch: () => store.touch(),
+    saveFile: (uid, file) => store.saveFile(uid, file.id, JSON.stringify(file), file.updated).then(() => reindex(uid, file.id, file)),
   };
   return { hooks, ui, pages, routes, reindex, tick, poll, agent, setAgentRunner: fn => { agentRunner = fn; }, close: () => clearInterval(timer) };
 }
